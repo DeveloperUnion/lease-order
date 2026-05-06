@@ -19,11 +19,11 @@ type NavItem = {
 function ItemIcon({ d, active }: { d: string; active: boolean }) {
   return (
     <svg
-      className={`h-5 w-5 ${active ? "text-accent" : "text-muted"}`}
+      className={`h-[18px] w-[18px] ${active ? "text-accent" : "text-muted"}`}
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
-      strokeWidth={1.7}
+      strokeWidth={1.6}
     >
       <path strokeLinecap="round" strokeLinejoin="round" d={d} />
     </svg>
@@ -44,10 +44,19 @@ function getNavItems(overdueCount: number): NavItem[] {
       isActive: (p) => p.startsWith("/rentals"),
       badge: overdueCount,
       icon: (active) => (
-        <ItemIcon
-          active={active}
-          d="M9 17v-6a2 2 0 012-2h2a2 2 0 012 2v6m-7 0H4a1 1 0 01-1-1V8a1 1 0 011-1h3l1-2h8l1 2h3a1 1 0 011 1v8a1 1 0 01-1 1h-2m-7 0h6"
-        />
+        <svg
+          className={`h-[18px] w-[18px] ${active ? "text-accent" : "text-muted"}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.6}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+          <path d="M3.27 6.96L12 12.01l8.73-5.05" />
+          <path d="M12 22.08V12" />
+        </svg>
       ),
     },
     {
@@ -78,7 +87,7 @@ function getNavItems(overdueCount: number): NavItem[] {
 function Badge({ count }: { count: number }) {
   if (!count) return null;
   return (
-    <span className="absolute top-1 right-1 md:top-2 md:right-3 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold bg-red-600 text-white">
+    <span className="absolute top-1.5 right-2 md:top-3 md:right-3 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold bg-danger text-white">
       {count > 99 ? "99+" : count}
     </span>
   );
@@ -103,49 +112,51 @@ export default function CustomerNav({ customer, overdueCount }: { customer: Cust
     <>
       {/* PC: 左サイドバー */}
       <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-56 flex-col bg-surface border-r border-border z-40">
-        <Link href="/" className="flex items-center gap-2 px-5 py-4 border-b border-border">
+        <Link href="/" className="flex items-center gap-2 px-5 py-5 border-b border-border">
           <Image
             src="/images/logo-union.png"
             alt="union"
             width={486}
             height={823}
             priority
-            className="h-10 w-auto"
+            className="h-9 w-auto"
           />
-          <span className="text-base font-bold tracking-tight text-cyan-500">
-            発注<span className="text-[10px] font-medium ml-0.5">for リース</span>
+          <span className="text-base font-bold tracking-tight text-accent leading-none">
+            発注<span className="text-[10px] font-medium ml-0.5 align-baseline">for リース</span>
           </span>
         </Link>
 
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-2 pt-4 pb-4 space-y-0.5">
           {items.map((item) => {
             const active = item.isActive(pathname);
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                  active ? "bg-accent/10 text-accent" : "text-muted hover:bg-surface-muted hover:text-foreground"
+                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 ease-[cubic-bezier(.2,.8,.2,1)] ${
+                  active
+                    ? "bg-accent-soft text-accent"
+                    : "text-muted hover:bg-surface-muted hover:text-foreground"
                 }`}
               >
                 {item.icon(active)}
-                <span>{item.label}</span>
+                <span className="flex-1">{item.label}</span>
                 {item.badge ? <Badge count={item.badge} /> : null}
               </Link>
             );
           })}
         </nav>
 
-        <div className="px-4 py-3 border-t border-border space-y-1">
-          <p className="text-xs font-medium text-foreground truncate">{customer.name}</p>
-          <p className="text-[10px] font-mono text-subtle truncate">{customer.company_id}</p>
+        <div className="border-t border-border px-5 py-4">
+          <p className="text-sm font-medium text-foreground truncate leading-snug">{customer.name}</p>
+          <p className="text-xs text-subtle truncate mt-0.5">{customer.company_id}</p>
           <button
             type="button"
             onClick={onLogout}
             disabled={isPending}
-            className="mt-2 w-full text-left text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
+            className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted hover:text-foreground disabled:opacity-50 transition-colors"
           >
-            ログアウト
+            <span aria-hidden>↪</span> ログアウト
           </button>
         </div>
       </aside>
@@ -158,10 +169,16 @@ export default function CustomerNav({ customer, overdueCount }: { customer: Cust
             <Link
               key={item.href}
               href={item.href}
-              className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
+              className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors ${
                 active ? "text-accent" : "text-muted hover:text-foreground"
               }`}
             >
+              {active && (
+                <span
+                  aria-hidden
+                  className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] bg-accent rounded-full"
+                />
+              )}
               {item.icon(active)}
               <span>{item.label}</span>
               {item.badge ? <Badge count={item.badge} /> : null}

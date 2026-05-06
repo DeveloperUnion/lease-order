@@ -1,15 +1,19 @@
 import Link from "next/link";
 import { requireCustomer } from "@/lib/customer-auth";
 import { listAllOrdersByCustomer, type OrderStatusFilter } from "@/lib/rentals-data";
+import StatusBadge from "@/components/ui/status-badge";
 
 export const dynamic = "force-dynamic";
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  pending: { label: "未確認", color: "bg-yellow-100 text-yellow-800" },
-  confirmed: { label: "承認済", color: "bg-blue-100 text-blue-800" },
-  shipped: { label: "出荷済", color: "bg-purple-100 text-purple-800" },
-  completed: { label: "完了", color: "bg-green-100 text-green-800" },
-  cancelled: { label: "キャンセル", color: "bg-surface-muted text-muted" },
+const STATUS: Record<
+  string,
+  { label: string; tone: "neutral" | "accent" | "info" | "success" | "warning" | "danger" }
+> = {
+  pending: { label: "未確認", tone: "warning" },
+  confirmed: { label: "承認済", tone: "info" },
+  shipped: { label: "出荷済", tone: "accent" },
+  completed: { label: "完了", tone: "success" },
+  cancelled: { label: "キャンセル", tone: "neutral" },
 };
 
 const FILTER_TABS: { value: OrderStatusFilter; label: string }[] = [
@@ -47,70 +51,70 @@ export default async function OrdersPage({
   const orders = await listAllOrdersByCustomer(customer.id, customer.tenant_id, filter);
 
   return (
-    <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-accent">発注履歴</h1>
-        <p className="text-sm text-muted mt-1">これまでの発注を確認できます。</p>
-      </div>
+    <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-7">
+      <h1 className="text-2xl font-bold tracking-tight text-foreground">発注履歴</h1>
 
-      <div className="mb-5 flex gap-1 border-b border-border overflow-x-auto">
+      {/* Filter tabs */}
+      <div className="mt-6 flex gap-1 border-b border-border overflow-x-auto">
         {FILTER_TABS.map((tab) => {
           const active = tab.value === filter;
           return (
             <Link
               key={tab.value}
               href={`/orders${tab.value === "all" ? "" : `?status=${tab.value}`}`}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                active
-                  ? "border-accent text-accent"
-                  : "border-transparent text-muted hover:text-foreground"
+              className={`relative px-4 pt-2 pb-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                active ? "text-accent" : "text-muted hover:text-foreground"
               }`}
             >
-              {tab.label}
+              <span>{tab.label}</span>
+              {active && (
+                <span aria-hidden className="absolute left-0 right-0 -bottom-px h-[2px] bg-accent rounded-full" />
+              )}
             </Link>
           );
         })}
       </div>
 
       {orders.length === 0 ? (
-        <div className="bg-surface border border-border rounded-xl p-10 text-center text-sm text-muted">
-          該当する発注がありません
+        <div className="mt-8 border border-border bg-surface rounded-2xl p-10 text-center">
+          <p className="text-sm text-muted">該当する発注がありません</p>
         </div>
       ) : (
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <div className="mt-6 bg-surface border border-border rounded-xl overflow-hidden">
           {orders.map((o) => {
-            const statusMeta = STATUS_LABELS[o.status] ?? { label: o.status, color: "bg-surface-muted text-muted" };
+            const s = STATUS[o.status] ?? { label: o.status, tone: "neutral" as const };
             return (
               <Link
                 key={o.id}
                 href={`/rentals/${o.id}?from=orders`}
-                className="flex items-start gap-3 px-5 py-4 border-b border-border last:border-b-0 hover:bg-surface-muted transition-colors"
+                className="flex items-start gap-4 px-4 py-4 border-b border-border last:border-b-0 hover:bg-surface-muted transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-foreground truncate">
                       {o.site_name ?? "現場未設定"}
                     </span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${statusMeta.color}`}>
-                      {statusMeta.label}
-                    </span>
+                    <StatusBadge tone={s.tone}>{s.label}</StatusBadge>
                     {o.overdue_item_count > 0 && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800">
+                      <StatusBadge tone="danger">
                         期限超過 {o.overdue_item_count}
-                      </span>
+                      </StatusBadge>
                     )}
                   </div>
-                  <p className="text-xs font-mono text-subtle mt-0.5">{o.order_number}</p>
+                  <p className="text-xs text-subtle mt-0.5">{o.order_number}</p>
                   <p className="text-xs text-subtle mt-0.5">
                     {o.item_count} 品目
                     {o.lease_start_date && o.lease_end_date && (
-                      <> ・ {formatDateLong(o.lease_start_date)} 〜 {formatDate(o.lease_end_date)}</>
+                      <>
+                        <span className="mx-1.5 text-subtle">·</span>
+                        <span className="text-foreground">
+                          {formatDateLong(o.lease_start_date)} 〜 {formatDate(o.lease_end_date)}
+                        </span>
+                      </>
                     )}
                   </p>
                 </div>
-                <svg className="h-4 w-4 text-subtle flex-shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
+                <span aria-hidden className="text-sm text-subtle flex-shrink-0 mt-0.5">→</span>
               </Link>
             );
           })}

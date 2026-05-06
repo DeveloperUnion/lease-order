@@ -16,7 +16,6 @@ function extractSlugFromHost(rawHost: string): string | null {
 }
 
 async function resolveSlug(): Promise<string> {
-  if (process.env.TENANT_SLUG) return process.env.TENANT_SLUG;
   const host = (await headers()).get("host");
   if (host) {
     const slug = extractSlugFromHost(host);

@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requireCustomer } from "@/lib/customer-auth";
 import { getRentalOrder } from "@/lib/rentals-data";
 import ReturnForm from "./return-form";
+import LeaseTimeline from "@/components/ui/lease-timeline";
+import StatusBadge from "@/components/ui/status-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -27,53 +29,68 @@ export default async function RentalDetailPage({
 
   const activeItems = order.items.filter((i) => i.remaining > 0);
   const completedItems = order.items.filter((i) => i.remaining === 0);
+  const hasOverdue = activeItems.some((i) => i.is_overdue);
   const isClosed = order.status === "completed" || order.status === "cancelled";
   const isReadOnly = isClosed;
 
   const backHref = from === "orders" ? "/orders" : "/rentals";
-  const backLabel = from === "orders" ? "発注履歴に戻る" : "レンタル品管理に戻る";
+  const backLabel = from === "orders" ? "発注履歴に戻る" : "レンタル一覧に戻る";
 
   return (
-    <main className={`flex-1 max-w-3xl mx-auto w-full px-4 py-6 ${isReadOnly ? "" : "pb-32"}`}>
-      <div className="mb-6">
-        <Link href={backHref} className="inline-flex items-center gap-1 text-sm text-subtle hover:text-accent transition-colors mb-3">
-          <span aria-hidden>←</span> {backLabel}
-        </Link>
-        <div className="flex flex-wrap items-baseline gap-3">
-          <h1 className="text-xl font-bold text-accent">{order.site_name ?? "現場未設定"}</h1>
-          <span className="text-sm font-mono text-muted">{order.order_number}</span>
-        </div>
+    <main className={`flex-1 max-w-3xl mx-auto w-full px-4 py-7 ${isReadOnly ? "" : "pb-32"}`}>
+      <Link
+        href={backHref}
+        className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors mb-5"
+      >
+        <span aria-hidden>←</span> {backLabel}
+      </Link>
 
-        <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
-          <div className="flex gap-2">
-            <dt className="text-subtle min-w-[5rem]">受取方法</dt>
-            <dd className="text-foreground">{order.delivery_method === "delivery" ? "配送" : "引取"}</dd>
-          </div>
-          {order.delivery_method === "delivery" && order.delivery_address && (
-            <div className="flex gap-2 sm:col-span-2">
-              <dt className="text-subtle min-w-[5rem]">配送先</dt>
-              <dd className="text-foreground">{order.delivery_address}</dd>
-            </div>
-          )}
-          {order.delivery_method === "pickup" && order.pickup_office && (
-            <div className="flex gap-2 sm:col-span-2">
-              <dt className="text-subtle min-w-[5rem]">引取営業所</dt>
-              <dd className="text-foreground">{order.pickup_office.name}</dd>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <dt className="text-subtle min-w-[5rem]">リース開始</dt>
-            <dd className="text-foreground">{formatDateLong(order.lease_start_date)}</dd>
-          </div>
-        </dl>
+      <p className="text-xs text-subtle">{order.order_number}</p>
+      <div className="mt-1 flex flex-wrap items-baseline gap-3">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          {order.site_name ?? "現場未設定"}
+        </h1>
+        {isClosed && (
+          <StatusBadge tone={order.status === "completed" ? "success" : "neutral"}>
+            {order.status === "completed" ? "完了" : "キャンセル"}
+          </StatusBadge>
+        )}
+        {hasOverdue && !isClosed && (
+          <StatusBadge tone="danger">
+            期限超過
+          </StatusBadge>
+        )}
+      </div>
+
+      {/* メタ情報テーブル */}
+      <dl className="mt-5 border-t border-border">
+        <Row label="受取方法" value={order.delivery_method === "delivery" ? "配送" : "引取"} />
+        {order.delivery_method === "delivery" && order.delivery_address && (
+          <Row label="配送先" value={order.delivery_address} />
+        )}
+        {order.delivery_method === "pickup" && order.pickup_office && (
+          <Row label="引取営業所" value={order.pickup_office.name} />
+        )}
+        <Row label="リース開始" value={formatDateLong(order.lease_start_date)} />
+      </dl>
+
+      {/* Lease Timeline */}
+      <div className="mt-6">
+        <LeaseTimeline
+          startDate={order.lease_start_date}
+          endDate={order.lease_end_date}
+          overdue={hasOverdue}
+        />
       </div>
 
       {isClosed && (
-        <div className={`mb-6 px-5 py-4 rounded-xl border ${
-          order.status === "completed"
-            ? "bg-green-50 border-green-200 text-green-900"
-            : "bg-surface-muted border-border text-muted"
-        }`}>
+        <div
+          className={`mt-6 px-5 py-4 rounded-xl border ${
+            order.status === "completed"
+              ? "bg-success-soft border-success/30 text-success"
+              : "bg-surface-muted border-border text-muted"
+          }`}
+        >
           <p className="text-sm font-semibold">
             {order.status === "completed" ? "この発注は完了しています" : "この発注はキャンセルされました"}
           </p>
@@ -84,23 +101,31 @@ export default async function RentalDetailPage({
       )}
 
       {!isReadOnly && activeItems.length === 0 ? (
-        <div className="bg-surface border border-border rounded-xl p-8 text-center text-sm text-muted">
-          すべて返却済みです
+        <div className="mt-8 border border-border bg-surface rounded-2xl p-8 text-center">
+          <p className="text-sm text-muted">すべて返却済みです</p>
         </div>
       ) : null}
 
       {!isReadOnly && activeItems.length > 0 && (
-        <ReturnForm orderId={order.id} items={activeItems} extensions={order.extensions} />
+        <div className="mt-8">
+          <SectionLabel label="返却 / 延長" />
+          <ReturnForm orderId={order.id} items={activeItems} extensions={order.extensions} />
+        </div>
       )}
 
       {isReadOnly && (
-        <section>
-          <h2 className="text-xs font-semibold text-subtle uppercase tracking-wider mb-3">明細</h2>
-          <div className="bg-surface border border-border rounded-xl divide-y divide-border">
+        <section className="mt-8">
+          <SectionLabel label="明細" />
+          <div className="border border-border bg-surface rounded-xl overflow-hidden">
             {order.items.map((it) => (
-              <div key={it.id} className="px-5 py-3 flex items-center justify-between text-sm">
+              <div
+                key={it.id}
+                className="px-5 py-3 flex items-center justify-between text-sm border-b border-border last:border-b-0"
+              >
                 <span className="text-foreground">{it.material_name}</span>
-                <span className="text-subtle">× {it.quantity}（返却 {it.returned_quantity}）</span>
+                <span className="text-subtle tabular-nums">
+                  × {it.quantity}（返却 {it.returned_quantity}）
+                </span>
               </div>
             ))}
           </div>
@@ -109,17 +134,39 @@ export default async function RentalDetailPage({
 
       {!isReadOnly && completedItems.length > 0 && (
         <section className="mt-10">
-          <h2 className="text-xs font-semibold text-subtle uppercase tracking-wider mb-3">返却済み</h2>
-          <div className="bg-surface border border-border rounded-xl divide-y divide-border">
+          <SectionLabel label="返却済み" />
+          <div className="border border-border bg-surface rounded-xl overflow-hidden">
             {completedItems.map((it) => (
-              <div key={it.id} className="px-5 py-3 flex items-center justify-between text-sm">
+              <div
+                key={it.id}
+                className="px-5 py-3 flex items-center justify-between text-sm border-b border-border last:border-b-0"
+              >
                 <span className="text-foreground">{it.material_name}</span>
-                <span className="text-subtle">× {it.quantity} 返却済</span>
+                <span className="text-success tabular-nums">× {it.quantity} 返却済</span>
               </div>
             ))}
           </div>
         </section>
       )}
     </main>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline gap-4 py-2 border-b border-border">
+      <dt className="text-xs text-subtle min-w-[6rem]">
+        {label}
+      </dt>
+      <dd className="text-sm text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <h2 className="text-base font-semibold text-foreground mb-3">
+      {label}
+    </h2>
   );
 }

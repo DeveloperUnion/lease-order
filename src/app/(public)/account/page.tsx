@@ -14,49 +14,80 @@ export default async function AccountPage({
   const showResetBanner = customer.must_change_password || sp.reset === "1";
 
   return (
-    <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-accent">マイページ</h1>
-        <p className="text-sm text-muted mt-1">会社情報・連絡先・パスワードを確認・変更できます。</p>
-      </div>
+    <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-7">
+      <h1 className="text-2xl font-bold tracking-tight text-foreground">マイページ</h1>
 
       {showResetBanner && (
-        <div className="mb-6 px-4 py-3 rounded-xl border border-yellow-300 bg-yellow-50">
-          <p className="text-sm font-bold text-yellow-900">初回ログイン: パスワード変更が必要です</p>
-          <p className="text-xs text-yellow-800 mt-0.5">
+        <div className="mt-6 bg-warning-soft border border-warning/30 rounded-xl px-5 py-4">
+          <p className="text-sm font-bold text-warning">
+            初回ログイン: パスワード変更が必要です
+          </p>
+          <p className="text-xs text-warning/80 mt-1">
             セキュリティのため、パスワードを変更するまで他のページは利用できません。
           </p>
         </div>
       )}
 
-      <section className="mb-8 bg-surface border border-border rounded-xl p-5 sm:p-6">
-        <h2 className="text-xs font-semibold text-subtle uppercase tracking-wider mb-3">会社情報</h2>
-        <dl className="grid grid-cols-1 gap-y-2 text-sm">
-          <div className="flex gap-3">
-            <dt className="text-subtle min-w-[5rem]">会社 ID</dt>
-            <dd className="font-mono text-foreground">{customer.company_id}</dd>
-          </div>
-          <div className="flex gap-3">
-            <dt className="text-subtle min-w-[5rem]">会社名</dt>
-            <dd className="text-foreground">{customer.name}</dd>
-          </div>
+      <Section label="会社情報">
+        <dl className="border-t border-border">
+          <Row label="会社 ID" value={customer.company_id} />
+          <Row label="会社名" value={customer.name} />
         </dl>
-        <p className="text-xs text-subtle mt-3">会社 ID と会社名はリース会社が管理します。変更が必要な場合は担当者にご連絡ください。</p>
-      </section>
+        <p className="text-xs text-subtle mt-3">
+          会社 ID と会社名はリース会社が管理します。変更が必要な場合は担当者にご連絡ください。
+        </p>
+      </Section>
 
-      <section className={`mb-8 bg-surface border rounded-xl p-5 sm:p-6 ${showResetBanner ? "border-yellow-300 ring-2 ring-yellow-100" : "border-border"}`}>
-        <h2 className="text-xs font-semibold text-subtle uppercase tracking-wider mb-3">パスワード変更</h2>
+      <Section
+        label="パスワード変更"
+        emphasis={showResetBanner ? "warning" : undefined}
+      >
         <PasswordForm mustChange={showResetBanner} />
-      </section>
+      </Section>
 
-      <section className="bg-surface border border-border rounded-xl p-5 sm:p-6">
-        <h2 className="text-xs font-semibold text-subtle uppercase tracking-wider mb-3">連絡先情報</h2>
+      <Section label="連絡先情報">
         <ProfileForm
           initialPhone={customer.phone ?? ""}
           initialDefaultAddress={customer.default_address ?? ""}
           initialContactEmail={customer.contact_email ?? ""}
         />
-      </section>
+      </Section>
     </main>
+  );
+}
+
+function Section({
+  label,
+  emphasis,
+  children,
+}: {
+  label: string;
+  emphasis?: "warning";
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mt-8">
+      <h2
+        className={`text-base font-semibold pb-2 border-b ${
+          emphasis === "warning"
+            ? "text-warning border-warning/40"
+            : "text-foreground border-border"
+        }`}
+      >
+        {label}
+      </h2>
+      <div className="pt-4">{children}</div>
+    </section>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline gap-4 py-2 border-b border-border">
+      <dt className="text-xs text-subtle min-w-[6rem]">
+        {label}
+      </dt>
+      <dd className="text-sm text-foreground">{value}</dd>
+    </div>
   );
 }

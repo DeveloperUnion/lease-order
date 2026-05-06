@@ -32,45 +32,59 @@ function CategoryViewInner({
     <>
       <Link
         href="/"
-        className="inline-flex items-center gap-1 text-sm text-subtle hover:text-accent transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors mb-5"
       >
         <span aria-hidden>←</span> 発注画面に戻る
       </Link>
 
-      <h1 className="text-2xl font-bold text-accent mb-1">{category.name}</h1>
-      <p className="text-sm text-subtle mb-6">{filtered.length}件の資材</p>
+      <h1 className="text-2xl font-bold tracking-tight text-foreground">
+        {category.name}
+      </h1>
+      <p className="text-sm text-muted mt-1">
+        <span className="text-foreground font-medium">{filtered.length}</span> 件の資材
+        {search && (
+          <>
+            <span className="mx-1.5 text-subtle">·</span>
+            <span>キーワード: 「{search}」</span>
+          </>
+        )}
+      </p>
 
-      <div className="mb-6">
-        <div className="relative max-w-sm">
-          <input
-            type="text"
-            placeholder="この中から検索..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-surface-muted rounded-full text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent transition-colors"
-          />
+      <div className="mt-5 mb-2">
+        <div className="relative max-w-md">
           <svg
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-subtle"
+            aria-hidden
+            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-subtle pointer-events-none"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
             strokeWidth={2}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
           </svg>
+          <input
+            type="text"
+            placeholder="この中から絞り込み"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full h-10 pl-10 pr-4 bg-surface border border-border rounded-lg text-sm placeholder:text-subtle focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors"
+          />
         </div>
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-subtle text-center py-16">
-          {search ? "該当する資材がありません" : "資材が登録されていません"}
-        </p>
+        <div className="mt-8 border-y border-border py-16 text-center">
+          <p className="text-sm text-muted">
+            {search ? "該当する資材がありません" : "資材が登録されていません"}
+          </p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {filtered.map((material) => (
+        <div className="mt-4 border-t border-border bg-surface rounded-xl border overflow-hidden">
+          {filtered.map((material, index) => (
             <MaterialCard
               key={material.id}
               material={material}
+              index={index}
               onClick={() => setSelectedMaterial(material)}
             />
           ))}
@@ -89,7 +103,7 @@ function CategoryViewInner({
 
 export default function CategoryView(props: { category: Category; materials: Material[] }) {
   return (
-    <Suspense fallback={<p className="text-subtle text-center py-16">読み込み中...</p>}>
+    <Suspense fallback={<p className="text-subtle text-center py-16 text-sm">読み込み中…</p>}>
       <CategoryViewInner {...props} />
     </Suspense>
   );
