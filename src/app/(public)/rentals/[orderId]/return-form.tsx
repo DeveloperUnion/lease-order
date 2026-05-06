@@ -28,7 +28,10 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
   const router = useRouter();
   const [states, setStates] = useState<Record<string, RowState>>(() => {
     const init: Record<string, RowState> = {};
-    for (const it of items) init[it.id] = { kind: "return" };
+    for (const it of items) {
+      const wasExtended = (extensions[it.id]?.length ?? 0) > 0;
+      init[it.id] = wasExtended ? { kind: "skip" } : { kind: "return" };
+    }
     return init;
   });
   const [extendingId, setExtendingId] = useState<string | null>(null);
@@ -102,6 +105,7 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
         {items.map((it) => {
           const state = states[it.id] ?? { kind: "return" as const };
           const checked = state.kind === "return";
+          const wasExtended = (extensions[it.id]?.length ?? 0) > 0;
           const overdueBorder = it.is_overdue ? "border-l-2 border-l-danger pl-4" : "pl-5";
           return (
             <div key={it.id} className={`pr-4 sm:pr-5 py-4 border-b border-border last:border-b-0 ${overdueBorder}`}>
@@ -121,6 +125,11 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
                       {it.is_overdue && (
                         <span className="inline-flex items-center px-2 h-[20px] rounded-full text-[11px] font-semibold bg-danger-soft text-danger">
                           期限超過
+                        </span>
+                      )}
+                      {wasExtended && !it.is_overdue && (
+                        <span className="inline-flex items-center px-2 h-[20px] rounded-full text-[11px] font-semibold bg-info-soft text-info">
+                          延長済み
                         </span>
                       )}
                     </div>
