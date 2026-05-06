@@ -25,7 +25,7 @@ export default function AdminShell({
 
   return (
     <div className="flex flex-1 min-h-0">
-      <aside className="hidden lg:flex w-64 flex-shrink-0 border-r border-border">
+      <aside className="hidden lg:flex w-64 flex-shrink-0 border-r border-rule">
         <Sidebar pendingCount={pendingCount} email={email} />
       </aside>
 
@@ -37,7 +37,7 @@ export default function AdminShell({
         />
       )}
       <aside
-        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-72 transform transition-transform duration-200 border-r border-border shadow-xl ${
+        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-72 transform transition-transform duration-200 border-r border-rule shadow-xl bg-surface ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -48,8 +48,8 @@ export default function AdminShell({
         />
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="lg:hidden sticky top-0 z-30 h-14 flex items-center gap-3 px-4 bg-surface border-b border-border">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        <header className="lg:hidden sticky top-0 z-30 h-14 flex items-center gap-3 px-4 bg-surface border-b border-rule">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
@@ -66,7 +66,9 @@ export default function AdminShell({
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="font-semibold text-accent">管理画面</span>
+          <span className="font-[family-name:var(--font-display)] text-base tracking-tight text-foreground">
+            管理コンソール
+          </span>
         </header>
 
         {children}

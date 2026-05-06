@@ -4,10 +4,56 @@ import {
   countOrdersInMonth,
   countPendingOrders,
   listRecentOrders,
-  statusLabels,
+  type RecentOrderRow,
 } from "@/lib/admin-data";
+import {
+  PageHeader,
+  SectionRule,
+  StatBlock,
+  DataTable,
+  StatusBadge,
+  EmptyState,
+  type Column,
+} from "@/components/admin/ui";
 
 export const dynamic = "force-dynamic";
+
+function IconBell() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </svg>
+  );
+}
+
+function IconClipboard() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <path d="m9 11 3 3L22 4" />
+    </svg>
+  );
+}
+
+function IconBox() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+      <path d="m3.3 7 8.7 5 8.7-5" />
+      <path d="M12 22V12" />
+    </svg>
+  );
+}
 
 export default async function AdminPage() {
   const [pending, monthlyTotal, monthlyCompleted, materialCount, recent] =
@@ -19,107 +65,119 @@ export default async function AdminPage() {
       listRecentOrders(5),
     ]);
 
-  return (
-    <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6">
-      <h1 className="text-2xl font-bold text-accent mb-6">ダッシュボード</h1>
+  const today = new Date().toLocaleDateString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
-        <StatCard
-          label="未確認の発注"
-          value={pending}
-          highlight={pending > 0}
-          href="/admin/orders?status=pending"
-        />
-        <StatCard label="今月の発注" value={monthlyTotal} />
-        <StatCard label="今月の完了" value={monthlyCompleted} />
-        <StatCard
-          label="公開中の資材"
-          value={materialCount}
-          href="/admin/materials"
-        />
-      </div>
+  const recentColumns: Column<RecentOrderRow>[] = [
+    {
+      key: "order_number",
+      header: "発注番号",
+      width: "180px",
+      mono: true,
+      cell: (o) => o.order_number,
+    },
+    {
+      key: "status",
+      header: "状態",
+      width: "120px",
+      cell: (o) => <StatusBadge status={o.status} />,
+    },
+    {
+      key: "company",
+      header: "顧客",
+      width: "minmax(200px, 1fr)",
+      cell: (o) => <span className="text-foreground">{o.company_name}</span>,
+    },
+    {
+      key: "created",
+      header: "受付",
+      width: "120px",
+      align: "right",
+      cell: (o) =>
+        new Date(o.created_at).toLocaleDateString("ja-JP", {
+          month: "2-digit",
+          day: "2-digit",
+        }),
+    },
+  ];
+
+  return (
+    <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8">
+      <PageHeader
+        eyebrow={
+          <span className="font-[family-name:var(--font-mono)] tabular-nums">
+            {today}
+          </span>
+        }
+        title="ダッシュボード"
+        description="発注の処理状況と当月の集計を一覧します。"
+      />
+
+      <section className="mb-10">
+        <div className="grid grid-cols-2 lg:grid-cols-4 border-y border-rule-strong divide-y divide-rule lg:divide-y-0 lg:divide-x lg:divide-rule">
+          <StatBlock
+            label="未確認"
+            value={pending}
+            unit="件"
+            highlight={pending > 0}
+            href="/admin/orders"
+            hint={pending > 0 ? "承認待ちあり" : undefined}
+            icon={<IconBell />}
+          />
+          <StatBlock
+            label="今月の発注"
+            value={monthlyTotal}
+            unit="件"
+            icon={<IconClipboard />}
+          />
+          <StatBlock
+            label="今月の完了"
+            value={monthlyCompleted}
+            unit="件"
+            icon={<IconCheck />}
+          />
+          <StatBlock
+            label="公開資材"
+            value={materialCount}
+            unit="点"
+            href="/admin/materials"
+            icon={<IconBox />}
+          />
+        </div>
+      </section>
 
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-foreground">直近の発注</h2>
-          <Link
-            href="/admin/orders"
-            className="text-xs text-subtle hover:text-accent transition-colors"
-          >
-            すべて見る →
-          </Link>
-        </div>
-
+        <SectionRule
+          label="直近の発注"
+          right={
+            <Link
+              href="/admin/orders"
+              className="font-[family-name:var(--font-mono)] text-[11px] uppercase tracking-wider text-muted hover:text-accent transition-colors"
+            >
+              すべて見る →
+            </Link>
+          }
+          className="mb-3"
+        />
         {recent.length === 0 ? (
-          <p className="text-subtle text-sm bg-surface rounded-xl border border-border px-4 py-8 text-center">
-            まだ発注はありません
-          </p>
+          <EmptyState
+            title="まだ発注はありません"
+            description="顧客から発注が入ると、ここに直近5件が表示されます。"
+          />
         ) : (
-          <div className="bg-surface rounded-xl border border-border divide-y divide-border">
-            {recent.map((order) => {
-              const st = statusLabels[order.status];
-              return (
-                <Link
-                  key={order.id}
-                  href={`/admin/orders/${order.id}`}
-                  className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-surface-muted transition-colors"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="font-mono text-xs text-muted">
-                        {order.order_number}
-                      </span>
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${st.color}`}
-                      >
-                        {st.label}
-                      </span>
-                    </div>
-                    <p className="text-sm text-accent truncate">
-                      {order.company_name}
-                    </p>
-                  </div>
-                  <p className="text-xs text-subtle flex-shrink-0">
-                    {new Date(order.created_at).toLocaleDateString("ja-JP")}
-                  </p>
-                </Link>
-              );
-            })}
-          </div>
+          <DataTable
+            columns={recentColumns}
+            rows={recent}
+            rowKey={(o) => o.id}
+            rowHref={(o) => `/admin/orders/${o.id}`}
+            density="compact"
+            caption="直近の発注"
+          />
         )}
       </section>
     </main>
   );
-}
-
-function StatCard({
-  label,
-  value,
-  highlight,
-  href,
-}: {
-  label: string;
-  value: number;
-  highlight?: boolean;
-  href?: string;
-}) {
-  const content = (
-    <div
-      className={`p-4 sm:p-5 rounded-xl border transition-all ${
-        highlight
-          ? "bg-yellow-50 border-yellow-200"
-          : "bg-surface border-border"
-      } ${href ? "hover:shadow-sm hover:border-border-strong" : ""}`}
-    >
-      <p className="text-xs text-subtle mb-2">{label}</p>
-      <p
-        className={`text-2xl sm:text-3xl font-bold ${
-          highlight ? "text-yellow-700" : "text-accent"
-        }`}
-      >
-        {value}
-      </p>
-    </div>
-  );
-  return href ? <Link href={href}>{content}</Link> : content;
 }

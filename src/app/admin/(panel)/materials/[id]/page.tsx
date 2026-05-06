@@ -21,10 +21,10 @@ export default async function MaterialDetailPage({
   if (!material) notFound();
 
   return (
-    <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+    <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
       <Link
         href="/admin/materials"
-        className="inline-flex items-center gap-1 text-sm text-subtle hover:text-accent transition-colors mb-3"
+        className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-[11px] uppercase tracking-wider text-subtle hover:text-foreground transition-colors mb-5"
       >
         <span aria-hidden>←</span> 資材マスタに戻る
       </Link>

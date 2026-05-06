@@ -9,6 +9,7 @@ import {
   shipOrder,
 } from "@/app/admin/actions";
 import type { OrderDetail, OrderStatus } from "@/lib/admin-data";
+import { Button } from "@/components/admin/ui";
 
 type Props = {
   order: OrderDetail;
@@ -42,12 +43,16 @@ export default function OrderActions({ order }: Props) {
   const canReject = status === "pending";
   const canShip = status === "approved";
   const canComplete = status === "shipped";
-  const canCancel = status === "pending" || status === "approved" || status === "shipped";
-  const noActions = !canApprove && !canReject && !canShip && !canComplete && !canCancel;
+  const canCancel =
+    status === "pending" || status === "approved" || status === "shipped";
+  const noActions =
+    !canApprove && !canReject && !canShip && !canComplete && !canCancel;
 
   if (noActions) {
     return (
-      <p className="text-sm text-subtle">この発注は {status} 状態のため操作できません。</p>
+      <p className="text-sm text-subtle">
+        この発注は {status} 状態のため操作できません。
+      </p>
     );
   }
 
@@ -55,81 +60,83 @@ export default function OrderActions({ order }: Props) {
     <>
       <div className="flex flex-wrap gap-2">
         {canApprove && (
-          <button
-            onClick={() => setModal("approve")}
-            disabled={isPending}
-            className="text-sm px-4 py-2 rounded-full bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-40"
-          >
+          <Button onClick={() => setModal("approve")} disabled={isPending}>
             承認する
-          </button>
+          </Button>
         )}
         {canReject && (
-          <button
+          <Button
+            variant="danger"
             onClick={() => setModal("reject")}
             disabled={isPending}
-            className="text-sm px-4 py-2 rounded-full bg-red-50 text-red-700 font-medium hover:bg-red-100 disabled:opacity-40"
           >
             却下する
-          </button>
+          </Button>
         )}
         {canShip && (
-          <button
+          <Button
+            variant="secondary"
             onClick={() =>
               run(async () => {
                 await shipOrder(order.id);
               })
             }
             disabled={isPending}
-            className="text-sm px-4 py-2 rounded-full bg-purple-600 text-white font-medium hover:bg-purple-700 disabled:opacity-40"
           >
             出荷済にする
-          </button>
+          </Button>
         )}
         {canComplete && (
-          <button
+          <Button
+            variant="secondary"
             onClick={() =>
               run(async () => {
                 await completeOrder(order.id);
               })
             }
             disabled={isPending}
-            className="text-sm px-4 py-2 rounded-full bg-green-600 text-white font-medium hover:bg-green-700 disabled:opacity-40"
           >
             完了にする
-          </button>
+          </Button>
         )}
         {canCancel && (
-          <button
+          <Button
+            variant="ghost"
             onClick={() => setModal("cancel")}
             disabled={isPending}
-            className="text-sm px-4 py-2 rounded-full bg-surface-muted text-muted font-medium hover:bg-border disabled:opacity-40"
           >
             キャンセル
-          </button>
+          </Button>
         )}
       </div>
 
-      {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
+      {error && (
+        <p className="text-sm text-[var(--color-status-rejected-fg)] mt-3">{error}</p>
+      )}
 
       {modal === "approve" && (
         <Modal title="発注を承認" onClose={() => setModal(null)}>
           <p className="text-sm text-muted mb-4">
             必要に応じて承認数量を修正してください。
           </p>
-          <div className="space-y-2 mb-6">
+          <div className="border-y border-rule divide-y divide-rule mb-6">
             {order.items.map((it) => (
               <div
                 key={it.id}
-                className="flex items-center justify-between gap-3 text-sm"
+                className="flex items-center justify-between gap-3 py-3 text-sm"
               >
                 <div className="min-w-0">
-                  <p className="text-accent truncate">{it.material_name}</p>
+                  <p className="text-foreground font-medium truncate">
+                    {it.material_name}
+                  </p>
                   {it.variant_name && (
-                    <p className="text-xs text-subtle truncate">
+                    <p className="text-xs text-subtle truncate mt-0.5">
                       {it.variant_name}
                     </p>
                   )}
-                  <p className="text-xs text-subtle">発注: {it.quantity}</p>
+                  <p className="font-[family-name:var(--font-mono)] tabular-nums text-[11px] text-subtle mt-1">
+                    発注 {it.quantity}
+                  </p>
                 </div>
                 <input
                   type="number"
@@ -141,7 +148,7 @@ export default function OrderActions({ order }: Props) {
                       [it.id]: Math.max(0, Number(e.target.value) || 0),
                     }))
                   }
-                  className="w-20 px-3 py-2 bg-surface-muted rounded-lg text-sm text-right focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
+                  className="w-20 h-9 px-3 bg-surface border border-rule text-sm text-right tabular-nums font-[family-name:var(--font-mono)] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
                 />
               </div>
             ))}
@@ -167,15 +174,16 @@ export default function OrderActions({ order }: Props) {
 
       {modal === "reject" && (
         <Modal title="発注を却下" onClose={() => setModal(null)}>
-          <label className="block text-sm font-medium text-foreground mb-1.5">
-            却下理由 <span className="text-red-500">*</span>
+          <label className="block font-[family-name:var(--font-mono)] text-xs uppercase tracking-wider text-subtle mb-2">
+            却下理由{" "}
+            <span className="text-[var(--color-status-rejected-fg)]">*</span>
           </label>
           <textarea
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
             rows={4}
             placeholder="在庫不足、納期不可 など"
-            className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent mb-6"
+            className="w-full px-3 py-2.5 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 mb-6"
           />
           <ModalFooter
             pending={isPending}
@@ -229,15 +237,18 @@ function Modal({
       onClick={onClose}
     >
       <div
-        className="bg-surface w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[85vh] overflow-y-auto shadow-2xl"
+        className="bg-surface w-full sm:max-w-md max-h-[85vh] overflow-y-auto shadow-2xl border-t border-rule-strong sm:border sm:border-rule-strong"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-accent">{title}</h2>
+          <div className="flex items-center justify-between mb-5 pb-3 border-b border-rule">
+            <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight text-foreground">
+              {title}
+            </h2>
             <button
               onClick={onClose}
-              className="text-subtle hover:text-muted"
+              className="text-subtle hover:text-foreground transition-colors"
+              aria-label="閉じる"
             >
               <svg
                 className="h-5 w-5"
@@ -267,35 +278,35 @@ function ModalFooter({
   onCancel,
   onConfirm,
   confirmLabel,
-  confirmVariant = "accent",
+  confirmVariant = "primary",
 }: {
   pending: boolean;
   disabled?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
   confirmLabel: string;
-  confirmVariant?: "accent" | "danger";
+  confirmVariant?: "primary" | "danger";
 }) {
-  const confirmClass =
-    confirmVariant === "danger"
-      ? "bg-red-600 text-white hover:bg-red-700"
-      : "bg-primary text-primary-foreground hover:bg-primary/90";
   return (
     <div className="flex gap-3">
-      <button
+      <Button
+        variant="secondary"
+        size="lg"
         onClick={onCancel}
         disabled={pending}
-        className="flex-1 py-2.5 border border-border-strong text-foreground rounded-full text-sm font-medium hover:bg-surface-muted disabled:opacity-40"
+        className="flex-1"
       >
         戻る
-      </button>
-      <button
+      </Button>
+      <Button
+        variant={confirmVariant}
+        size="lg"
         onClick={onConfirm}
         disabled={pending || disabled}
-        className={`flex-1 py-2.5 rounded-full text-sm font-medium disabled:opacity-40 ${confirmClass}`}
+        className="flex-1"
       >
-        {pending ? "処理中..." : confirmLabel}
-      </button>
+        {pending ? "処理中…" : confirmLabel}
+      </Button>
     </div>
   );
 }

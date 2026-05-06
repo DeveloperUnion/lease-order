@@ -14,14 +14,57 @@
 
   --color-accent: #04384c;
   --color-accent-hover: #032a3a;
+  --color-accent-soft: #e6eef3;
 
   --color-primary: #0c0a09;
   --color-primary-foreground: #fafaf9;
+
+  --color-rule: #e7e5e4;
+  --color-rule-strong: #1c1917;
+
+  --color-status-pending-bg: #fef3c7;
+  --color-status-pending-fg: #92400e;
+  --color-status-pending-dot: #f59e0b;
+  --color-status-approved-bg: #cffafe;
+  --color-status-approved-fg: #155e75;
+  --color-status-approved-dot: #06b6d4;
+  --color-status-rejected-bg: #fee2e2;
+  --color-status-rejected-fg: #991b1b;
+  --color-status-rejected-dot: #ef4444;
+  --color-status-shipped-bg: #ecfeff;
+  --color-status-shipped-fg: #0e7490;
+  --color-status-shipped-dot: #06b6d4;
+  --color-status-completed-bg: #d1fae5;
+  --color-status-completed-fg: #065f46;
+  --color-status-completed-dot: #10b981;
+  --color-status-cancelled-bg: #f5f5f4;
+  --color-status-cancelled-fg: #57534e;
+  --color-status-cancelled-dot: #a8a29e;
+
+  --font-display: var(--font-noto-serif-jp), "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-body: var(--font-ibm-plex-sans-jp), -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
+
+  --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+[data-tenant="union"] {
+  --color-accent: #06b6d4;
+  --color-accent-hover: #0891b2;
+  --color-accent-soft: #ecfeff;
+  --color-foreground: #0a0a0a;
+  --color-rule-strong: #0a0a0a;
+}
+
+[data-tenant="sanshin"] {
+  --color-accent: #04384c;
+  --color-accent-hover: #032a3a;
+  --color-accent-soft: #e6eef3;
 }
 
 body {
@@ -31,6 +74,11 @@ body {
     "Noto Sans JP", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: #ffffff;
 }
 
 input[type="number"]::-webkit-outer-spin-button,

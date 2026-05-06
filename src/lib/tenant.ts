@@ -25,6 +25,8 @@ async function resolveSlug(): Promise<string> {
   return FALLBACK_SLUG;
 }
 
+export const getTenantSlug = cache(resolveSlug);
+
 export const getTenantId = cache(async (): Promise<string> => {
   const slug = await resolveSlug();
   const { data, error } = await supabaseAdmin

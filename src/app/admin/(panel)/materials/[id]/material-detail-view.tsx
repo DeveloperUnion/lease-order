@@ -18,11 +18,17 @@ import {
   updateMaterial,
   updateVariant,
 } from "@/app/admin/actions";
+import {
+  PageHeader,
+  SectionRule,
+  Button,
+  FormField,
+  TextInput,
+  TextArea,
+  Select,
+} from "@/components/admin/ui";
 
 const MAX_IMAGES = 5;
-
-const inputClass =
-  "w-full px-3 py-2 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent";
 
 export default function MaterialDetailView({
   material,
@@ -39,14 +45,13 @@ export default function MaterialDetailView({
 
   return (
     <>
-      <header className="flex items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-accent truncate">
-          {material.name}
-        </h1>
-        <ActiveToggle material={material} onToast={showToast} />
-      </header>
+      <PageHeader
+        eyebrow="マスタ ／ 資材"
+        title={material.name}
+        actions={<ActiveToggle material={material} onToast={showToast} />}
+      />
 
-      <div className="space-y-8">
+      <div className="space-y-10">
         <BasicInfoSection
           material={material}
           categories={categories}
@@ -58,10 +63,10 @@ export default function MaterialDetailView({
 
       {toast && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px] pointer-events-none">
-          <div className="bg-surface rounded-2xl shadow-2xl px-8 py-6 flex flex-col items-center gap-3">
-            <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
+          <div className="bg-surface border border-rule-strong shadow-2xl px-8 py-6 flex flex-col items-center gap-3">
+            <div className="w-10 h-10 bg-foreground flex items-center justify-center">
               <svg
-                className="h-6 w-6 text-primary-foreground"
+                className="h-5 w-5 text-background"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -74,7 +79,7 @@ export default function MaterialDetailView({
                 />
               </svg>
             </div>
-            <p className="text-base font-medium text-accent">{toast}</p>
+            <p className="text-sm font-medium text-foreground">{toast}</p>
           </div>
         </div>
       )}
@@ -108,13 +113,20 @@ function ActiveToggle({
     <button
       onClick={handleToggle}
       disabled={isPending}
-      className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium ${
+      className={`flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 text-xs transition-colors disabled:opacity-50 ${
         material.is_active
-          ? "bg-green-50 text-green-700 hover:bg-green-100"
-          : "bg-surface-muted text-muted hover:bg-border"
+          ? "bg-[var(--color-status-completed-bg)] text-[var(--color-status-completed-fg)] border border-[var(--color-status-completed-fg)]/20 hover:bg-[var(--color-status-completed-fg)]/10"
+          : "bg-surface-muted text-muted border border-rule hover:bg-rule"
       }`}
     >
-      {material.is_active ? "公開中" : "非公開"}
+      <span
+        className={`w-1.5 h-1.5 rounded-full ${
+          material.is_active ? "bg-[var(--color-status-completed-fg)]" : "bg-subtle"
+        }`}
+      />
+      <span className="font-medium">
+        {material.is_active ? "公開中" : "非公開"}
+      </span>
     </button>
   );
 }
@@ -164,61 +176,60 @@ function BasicInfoSection({
   };
 
   return (
-    <Section title="基本情報">
+    <section>
+      <SectionRule label="基本情報" className="mb-4" />
       <div className="space-y-4">
-        <div>
-          <Label>資材名 *</Label>
-          <input
+        <FormField label="資材名" htmlFor="material-name" required>
+          <TextInput
+            id="material-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            className={inputClass}
           />
-        </div>
-        <div>
-          <Label>カテゴリ</Label>
-          <select
+        </FormField>
+        <FormField label="カテゴリ" htmlFor="material-cat">
+          <Select
+            id="material-cat"
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className={inputClass}
           >
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
-        </div>
-        <div>
-          <Label>説明</Label>
-          <textarea
+          </Select>
+        </FormField>
+        <FormField label="説明" htmlFor="material-desc">
+          <TextArea
+            id="material-desc"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className={inputClass}
           />
-        </div>
-        <div>
-          <Label>並び順</Label>
-          <input
+        </FormField>
+        <FormField label="並び順" htmlFor="material-sort">
+          <TextInput
+            id="material-sort"
             type="number"
             value={sortOrder}
             onChange={(e) => setSortOrder(Number(e.target.value) || 0)}
-            className={`${inputClass} w-32`}
+            className="w-32"
           />
-        </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        </FormField>
+        {error && (
+          <p className="text-sm text-[var(--color-status-rejected-fg)]">{error}</p>
+        )}
         <div className="flex justify-end">
-          <button
+          <Button
             onClick={handleSave}
             disabled={!dirty || !name.trim() || isPending}
-            className="px-5 py-2 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 disabled:opacity-40"
           >
-            {isPending ? "保存中..." : "基本情報を保存"}
-          </button>
+            {isPending ? "保存中…" : "基本情報を保存"}
+          </Button>
         </div>
       </div>
-    </Section>
+    </section>
   );
 }
 
@@ -238,12 +249,10 @@ function ImagesSection({
   const [dragId, setDragId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Sync local order if server data changed (e.g. after add/remove)
   if (
     material.images.length !== order.length ||
     material.images.some((img, i) => order[i]?.image_id !== img.image_id)
   ) {
-    // Only resync if the IDs differ as a set; otherwise preserve in-flight reorder.
     const serverIds = new Set(material.images.map((i) => i.image_id));
     const localIds = new Set(order.map((i) => i.image_id));
     const sameSet =
@@ -319,7 +328,16 @@ function ImagesSection({
   };
 
   return (
-    <Section title={`画像 ${order.length} / ${MAX_IMAGES}`}>
+    <section>
+      <SectionRule
+        label="画像"
+        right={
+          <span className="font-[family-name:var(--font-mono)] tabular-nums text-[11px] text-subtle">
+            {order.length} / {MAX_IMAGES}
+          </span>
+        }
+        className="mb-4"
+      />
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
         {order.map((img) => (
           <div
@@ -328,8 +346,8 @@ function ImagesSection({
             onDragStart={() => setDragId(img.image_id)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => handleDrop(img.image_id)}
-            className={`group relative aspect-square bg-surface-muted rounded-lg overflow-hidden border ${
-              img.is_primary ? "border-accent" : "border-border"
+            className={`group relative aspect-square bg-surface-muted overflow-hidden border ${
+              img.is_primary ? "border-accent border-2" : "border-rule"
             } ${dragId === img.image_id ? "opacity-50" : ""}`}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -339,17 +357,17 @@ function ImagesSection({
               className="w-full h-full object-contain pointer-events-none"
             />
             {img.is_primary && (
-              <span className="absolute top-1 left-1 text-[10px] font-medium bg-accent text-white px-1.5 py-0.5 rounded">
+              <span className="absolute top-1 left-1 font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-wider bg-accent text-white px-1.5 py-0.5">
                 代表
               </span>
             )}
-            <div className="absolute inset-x-0 bottom-0 bg-black/60 text-white text-[10px] flex divide-x divide-white/30 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute inset-x-0 bottom-0 bg-foreground/80 text-background text-[10px] flex divide-x divide-background/20 opacity-0 group-hover:opacity-100 transition-opacity">
               {!img.is_primary && (
                 <button
                   type="button"
                   onClick={() => handleSetPrimary(img.image_id)}
                   disabled={isPending}
-                  className="flex-1 py-1.5 hover:bg-white/10 disabled:opacity-50"
+                  className="flex-1 py-1.5 hover:bg-background/10 disabled:opacity-50 font-[family-name:var(--font-mono)] uppercase tracking-wider"
                 >
                   代表に
                 </button>
@@ -358,7 +376,7 @@ function ImagesSection({
                 type="button"
                 onClick={() => handleDelete(img.image_id)}
                 disabled={isPending}
-                className="flex-1 py-1.5 hover:bg-white/10 disabled:opacity-50"
+                className="flex-1 py-1.5 hover:bg-background/10 disabled:opacity-50 font-[family-name:var(--font-mono)] uppercase tracking-wider"
               >
                 削除
               </button>
@@ -367,7 +385,7 @@ function ImagesSection({
         ))}
         {order.length < MAX_IMAGES && (
           <label
-            className={`aspect-square rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center text-subtle text-xs gap-1 cursor-pointer hover:border-border-strong hover:bg-surface-muted transition-colors ${
+            className={`aspect-square border-2 border-dashed border-rule flex flex-col items-center justify-center text-subtle text-xs gap-1 cursor-pointer hover:border-rule-strong hover:bg-surface-muted transition-colors ${
               isPending ? "opacity-50 cursor-wait" : ""
             }`}
           >
@@ -378,13 +396,11 @@ function ImagesSection({
               stroke="currentColor"
               strokeWidth={1.5}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 5v14m7-7H5"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m7-7H5" />
             </svg>
-            <span>画像を追加</span>
+            <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider">
+              画像を追加
+            </span>
             <input
               ref={fileRef}
               type="file"
@@ -402,7 +418,7 @@ function ImagesSection({
       <p className="mt-3 text-xs text-subtle">
         画像をドラッグで並び替え。カードをクリック → 代表に / 削除。
       </p>
-    </Section>
+    </section>
   );
 }
 
@@ -507,28 +523,26 @@ function VariantsSection({
   };
 
   return (
-    <Section
-      title={`バリエーション ${material.variants.length}件`}
-      action={
-        !creating &&
-        !editing && (
-          <button
-            type="button"
-            onClick={startCreate}
-            className="text-sm px-3 py-1.5 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90"
-          >
-            + 追加
-          </button>
-        )
-      }
-    >
+    <section>
+      <SectionRule
+        label="バリエーション"
+        right={
+          !creating &&
+          !editing && (
+            <Button size="sm" onClick={startCreate}>
+              + 追加
+            </Button>
+          )
+        }
+        className="mb-4"
+      />
       {material.variants.length === 0 && !creating ? (
-        <p className="text-sm text-subtle py-6 text-center">
+        <p className="text-sm text-subtle py-6 text-center border-y border-rule">
           バリエーションは未登録です
         </p>
       ) : (
-        <div className="space-y-2">
-          <div className="hidden sm:grid grid-cols-[1fr,80px,140px,60px,auto] gap-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-subtle">
+        <div className="border-y border-rule divide-y divide-rule">
+          <div className="hidden sm:grid grid-cols-[1fr,80px,140px,60px,auto] gap-2 px-3 py-2 bg-surface-muted/60 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-subtle">
             <span>名前</span>
             <span>単位</span>
             <span>SKU</span>
@@ -552,36 +566,34 @@ function VariantsSection({
             return (
               <div
                 key={v.id}
-                className={`grid grid-cols-2 sm:grid-cols-[1fr,80px,140px,60px,auto] gap-2 items-center bg-surface border border-border rounded-lg px-3 py-2 text-sm ${
+                className={`grid grid-cols-2 sm:grid-cols-[1fr,80px,140px,60px,auto] gap-2 items-center px-3 py-2.5 text-sm hover:bg-surface-muted ${
                   !v.is_active ? "opacity-50" : ""
                 }`}
               >
-                <div className="font-medium text-accent truncate">{v.name}</div>
-                <div className="text-muted text-xs sm:text-sm">
-                  {v.unit ?? "—"}
-                </div>
-                <div className="text-muted font-mono text-xs truncate">
+                <div className="font-medium text-foreground truncate">{v.name}</div>
+                <div className="text-muted text-xs sm:text-sm">{v.unit ?? "—"}</div>
+                <div className="text-muted font-[family-name:var(--font-mono)] text-xs truncate">
                   {v.sku ?? "—"}
                 </div>
-                <div className="text-right text-muted text-xs">
+                <div className="text-right text-muted font-[family-name:var(--font-mono)] tabular-nums text-xs">
                   {v.sort_order}
                 </div>
                 <div className="col-span-2 sm:col-span-1 flex justify-end gap-2">
-                  <button
-                    type="button"
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() => handleDelete(v)}
                     disabled={isPending}
-                    className="text-xs px-2.5 py-1 bg-surface-muted text-muted rounded-full hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
                   >
                     削除
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => startEdit(v)}
-                    className="text-xs px-2.5 py-1 bg-surface-muted text-muted rounded-full hover:bg-border"
                   >
                     編集
-                  </button>
+                  </Button>
                 </div>
               </div>
             );
@@ -599,8 +611,12 @@ function VariantsSection({
         </div>
       )}
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-    </Section>
+      {error && (
+        <p className="mt-3 text-sm text-[var(--color-status-rejected-fg)]">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -618,25 +634,25 @@ function VariantEditRow({
   pending: boolean;
 }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-[1fr,80px,140px,60px,auto] gap-2 items-center bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
+    <div className="grid grid-cols-2 sm:grid-cols-[1fr,80px,140px,60px,auto] gap-2 items-center px-3 py-2.5 bg-[var(--color-status-pending-bg)]/40 border-l-2 border-accent">
       <input
         autoFocus
         value={draft.name}
         onChange={(e) => setDraft({ ...draft, name: e.target.value })}
         placeholder="名前 (例: 2m)"
-        className="px-2 py-1.5 bg-surface rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        className="h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
       <input
         value={draft.unit}
         onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
         placeholder="本/枚"
-        className="px-2 py-1.5 bg-surface rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        className="h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
       <input
         value={draft.sku}
         onChange={(e) => setDraft({ ...draft, sku: e.target.value })}
         placeholder="SKU"
-        className="px-2 py-1.5 bg-surface rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent"
+        className="h-9 px-2 bg-surface border border-rule text-sm font-[family-name:var(--font-mono)] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
       <input
         type="number"
@@ -644,7 +660,7 @@ function VariantEditRow({
         onChange={(e) =>
           setDraft({ ...draft, sort_order: Number(e.target.value) || 0 })
         }
-        className="px-2 py-1.5 bg-surface rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-accent"
+        className="h-9 px-2 bg-surface border border-rule text-sm text-right tabular-nums font-[family-name:var(--font-mono)] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
       <div className="col-span-2 sm:col-span-1 flex items-center justify-end gap-2">
         <label className="flex items-center gap-1 text-xs text-muted mr-2">
@@ -656,57 +672,22 @@ function VariantEditRow({
           />
           公開
         </label>
-        <button
-          type="button"
+        <Button
+          size="sm"
+          variant="secondary"
           onClick={onCancel}
           disabled={pending}
-          className="text-xs px-3 py-1 bg-surface text-muted border border-border rounded-full hover:bg-surface-muted"
         >
           取消
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          size="sm"
           onClick={onSave}
           disabled={pending || !draft.name.trim()}
-          className="text-xs px-3 py-1 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 disabled:opacity-40"
         >
           保存
-        </button>
+        </Button>
       </div>
     </div>
-  );
-}
-
-// ============================================================
-// Layout helpers
-// ============================================================
-
-function Section({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        {action}
-      </div>
-      <div className="bg-surface border border-border rounded-xl p-4 sm:p-5">
-        {children}
-      </div>
-    </section>
-  );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <label className="block text-sm font-medium text-foreground mb-1.5">
-      {children}
-    </label>
   );
 }
