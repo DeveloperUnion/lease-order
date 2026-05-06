@@ -173,7 +173,7 @@ export default function AddressAutocomplete({ value, onChange, placeholder }: Pr
           onFocus={handleFocus}
           onBlur={handleBlur}
           placeholder={placeholder}
-          className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent transition-colors"
+          className="w-full h-[2.625rem] px-3.5 bg-surface border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors"
         />
 
         {showSuggestions && suggestions.length > 0 && (
@@ -218,7 +218,7 @@ export default function AddressAutocomplete({ value, onChange, placeholder }: Pr
         </button>
       )}
 
-      {geoError && <div className="text-xs text-red-500">{geoError}</div>}
+      {geoError && <div className="text-xs text-danger">{geoError}</div>}
 
       <div>
         <label className="block text-xs text-muted mb-1">
@@ -229,7 +229,7 @@ export default function AddressAutocomplete({ value, onChange, placeholder }: Pr
           value={buildingDetail}
           onChange={(e) => setBuildingDetail(e.target.value)}
           placeholder="例: ○○ビル 3階"
-          className="w-full px-4 py-2 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent transition-colors"
+          className="w-full h-10 px-3.5 bg-surface border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors"
         />
       </div>
     </div>

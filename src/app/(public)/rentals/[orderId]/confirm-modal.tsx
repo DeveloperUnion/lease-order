@@ -31,22 +31,35 @@ export default function ConfirmModal({
   }, [onCancel, isPending]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40">
-      <div className="bg-surface w-full sm:max-w-md sm:rounded-xl rounded-t-xl shadow-xl overflow-hidden">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-foreground/40 backdrop-blur-[2px]"
+      onClick={() => !isPending && onCancel()}
+    >
+      <div
+        className="bg-surface w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl border border-border overflow-hidden motion-safe:animate-[reveal-up_240ms_ease-out_both]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-5 py-4 border-b border-border">
           <h2 className="text-base font-bold text-foreground">手続きの確認</h2>
           <p className="text-sm text-muted mt-0.5">以下の内容で確定します。</p>
         </div>
 
-        <div className="px-5 py-4 space-y-5 max-h-[60vh] overflow-y-auto">
+        <div className="px-5 py-4 space-y-6 max-h-[60vh] overflow-y-auto">
           {returns.length > 0 && (
             <section>
-              <h3 className="text-xs font-semibold text-subtle uppercase tracking-wider mb-2">返却 ({returns.length})</h3>
-              <ul className="space-y-1.5">
+              <h3 className="text-sm font-semibold text-foreground mb-2 pb-1.5 border-b border-border">
+                返却 <span className="text-subtle font-normal">({returns.length})</span>
+              </h3>
+              <ul className="divide-y divide-border">
                 {returns.map((it) => (
-                  <li key={it.id} className="flex items-baseline justify-between gap-3 text-sm">
+                  <li
+                    key={it.id}
+                    className="flex items-baseline justify-between gap-3 py-2 text-sm"
+                  >
                     <span className="text-foreground truncate">{it.material_name}</span>
-                    <span className="text-subtle text-xs flex-shrink-0">× {it.quantity}</span>
+                    <span className="text-foreground flex-shrink-0 tabular-nums">× {it.quantity}</span>
                   </li>
                 ))}
               </ul>
@@ -55,12 +68,19 @@ export default function ConfirmModal({
 
           {extensions.length > 0 && (
             <section>
-              <h3 className="text-xs font-semibold text-subtle uppercase tracking-wider mb-2">期限延長 ({extensions.length})</h3>
-              <ul className="space-y-1.5">
+              <h3 className="text-sm font-semibold text-foreground mb-2 pb-1.5 border-b border-border">
+                延長 <span className="text-subtle font-normal">({extensions.length})</span>
+              </h3>
+              <ul className="divide-y divide-border">
                 {extensions.map(({ item, newEndDate }) => (
-                  <li key={item.id} className="flex items-baseline justify-between gap-3 text-sm">
+                  <li
+                    key={item.id}
+                    className="flex items-baseline justify-between gap-3 py-2 text-sm"
+                  >
                     <span className="text-foreground truncate">{item.material_name}</span>
-                    <span className="text-blue-700 text-xs flex-shrink-0">{formatDate(item.lease_end_date)} → {formatDate(newEndDate)}</span>
+                    <span className="text-info flex-shrink-0 tabular-nums">
+                      {formatDate(item.lease_end_date)} → {formatDate(newEndDate)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -73,7 +93,7 @@ export default function ConfirmModal({
             type="button"
             onClick={onCancel}
             disabled={isPending}
-            className="px-4 h-10 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
+            className="px-4 h-10 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50 transition-colors"
           >
             キャンセル
           </button>
@@ -81,9 +101,10 @@ export default function ConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={isPending}
-            className="px-5 h-10 bg-primary text-primary-foreground text-sm font-semibold rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="px-5 h-10 inline-flex items-center gap-2 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99]"
           >
             {isPending ? "処理中…" : "確定する"}
+            <span aria-hidden>→</span>
           </button>
         </div>
       </div>

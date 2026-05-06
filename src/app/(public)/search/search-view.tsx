@@ -19,34 +19,51 @@ export default function SearchView({
   const getCategoryName = (categoryId: string) =>
     categories.find((c) => c.id === categoryId)?.name || "";
 
+  const grouped = Array.from(new Set(results.map((r) => r.category_id))).map((catId) => ({
+    catId,
+    catName: getCategoryName(catId),
+    materials: results.filter((r) => r.category_id === catId),
+  }));
+
   return (
     <>
-      <h1 className="text-2xl font-bold text-accent mb-1">
-        &ldquo;{query}&rdquo; の検索結果
+      <h1 className="text-2xl font-bold tracking-tight text-foreground">
+        検索結果
       </h1>
-      <p className="text-sm text-subtle mb-6">{results.length}件</p>
+      <p className="text-sm text-muted mt-1">
+        キーワード「<span className="text-foreground font-medium">{query}</span>」
+        <span className="mx-1.5 text-subtle">·</span>
+        <span className="text-foreground font-medium">{results.length}</span> 件
+      </p>
 
       {results.length === 0 ? (
-        <p className="text-subtle text-center py-16">該当する資材がありません</p>
+        <div className="mt-8 border-y border-border py-16 text-center">
+          <p className="text-sm text-muted">該当する資材がありません</p>
+        </div>
       ) : (
-        <div className="space-y-6">
-          {Array.from(new Set(results.map((r) => r.category_id))).map((catId) => {
-            const catMaterials = results.filter((r) => r.category_id === catId);
-            return (
-              <div key={catId}>
-                <h2 className="text-sm font-medium text-subtle mb-2">{getCategoryName(catId)}</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {catMaterials.map((material) => (
-                    <MaterialCard
-                      key={material.id}
-                      material={material}
-                      onClick={() => setSelectedMaterial(material)}
-                    />
-                  ))}
-                </div>
+        <div className="mt-6 space-y-8">
+          {grouped.map(({ catId, catName, materials }) => (
+            <section key={catId}>
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="text-base font-semibold text-foreground">
+                  {catName}
+                </h2>
+                <span className="text-xs text-subtle">
+                  {materials.length} 件
+                </span>
               </div>
-            );
-          })}
+              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+                {materials.map((material, index) => (
+                  <MaterialCard
+                    key={material.id}
+                    material={material}
+                    index={index}
+                    onClick={() => setSelectedMaterial(material)}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
       )}
 

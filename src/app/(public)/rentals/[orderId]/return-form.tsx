@@ -98,13 +98,13 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
 
   return (
     <>
-      <div className="bg-surface border border-border rounded-xl divide-y divide-border overflow-hidden">
+      <div className="border border-border bg-surface rounded-xl overflow-hidden">
         {items.map((it) => {
           const state = states[it.id] ?? { kind: "return" as const };
           const checked = state.kind === "return";
-          const overdueBorder = it.is_overdue ? "border-l-4 border-l-red-500" : "";
+          const overdueBorder = it.is_overdue ? "border-l-2 border-l-danger pl-4" : "pl-5";
           return (
-            <div key={it.id} className={`px-4 py-4 sm:px-5 ${overdueBorder}`}>
+            <div key={it.id} className={`pr-4 sm:pr-5 py-4 border-b border-border last:border-b-0 ${overdueBorder}`}>
               <div className="flex items-start gap-3">
                 <input
                   id={`r-${it.id}`}
@@ -112,32 +112,42 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
                   checked={checked}
                   onChange={(e) => handleToggle(it.id, e.target.checked)}
                   disabled={state.kind === "extend"}
-                  className="mt-1 h-5 w-5 rounded border-border-strong text-accent focus:ring-accent/30 disabled:opacity-40"
+                  className="mt-1 h-5 w-5 rounded border-border text-accent focus:ring-2 focus:ring-accent/40 disabled:opacity-40"
                 />
                 <div className="flex-1 min-w-0">
-                  <label htmlFor={`r-${it.id}`} className="block">
+                  <label htmlFor={`r-${it.id}`} className="block cursor-pointer">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                       <span className="text-sm font-semibold text-foreground">{it.material_name}</span>
                       {it.is_overdue && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800">
+                        <span className="inline-flex items-center px-2 h-[20px] rounded-full text-[11px] font-semibold bg-danger-soft text-danger">
                           期限超過
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-subtle mt-0.5">
-                      数量 {it.quantity}
-                      {it.returned_quantity > 0 && <> ・ 返却済 {it.returned_quantity}</>}
-                      {it.lease_end_date && <> ・ 期限 {formatDate(it.lease_end_date)}</>}
+                    <div className="text-xs text-subtle mt-0.5 tabular-nums">
+                      <span className="text-foreground">× {it.quantity}</span>
+                      {it.returned_quantity > 0 && (
+                        <>
+                          <span className="mx-1.5 text-subtle">·</span>
+                          <span>返却済 {it.returned_quantity}</span>
+                        </>
+                      )}
+                      {it.lease_end_date && (
+                        <>
+                          <span className="mx-1.5 text-subtle">·</span>
+                          <span>期限 {formatDate(it.lease_end_date)}</span>
+                        </>
+                      )}
                     </div>
                   </label>
 
                   {state.kind === "extend" && (
-                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-800">
-                      <span>延長予定: {formatDate(state.newEndDate)}</span>
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 h-7 bg-info-soft border border-info/30 rounded-full text-xs text-info">
+                      <span>→ 延長予定 {formatDate(state.newEndDate)}</span>
                       <button
                         type="button"
                         onClick={() => handleExtendCancel(it.id)}
-                        className="text-blue-700 hover:text-blue-900 underline"
+                        className="text-xs text-info hover:text-info/80 underline"
                       >
                         取消
                       </button>
@@ -146,12 +156,16 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
 
                   {extensions[it.id]?.length > 0 && (
                     <details className="mt-2 text-xs text-subtle">
-                      <summary className="cursor-pointer hover:text-foreground">延長履歴 ({extensions[it.id].length})</summary>
-                      <ul className="mt-1 space-y-0.5 ml-3">
+                      <summary className="cursor-pointer text-xs hover:text-foreground">
+                        延長履歴 ({extensions[it.id].length})
+                      </summary>
+                      <ul className="mt-1.5 space-y-0.5 ml-2 text-xs tabular-nums">
                         {extensions[it.id].map((e, i) => (
                           <li key={i}>
-                            {formatDate(e.previous_end_date)} → {formatDate(e.new_end_date)}
-                            {e.reason && <> （{e.reason}）</>}
+                            <span className="text-subtle">{formatDate(e.previous_end_date)}</span>
+                            <span aria-hidden className="mx-1">→</span>
+                            <span className="text-foreground">{formatDate(e.new_end_date)}</span>
+                            {e.reason && <span className="text-subtle"> （{e.reason}）</span>}
                           </li>
                         ))}
                       </ul>
@@ -163,7 +177,7 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
                     <button
                       type="button"
                       onClick={() => handleExtendOpen(it.id)}
-                      className="px-3 h-8 inline-flex items-center text-xs font-semibold border border-border-strong rounded-md hover:bg-surface-muted transition-colors"
+                      className="px-3 h-8 inline-flex items-center text-xs font-semibold border border-border bg-surface rounded-lg hover:bg-surface-muted hover:border-border-strong transition-colors"
                     >
                       延長
                     </button>
@@ -176,25 +190,34 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
       </div>
 
       {errorMessage && (
-        <div role="alert" className="mt-4 px-3 py-2 rounded-md border border-red-200 bg-red-50 text-sm text-red-700">
+        <div role="alert" className="mt-4 px-3 py-2 rounded-lg border border-danger/30 bg-danger-soft text-sm text-danger">
           {errorMessage}
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 bg-surface/95 backdrop-blur border-t border-border px-4 py-3 z-40">
+      <div className="fixed bottom-0 left-0 right-0 md:left-56 bg-surface/95 backdrop-blur border-t border-border px-4 py-3 z-40 pb-[calc(0.75rem+env(safe-area-inset-bottom,0))] md:pb-3">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <div className="flex-1 text-xs text-muted">
-            {summary.returns.length > 0 && <span className="mr-3">返却 {summary.returns.length} 件</span>}
-            {summary.extendsItems.length > 0 && <span className="mr-3">延長 {summary.extendsItems.length} 件</span>}
-            {!hasAnyAction && <span>操作対象を選択してください</span>}
+            {summary.returns.length > 0 && (
+              <span className="mr-3">
+                <span className="text-subtle">返却</span> {summary.returns.length}
+              </span>
+            )}
+            {summary.extendsItems.length > 0 && (
+              <span className="mr-3">
+                <span className="text-subtle">延長</span> {summary.extendsItems.length}
+              </span>
+            )}
+            {!hasAnyAction && <span className="text-subtle">操作対象を選択してください</span>}
           </div>
           <button
             type="button"
             onClick={() => setShowConfirm(true)}
             disabled={!hasAnyAction || isPending}
-            className="px-5 h-11 bg-primary text-primary-foreground rounded-full text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="px-5 h-11 inline-flex items-center gap-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99]"
           >
-            返却手続きへ進む
+            手続きへ進む
+            <span aria-hidden>→</span>
           </button>
         </div>
       </div>

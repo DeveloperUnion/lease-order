@@ -40,7 +40,7 @@ export default function LoginForm({ next }: { next?: string }) {
           onChange={(e) => setCompanyId(e.target.value)}
           autoComplete="username"
           placeholder="C-2026-001"
-          className="w-full h-11 px-3.5 bg-surface border border-border-strong rounded-md text-sm text-foreground placeholder:text-subtle focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-colors"
+          className="w-full h-11 px-3.5 bg-surface border border-border rounded-lg text-sm text-foreground placeholder:text-subtle focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors"
         />
       </div>
 
@@ -56,12 +56,12 @@ export default function LoginForm({ next }: { next?: string }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
-          className="w-full h-11 px-3.5 bg-surface border border-border-strong rounded-md text-sm text-foreground placeholder:text-subtle focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-colors"
+          className="w-full h-11 px-3.5 bg-surface border border-border rounded-lg text-sm text-foreground placeholder:text-subtle focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors"
         />
       </div>
 
       {errorMessage && (
-        <div role="alert" className="px-3 py-2 rounded-md border border-red-200 bg-red-50 text-sm text-red-700">
+        <div role="alert" className="px-3 py-2 rounded-lg border border-danger/30 bg-danger-soft text-sm text-danger">
           {errorMessage}
         </div>
       )}
@@ -69,9 +69,10 @@ export default function LoginForm({ next }: { next?: string }) {
       <button
         type="submit"
         disabled={isPending || !companyId || !password}
-        className="w-full h-11 bg-accent text-white rounded-md text-sm font-semibold tracking-wide hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="w-full h-11 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99] inline-flex items-center justify-center gap-2"
       >
         {isPending ? "ログイン中…" : "ログイン"}
+        <span aria-hidden>→</span>
       </button>
     </form>
   );

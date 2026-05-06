@@ -29,7 +29,7 @@ export default async function SearchPage({
     <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-6">
       <Link
         href="/"
-        className="inline-flex items-center gap-1 text-sm text-subtle hover:text-accent transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors mb-5"
       >
         <span aria-hidden>←</span> 発注画面に戻る
       </Link>
