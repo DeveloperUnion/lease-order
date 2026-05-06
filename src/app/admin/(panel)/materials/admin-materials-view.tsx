@@ -5,6 +5,14 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { Category, Material } from "@/lib/types";
 import { createMaterial, setMaterialActive } from "@/app/admin/actions";
+import {
+  PageHeader,
+  Button,
+  FormField,
+  TextInput,
+  Select,
+  EmptyState,
+} from "@/components/admin/ui";
 
 export default function AdminMaterialsView({
   categories,
@@ -42,93 +50,104 @@ export default function AdminMaterialsView({
   };
 
   return (
-    <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6">
-      <h1 className="text-2xl font-bold text-accent mb-6">資材マスタ</h1>
+    <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
+      <PageHeader
+        title="資材マスタ"
+        description="カテゴリごとに資材を編集します。公開／非公開の切り替えは即時反映されます。"
+        actions={<Button onClick={() => setCreating(true)}>+ 新規追加</Button>}
+      />
 
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-6 -mx-4 px-4">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setSelectedCategoryId(cat.id)}
-            className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              selectedCategoryId === cat.id
-                ? "bg-primary text-primary-foreground"
-                : "bg-surface-muted text-muted hover:bg-border"
-            }`}
-          >
-            {cat.name}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-sm text-subtle">{filtered.length}件</span>
-        <button
-          onClick={() => setCreating(true)}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          + 新規追加
-        </button>
-      </div>
-
-      <div className="space-y-2">
-        {filtered.map((mat) => (
-          <div
-            key={mat.id}
-            className={`flex items-center justify-between p-4 bg-surface rounded-xl border border-border ${
-              !mat.is_active ? "opacity-50" : ""
-            }`}
-          >
-            <Link
-              href={`/admin/materials/${mat.id}`}
-              className="flex items-center gap-3 min-w-0 flex-1 hover:opacity-80 transition-opacity"
+      <div className="flex gap-0 overflow-x-auto pb-0 mb-6 -mx-4 px-4 border-b border-rule">
+        {categories.map((cat) => {
+          const isActive = selectedCategoryId === cat.id;
+          const count = allMaterials.filter((m) => m.category_id === cat.id).length;
+          return (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategoryId(cat.id)}
+              className={`whitespace-nowrap flex items-center gap-1.5 px-4 py-3 text-sm transition-colors border-b-2 -mb-px ${
+                isActive
+                  ? "border-accent text-foreground font-medium"
+                  : "border-transparent text-muted hover:text-foreground"
+              }`}
             >
-              <div className="w-10 h-10 bg-surface-muted rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden">
-                {mat.image_url ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={mat.image_url}
-                    alt=""
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <span className="text-subtle text-[10px]">NO IMG</span>
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-accent truncate">
-                  {mat.name}
-                </p>
-                <p className="text-xs text-subtle truncate">
-                  {mat.description || "説明なし"}
-                </p>
-              </div>
-            </Link>
-            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-              <button
-                onClick={() => handleToggleActive(mat)}
-                disabled={isPending}
-                className="text-xs px-2.5 py-1.5 bg-surface-muted text-muted rounded-full hover:bg-border disabled:opacity-40"
-              >
-                {mat.is_active ? "非公開" : "公開"}
-              </button>
+              <span>{cat.name}</span>
+              <span className="font-[family-name:var(--font-mono)] tabular-nums text-[10px] text-subtle">
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center justify-between mb-3">
+        <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-subtle">
+          {filtered.length} 件
+        </span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          title="このカテゴリには資材がありません"
+          description="上のフォームから資材を新規登録してください。"
+        />
+      ) : (
+        <div className="border-y border-rule divide-y divide-rule">
+          {filtered.map((mat) => (
+            <div
+              key={mat.id}
+              className={`flex items-center justify-between gap-3 px-3 sm:px-4 py-3 ${
+                !mat.is_active ? "opacity-50" : ""
+              }`}
+            >
               <Link
                 href={`/admin/materials/${mat.id}`}
-                className="text-sm px-3 py-1.5 bg-surface-muted text-muted rounded-full hover:bg-border transition-colors"
+                className="flex items-center gap-3 min-w-0 flex-1 hover:opacity-80 transition-opacity"
               >
-                詳細
+                <div className="w-12 h-12 bg-surface-muted border border-rule flex-shrink-0 flex items-center justify-center overflow-hidden">
+                  {mat.image_url ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={mat.image_url}
+                      alt=""
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <span className="font-[family-name:var(--font-mono)] text-[9px] text-subtle uppercase">
+                      no img
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {mat.name}
+                  </p>
+                  <p className="text-xs text-subtle truncate">
+                    {mat.description || "説明なし"}
+                  </p>
+                </div>
               </Link>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleToggleActive(mat)}
+                  disabled={isPending}
+                >
+                  {mat.is_active ? "非公開" : "公開"}
+                </Button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {toastMessage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px] pointer-events-none">
-          <div className="bg-surface rounded-2xl shadow-2xl px-8 py-6 flex flex-col items-center gap-3">
-            <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
+          <div className="bg-surface border border-rule-strong shadow-2xl px-8 py-6 flex flex-col items-center gap-3">
+            <div className="w-10 h-10 bg-foreground flex items-center justify-center">
               <svg
-                className="h-6 w-6 text-primary-foreground"
+                className="h-5 w-5 text-background"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -141,7 +160,7 @@ export default function AdminMaterialsView({
                 />
               </svg>
             </div>
-            <p className="text-base font-medium text-accent">{toastMessage}</p>
+            <p className="text-sm font-medium text-foreground">{toastMessage}</p>
           </div>
         </div>
       )}
@@ -203,16 +222,19 @@ function CreateModal({
       onClick={onClose}
     >
       <div
-        className="bg-surface w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
+        className="bg-surface w-full sm:max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border-t border-rule-strong sm:border sm:border-rule-strong"
         onClick={(e) => e.stopPropagation()}
       >
         <form action={handleSubmit} className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-accent">資材を追加</h2>
+          <div className="flex items-center justify-between mb-5 pb-3 border-b border-rule">
+            <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight text-foreground">
+              資材を追加
+            </h2>
             <button
               type="button"
               onClick={onClose}
-              className="text-subtle hover:text-muted"
+              className="text-subtle hover:text-foreground"
+              aria-label="閉じる"
             >
               <svg
                 className="h-5 w-5"
@@ -230,60 +252,60 @@ function CreateModal({
             </button>
           </div>
 
-          <p className="text-xs text-subtle mb-4">
+          <p className="text-xs text-subtle mb-5 leading-relaxed">
             まず最低限の情報で作成し、続けて詳細ページで画像・バリエーション・説明を編集できます。
           </p>
 
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                カテゴリ
-              </label>
-              <select
+            <FormField label="カテゴリ" htmlFor="cat">
+              <Select
+                id="cat"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
               >
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                資材名 <span className="text-red-500">*</span>
-              </label>
-              <input
+              </Select>
+            </FormField>
+            <FormField label="資材名" htmlFor="name" required>
+              <TextInput
+                id="name"
                 autoFocus
-                type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
               />
-            </div>
+            </FormField>
           </div>
 
-          {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+          {error && (
+            <p className="mt-4 text-sm text-[var(--color-status-rejected-fg)]">
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-3 mt-6">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="lg"
               onClick={onClose}
               disabled={isPending}
-              className="flex-1 py-2.5 border border-border-strong text-foreground rounded-full text-sm font-medium hover:bg-surface-muted disabled:opacity-40"
+              className="flex-1"
             >
               キャンセル
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              size="lg"
               disabled={isPending || !name.trim()}
-              className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 disabled:opacity-40"
+              className="flex-1"
             >
-              {isPending ? "作成中..." : "作成して詳細へ"}
-            </button>
+              {isPending ? "作成中…" : "作成して詳細へ"}
+            </Button>
           </div>
         </form>
       </div>

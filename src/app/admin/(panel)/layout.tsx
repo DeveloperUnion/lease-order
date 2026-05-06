@@ -1,5 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { countPendingOrders } from "@/lib/admin-data";
+import { getTenantSlug } from "@/lib/tenant";
+import { adminFontVariables } from "@/lib/admin-fonts";
 import AdminShell from "@/components/admin/admin-shell";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +17,21 @@ export default async function AdminPanelLayout({
       data: { user },
     },
     pendingCount,
-  ] = await Promise.all([supabase.auth.getUser(), countPendingOrders()]);
+    tenantSlug,
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    countPendingOrders(),
+    getTenantSlug(),
+  ]);
 
   return (
-    <AdminShell pendingCount={pendingCount} email={user?.email ?? null}>
-      {children}
-    </AdminShell>
+    <div
+      data-tenant={tenantSlug}
+      className={`${adminFontVariables} fixed inset-0 flex overflow-hidden bg-surface-muted font-[family-name:var(--font-body)]`}
+    >
+      <AdminShell pendingCount={pendingCount} email={user?.email ?? null}>
+        {children}
+      </AdminShell>
+    </div>
   );
 }

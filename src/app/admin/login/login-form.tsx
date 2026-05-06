@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { Button, FormField, TextInput } from "@/components/admin/ui";
 
 export default function LoginForm({ next }: { next?: string }) {
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
+    "idle"
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -38,25 +41,35 @@ export default function LoginForm({ next }: { next?: string }) {
 
   if (status === "sent") {
     return (
-      <div className="flex flex-col items-center text-center py-2">
-        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 mb-4">
+      <div className="flex flex-col items-center text-center py-3">
+        <div className="flex items-center justify-center w-10 h-10 bg-[var(--color-status-completed-bg)] text-[var(--color-status-completed-fg)] mb-4">
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            className="h-6 w-6"
+            className="h-5 w-5"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
             strokeWidth={2}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M5 13l4 4L19 7"
+            />
           </svg>
         </div>
-        <p className="text-sm font-semibold text-foreground mb-1">メールを送信しました</p>
-        <p className="text-sm text-muted leading-relaxed">
-          <span className="font-medium text-foreground">{email}</span> 宛のログインリンクを開いてください。
+        <p className="font-[family-name:var(--font-display)] text-base font-medium text-foreground mb-1">
+          メールを送信しました
         </p>
-        <p className="text-xs text-subtle mt-3">
-          届かない場合は迷惑メールフォルダもご確認ください。
+        <p className="text-sm text-muted leading-relaxed">
+          <span className="font-[family-name:var(--font-mono)] text-foreground">
+            {email}
+          </span>
+          <br />
+          宛のログインリンクを開いてください。
+        </p>
+        <p className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider text-subtle mt-3">
+          届かない場合は迷惑メールフォルダもご確認ください
         </p>
       </div>
     );
@@ -64,11 +77,8 @@ export default function LoginForm({ next }: { next?: string }) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1.5">
-          メールアドレス
-        </label>
-        <input
+      <FormField label="メールアドレス" htmlFor="email">
+        <TextInput
           id="email"
           name="email"
           type="email"
@@ -77,21 +87,24 @@ export default function LoginForm({ next }: { next?: string }) {
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
           placeholder="you@example.com"
-          className="w-full h-11 px-3.5 bg-surface border border-border-strong rounded-md text-sm text-foreground placeholder:text-subtle focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-colors"
+          className="h-11"
         />
-      </div>
+      </FormField>
 
       {errorMessage && (
-        <p className="text-sm text-rose-700">{errorMessage}</p>
+        <p className="text-sm text-[var(--color-status-rejected-fg)]">
+          {errorMessage}
+        </p>
       )}
 
-      <button
+      <Button
         type="submit"
+        size="lg"
         disabled={status === "sending" || !email}
-        className="w-full h-11 bg-accent text-white rounded-md text-sm font-semibold tracking-wide hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="w-full"
       >
         {status === "sending" ? "送信中…" : "ログインリンクを送信"}
-      </button>
+      </Button>
     </form>
   );
 }
