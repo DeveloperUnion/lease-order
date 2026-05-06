@@ -65,10 +65,9 @@ export default async function AdminCustomersPage() {
   return (
     <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
-        eyebrow="マスタ"
         title="顧客管理"
         description="ログイン可能な顧客アカウントを管理します。"
-        actions={<ButtonLink href="/admin/customers/new">新規追加</ButtonLink>}
+        actions={<ButtonLink href="/admin/customers/new">+ 新規追加</ButtonLink>}
       />
 
       <DataTable

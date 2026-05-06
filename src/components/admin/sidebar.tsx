@@ -68,9 +68,6 @@ export default function Sidebar({ pendingCount, email, onNavigate }: SidebarProp
         >
           管理コンソール
         </Link>
-        <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.22em] text-subtle mt-1.5">
-          Lease Order ／ Operator
-        </p>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-5 space-y-6">

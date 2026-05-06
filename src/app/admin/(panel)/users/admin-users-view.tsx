@@ -55,7 +55,6 @@ export default function AdminUsersView({
   return (
     <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
-        eyebrow="設定"
         title="管理ユーザー"
         description="登録されたメールアドレスは /admin/login からマジックリンクでサインインできます。"
       />

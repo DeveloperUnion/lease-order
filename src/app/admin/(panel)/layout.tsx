@@ -27,7 +27,7 @@ export default async function AdminPanelLayout({
   return (
     <div
       data-tenant={tenantSlug}
-      className={`${adminFontVariables} fixed inset-0 flex bg-surface-muted font-[family-name:var(--font-body)]`}
+      className={`${adminFontVariables} fixed inset-0 flex overflow-hidden bg-surface-muted font-[family-name:var(--font-body)]`}
     >
       <AdminShell pendingCount={pendingCount} email={user?.email ?? null}>
         {children}

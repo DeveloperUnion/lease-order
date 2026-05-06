@@ -71,7 +71,6 @@ export default function AdminCategoriesView({
   return (
     <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
-        eyebrow="マスタ"
         title="カテゴリマスタ"
         actions={
           <Button onClick={() => setEditing({ mode: "create" })}>

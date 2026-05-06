@@ -20,12 +20,6 @@ export default async function LoginPage({
   return (
     <main className="flex-1 flex items-center justify-center px-4 py-16 sm:py-24 bg-background">
       <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <p className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.28em] text-subtle">
-            Lease Order ／ Operator
-          </p>
-        </div>
-
         <div className="bg-surface border border-rule-strong">
           <header className="px-8 pt-8 pb-5 border-b border-rule">
             <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-foreground">

@@ -13,7 +13,7 @@ export default function NewCustomerPage() {
       >
         <span aria-hidden>←</span> 顧客管理に戻る
       </Link>
-      <PageHeader eyebrow="マスタ ／ 顧客" title="顧客を新規追加" />
+      <PageHeader title="顧客を新規追加" />
       <NewCustomerForm />
     </main>
   );

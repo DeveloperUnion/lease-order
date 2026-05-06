@@ -15,11 +15,9 @@ import {
 import type { OrderListRow } from "@/lib/admin-data";
 import { statusLabels, type OrderStatus } from "@/lib/order-status";
 import {
-  PageHeader,
   StatusBadge,
   DataTable,
   Button,
-  EmptyState,
   type Column,
 } from "@/components/admin/ui";
 import { COLUMN_ORDER, transitionFor } from "./status-transitions";
@@ -89,12 +87,9 @@ export default function OrdersBoardOrList({
 
   return (
     <main className="flex-1 flex flex-col min-h-0 w-full">
-      <div className="px-4 sm:px-6 pt-6 sm:pt-8 flex-shrink-0">
-        <div className="flex items-start justify-between gap-6 mb-5">
+      <div className="sticky top-0 z-10 bg-background px-4 sm:px-6 pt-6 sm:pt-8 flex-shrink-0">
+        <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
           <div className="min-w-0">
-            <p className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.22em] text-subtle mb-2">
-              業務
-            </p>
             <h1 className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-semibold tracking-tight text-foreground leading-tight">
               発注管理
             </h1>
@@ -141,21 +136,20 @@ export default function OrdersBoardOrList({
       </div>
 
       {view === "board" ? (
-        <>
-          <div className="hidden lg:flex flex-1 min-h-0 px-4 sm:px-6 pb-4">
+        <div className="flex-1 min-h-0 relative">
+          <div className="absolute inset-0 overflow-x-auto overflow-y-hidden px-4 sm:px-6 pb-4">
             <KanbanColumns
               orders={orders}
               pendingMoveId={pendingMoveId}
               onMoveAttempt={onMoveAttempt}
             />
           </div>
-          <div className="lg:hidden flex-1 overflow-y-auto px-4 sm:px-6 pb-6">
-            <PhasedTabs orders={orders} />
-          </div>
-        </>
+        </div>
       ) : (
-        <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-6">
-          <OrdersTable orders={orders} />
+        <div className="flex-1 min-h-0 relative">
+          <div className="absolute inset-0 overflow-auto px-4 sm:px-6 pb-6">
+            <OrdersTable orders={orders} />
+          </div>
         </div>
       )}
 
@@ -276,7 +270,7 @@ function KanbanColumns({
   for (const o of orders) byStatus[o.status].push(o);
 
   return (
-    <div className="flex gap-4 overflow-x-auto h-full w-full">
+    <div className="flex gap-4 h-full w-max">
       {COLUMN_ORDER.map((status) => {
         const items = byStatus[status];
         const dragOrder = orders.find((o) => o.id === dragOrderId);
@@ -406,76 +400,6 @@ function KanbanCard({
 }
 
 // ============================================================
-// Phased tabs (mobile)
-// ============================================================
-
-function PhasedTabs({ orders }: { orders: OrderListRow[] }) {
-  const [active, setActive] = useState<OrderStatus>("pending");
-  const filtered = orders.filter((o) => o.status === active);
-
-  return (
-    <>
-      <div className="sticky top-0 z-20 bg-background flex gap-0 overflow-x-auto pb-0 mb-4 -mx-4 sm:-mx-6 px-4 sm:px-6 border-b border-rule">
-        {COLUMN_ORDER.map((status) => {
-          const count = orders.filter((o) => o.status === status).length;
-          const isActive = active === status;
-          return (
-            <button
-              key={status}
-              onClick={() => setActive(status)}
-              className={`whitespace-nowrap flex items-center gap-1.5 px-4 py-3 text-sm transition-colors border-b-2 -mb-px ${
-                isActive
-                  ? "border-accent text-foreground font-medium"
-                  : "border-transparent text-muted hover:text-foreground"
-              }`}
-            >
-              <span>{statusLabels[status].label}</span>
-              {count > 0 && (
-                <span className="font-[family-name:var(--font-mono)] tabular-nums text-[10px] text-subtle">
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {filtered.length === 0 ? (
-        <EmptyState
-          title="該当する発注はありません"
-          description="フィルター条件を変更して再検索してください。"
-        />
-      ) : (
-        <div className="border-t border-rule divide-y divide-rule">
-          {filtered.map((order) => (
-            <Link
-              key={order.id}
-              href={`/admin/orders/${order.id}`}
-              className="block p-4 hover:bg-surface-muted transition-colors"
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-[family-name:var(--font-mono)] tabular-nums text-xs text-foreground">
-                  {order.order_number}
-                </span>
-                <span className="font-[family-name:var(--font-mono)] text-[10px] text-subtle">
-                  {new Date(order.created_at).toLocaleString("ja-JP")}
-                </span>
-              </div>
-              <p className="font-medium text-foreground truncate">
-                {order.company_name} ／ {order.contact_name}
-              </p>
-              <p className="font-[family-name:var(--font-mono)] tabular-nums text-[11px] text-subtle mt-1">
-                {order.item_count} 品目 / {order.total_quantity} 点
-              </p>
-            </Link>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-// ============================================================
 // List view (DataTable)
 // ============================================================
 
@@ -569,6 +493,7 @@ function OrdersTable({ orders }: { orders: OrderListRow[] }) {
         caption="発注一覧"
         stickyHeader
         stickyHeaderTop="top-12"
+        className="min-w-[800px]"
       />
     </>
   );

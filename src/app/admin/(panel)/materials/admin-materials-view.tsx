@@ -52,7 +52,6 @@ export default function AdminMaterialsView({
   return (
     <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
-        eyebrow="マスタ"
         title="資材マスタ"
         description="カテゴリごとに資材を編集します。公開／非公開の切り替えは即時反映されます。"
         actions={<Button onClick={() => setCreating(true)}>+ 新規追加</Button>}

@@ -46,7 +46,6 @@ export default function MaterialDetailView({
   return (
     <>
       <PageHeader
-        eyebrow="マスタ ／ 資材"
         title={material.name}
         actions={<ActiveToggle material={material} onToast={showToast} />}
       />
