@@ -54,27 +54,29 @@ function SearchBar({ className }: { className?: string }) {
   return (
     <div ref={wrapperRef} className={`relative ${className || ""}`}>
       <div className="relative">
-        <input
-          type="text"
-          placeholder="資材を検索"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => setFocused(true)}
-          className="w-full pl-10 pr-4 py-2 bg-surface-muted rounded-full text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent transition-colors"
-        />
         <svg
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-subtle"
+          aria-hidden
+          className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-subtle pointer-events-none"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
           strokeWidth={2}
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
         </svg>
+        <input
+          type="text"
+          placeholder="資材名で検索"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setFocused(true)}
+          className="w-full h-10 pl-10 pr-9 bg-surface border border-border rounded-lg text-sm placeholder:text-subtle focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors"
+        />
         {query && (
           <button
             onClick={() => { setQuery(""); setFocused(false); }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-foreground"
+            aria-label="クリア"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center text-subtle hover:text-foreground"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -84,29 +86,30 @@ function SearchBar({ className }: { className?: string }) {
       </div>
 
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-surface rounded-xl shadow-lg border border-border overflow-hidden z-50 max-h-[70vh] overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1.5 bg-surface rounded-md shadow-lg border border-border overflow-hidden z-50 max-h-[70vh] overflow-y-auto">
           {results.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-subtle">
               該当する資材がありません
             </div>
           ) : (
-            <div className="py-1">
+            <ul className="divide-y divide-ruled/60">
               {results.map((material) => (
-                <button
-                  key={material.id}
-                  onClick={() => handleSelect(material.category_id)}
-                  className="w-full px-4 py-3 text-left hover:bg-surface-muted flex items-center gap-3 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-accent truncate">{material.name}</p>
-                    <p className="text-xs text-subtle">{getCategoryName(material.category_id)}</p>
-                  </div>
-                  <svg className="h-4 w-4 text-subtle flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
+                <li key={material.id}>
+                  <button
+                    onClick={() => handleSelect(material.category_id)}
+                    className="w-full px-4 py-3 text-left hover:bg-surface-muted flex items-center gap-3 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{material.name}</p>
+                      <p className="text-xs text-subtle mt-0.5">
+                        {getCategoryName(material.category_id)}
+                      </p>
+                    </div>
+                    <span aria-hidden className="text-subtle">→</span>
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
       )}
@@ -121,22 +124,7 @@ export default function HeaderClient({ customer }: { customer: CustomerSummary |
   const isLogin = pathname === "/login";
 
   if (isLogin) {
-    return (
-      <header className="sticky top-0 z-30 bg-surface border-b border-border">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="h-16 sm:h-20 flex items-center justify-center">
-            <Image
-              src="/images/logo-union.png"
-              alt="union"
-              width={486}
-              height={823}
-              priority
-              className="h-12 sm:h-14 w-auto"
-            />
-          </div>
-        </div>
-      </header>
-    );
+    return null;
   }
 
   if (isAdmin) {
@@ -153,7 +141,7 @@ export default function HeaderClient({ customer }: { customer: CustomerSummary |
                 priority
                 className="h-12 sm:h-14 w-auto"
               />
-              <span className="text-lg sm:text-2xl font-bold tracking-tight text-cyan-500">発注<span className="text-xs sm:text-sm font-medium ml-1">for リース</span></span>
+              <span className="text-lg sm:text-2xl font-bold tracking-tight text-accent">発注<span className="text-xs sm:text-sm font-medium ml-1">for リース</span></span>
             </Link>
           </div>
         </div>
@@ -161,9 +149,9 @@ export default function HeaderClient({ customer }: { customer: CustomerSummary |
     );
   }
 
-  // 借り主ビュー: PC ではサイドバーがあるためロゴ非表示。検索バーとカートを表示
+  // 顧客ビュー: PC ではサイドバーがあるためロゴ非表示。検索バーとカートを表示
   return (
-    <header className="sticky top-0 z-30 bg-surface border-b border-border md:pl-56">
+    <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur border-b border-border md:pl-56">
       <div className="max-w-6xl mx-auto px-4">
         <div className="h-16 flex items-center justify-between gap-4">
           {/* モバイルのみロゴを表示 */}
@@ -174,16 +162,17 @@ export default function HeaderClient({ customer }: { customer: CustomerSummary |
               width={486}
               height={823}
               priority
-              className="h-10 w-auto"
+              className="h-9 w-auto"
             />
           </Link>
 
-          <SearchBar className="flex-1 max-w-md" />
+          <SearchBar className="flex-1 max-w-lg" />
 
           {customer && (
             <Link
               href="/cart"
-              className="relative flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-muted transition-colors flex-shrink-0"
+              aria-label="カート"
+              className="relative inline-flex items-center justify-center h-10 w-10 rounded-lg border border-border hover:border-border-strong hover:bg-surface-muted transition-colors flex-shrink-0"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -196,7 +185,7 @@ export default function HeaderClient({ customer }: { customer: CustomerSummary |
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
               </svg>
               {totalItems > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full h-[18px] min-w-[18px] flex items-center justify-center px-1">
+                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-bold bg-accent text-accent-ink">
                   {totalItems}
                 </span>
               )}
