@@ -136,6 +136,13 @@ export default function AdminMaterialsView({
                 >
                   {mat.is_active ? "非公開" : "公開"}
                 </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => router.push(`/admin/materials/${mat.id}`)}
+                >
+                  編集
+                </Button>
               </div>
             </div>
           ))}
