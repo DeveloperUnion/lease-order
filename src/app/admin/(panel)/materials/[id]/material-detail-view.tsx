@@ -146,15 +146,13 @@ function BasicInfoSection({
   const [name, setName] = useState(material.name);
   const [categoryId, setCategoryId] = useState(material.category_id);
   const [description, setDescription] = useState(material.description ?? "");
-  const [sortOrder, setSortOrder] = useState(material.sort_order);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   const dirty =
     name !== material.name ||
     categoryId !== material.category_id ||
-    (description ?? "") !== (material.description ?? "") ||
-    sortOrder !== material.sort_order;
+    (description ?? "") !== (material.description ?? "");
 
   const handleSave = () => {
     setError(null);
@@ -163,7 +161,6 @@ function BasicInfoSection({
       fd.set("name", name);
       fd.set("category_id", categoryId);
       fd.set("description", description);
-      fd.set("sort_order", String(sortOrder));
       fd.set("is_active", material.is_active ? "true" : "false");
       try {
         await updateMaterial(material.id, fd);
@@ -205,15 +202,6 @@ function BasicInfoSection({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-          />
-        </FormField>
-        <FormField label="並び順" htmlFor="material-sort">
-          <TextInput
-            id="material-sort"
-            type="number"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(Number(e.target.value) || 0)}
-            className="w-32"
           />
         </FormField>
         {error && (

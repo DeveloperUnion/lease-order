@@ -304,7 +304,6 @@ export async function updateMaterial(materialId: string, formData: FormData) {
       category_id: input.categoryId,
       name: input.name,
       description: input.description || null,
-      sort_order: input.sortOrder,
       is_active: input.isActive,
     })
     .eq("id", materialId)
@@ -318,6 +317,26 @@ export async function updateMaterial(materialId: string, formData: FormData) {
 
   revalidatePath("/admin/materials");
   revalidatePath("/admin");
+}
+
+export async function reorderMaterials(
+  categoryId: string,
+  orderedMaterialIds: string[]
+) {
+  const tenantId = await getTenantId();
+  for (let i = 0; i < orderedMaterialIds.length; i++) {
+    const { error } = await supabaseAdmin
+      .from("materials")
+      .update({ sort_order: i })
+      .eq("id", orderedMaterialIds[i])
+      .eq("tenant_id", tenantId)
+      .eq("category_id", categoryId);
+    if (error) throw new Error(`並び替えに失敗しました: ${error.message}`);
+  }
+
+  revalidatePath("/admin/materials");
+  revalidatePath("/admin");
+  revalidatePath("/");
 }
 
 export async function setMaterialActive(materialId: string, active: boolean) {

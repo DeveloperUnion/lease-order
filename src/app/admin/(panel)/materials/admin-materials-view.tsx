@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { Category, Material } from "@/lib/types";
-import { createMaterial, setMaterialActive } from "@/app/admin/actions";
+import {
+  createMaterial,
+  reorderMaterials,
+  setMaterialActive,
+} from "@/app/admin/actions";
 import {
   PageHeader,
   Button,
@@ -28,14 +32,62 @@ export default function AdminMaterialsView({
   const [creating, setCreating] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [dragId, setDragId] = useState<string | null>(null);
 
   const filtered = allMaterials
     .filter((m) => m.category_id === selectedCategoryId)
     .sort((a, b) => a.sort_order - b.sort_order);
 
+  const [order, setOrder] = useState<Material[]>(filtered);
+
+  // Re-sync local order whenever the server-side set changes (category switch,
+  // create/delete, etc.). Mirrors the pattern used in ImagesSection.
+  if (
+    filtered.length !== order.length ||
+    filtered.some((m, i) => order[i]?.id !== m.id)
+  ) {
+    const serverIds = new Set(filtered.map((m) => m.id));
+    const localIds = new Set(order.map((m) => m.id));
+    const sameSet =
+      serverIds.size === localIds.size &&
+      [...serverIds].every((id) => localIds.has(id));
+    if (!sameSet) {
+      setOrder(filtered);
+    }
+  }
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 1800);
+  };
+
+  const handleDrop = (targetId: string) => {
+    if (!dragId || dragId === targetId) {
+      setDragId(null);
+      return;
+    }
+    const next = [...order];
+    const fromIdx = next.findIndex((m) => m.id === dragId);
+    const toIdx = next.findIndex((m) => m.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) {
+      setDragId(null);
+      return;
+    }
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setOrder(next);
+    setDragId(null);
+    startTransition(async () => {
+      try {
+        await reorderMaterials(
+          selectedCategoryId,
+          next.map((m) => m.id)
+        );
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "並び替えに失敗しました");
+        setOrder(filtered);
+      }
+    });
   };
 
   const handleToggleActive = (material: Material) => {
@@ -84,6 +136,11 @@ export default function AdminMaterialsView({
         <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-subtle">
           {filtered.length} 件
         </span>
+        {order.length > 1 && (
+          <span className="text-[11px] text-subtle">
+            行をドラッグで並び替え
+          </span>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -93,15 +150,39 @@ export default function AdminMaterialsView({
         />
       ) : (
         <div className="border-y border-rule divide-y divide-rule">
-          {filtered.map((mat) => (
+          {order.map((mat) => (
             <div
               key={mat.id}
-              className={`flex items-center justify-between gap-3 px-3 sm:px-4 py-3 ${
+              draggable
+              onDragStart={() => setDragId(mat.id)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => handleDrop(mat.id)}
+              onDragEnd={() => setDragId(null)}
+              className={`flex items-center justify-between gap-3 px-2 sm:px-3 py-3 bg-surface ${
                 !mat.is_active ? "opacity-50" : ""
-              }`}
+              } ${dragId === mat.id ? "opacity-40" : ""}`}
             >
+              <span
+                aria-hidden
+                className="flex-shrink-0 text-subtle hover:text-foreground cursor-grab active:cursor-grabbing select-none px-1"
+                title="ドラッグで並び替え"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <circle cx="7" cy="5" r="1.4" />
+                  <circle cx="7" cy="10" r="1.4" />
+                  <circle cx="7" cy="15" r="1.4" />
+                  <circle cx="13" cy="5" r="1.4" />
+                  <circle cx="13" cy="10" r="1.4" />
+                  <circle cx="13" cy="15" r="1.4" />
+                </svg>
+              </span>
               <Link
                 href={`/admin/materials/${mat.id}`}
+                draggable={false}
                 className="flex items-center gap-3 min-w-0 flex-1 hover:opacity-80 transition-opacity"
               >
                 <div className="w-12 h-12 bg-surface-muted border border-rule flex-shrink-0 flex items-center justify-center overflow-hidden">
@@ -110,6 +191,7 @@ export default function AdminMaterialsView({
                     <img
                       src={mat.image_url}
                       alt=""
+                      draggable={false}
                       className="w-full h-full object-contain"
                     />
                   ) : (
