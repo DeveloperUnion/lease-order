@@ -5,6 +5,7 @@ import type { AdminOfficeRow } from "@/lib/admin-data";
 import {
   createOffice,
   deleteOffice,
+  reorderOffices,
   updateOffice,
 } from "@/app/admin/actions";
 import {
@@ -28,10 +29,52 @@ export default function AdminOfficesView({
   const [toastMessage, setToastMessage] = useState("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [order, setOrder] = useState<AdminOfficeRow[]>(offices);
+
+  if (
+    offices.length !== order.length ||
+    offices.some((o, i) => order[i]?.id !== o.id)
+  ) {
+    const serverIds = new Set(offices.map((o) => o.id));
+    const localIds = new Set(order.map((o) => o.id));
+    const sameSet =
+      serverIds.size === localIds.size &&
+      [...serverIds].every((id) => localIds.has(id));
+    if (!sameSet) {
+      setOrder(offices);
+    }
+  }
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 1800);
+  };
+
+  const handleDrop = (targetId: string) => {
+    if (!dragId || dragId === targetId) {
+      setDragId(null);
+      return;
+    }
+    const next = [...order];
+    const fromIdx = next.findIndex((o) => o.id === dragId);
+    const toIdx = next.findIndex((o) => o.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) {
+      setDragId(null);
+      return;
+    }
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setOrder(next);
+    setDragId(null);
+    startTransition(async () => {
+      try {
+        await reorderOffices(next.map((o) => o.id));
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "並び替えに失敗しました");
+        setOrder(offices);
+      }
+    });
   };
 
   const handleSubmit = (formData: FormData) => {
@@ -85,6 +128,11 @@ export default function AdminOfficesView({
         <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-subtle">
           {offices.length} 件
         </span>
+        {order.length > 1 && (
+          <span className="text-[11px] text-subtle">
+            行をドラッグで並び替え
+          </span>
+        )}
       </div>
 
       {offices.length === 0 ? (
@@ -94,13 +142,36 @@ export default function AdminOfficesView({
         />
       ) : (
         <div className="border-y border-rule divide-y divide-rule">
-          {offices.map((o) => (
+          {order.map((o) => (
             <div
               key={o.id}
-              className={`flex items-start justify-between gap-3 px-3 sm:px-4 py-4 ${
+              draggable
+              onDragStart={() => setDragId(o.id)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => handleDrop(o.id)}
+              onDragEnd={() => setDragId(null)}
+              className={`flex items-start justify-between gap-3 px-2 sm:px-3 py-4 bg-surface ${
                 !o.is_active ? "opacity-50" : ""
-              }`}
+              } ${dragId === o.id ? "opacity-40" : ""}`}
             >
+              <span
+                aria-hidden
+                className="flex-shrink-0 mt-0.5 text-subtle hover:text-foreground cursor-grab active:cursor-grabbing select-none px-1"
+                title="ドラッグで並び替え"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <circle cx="7" cy="5" r="1.4" />
+                  <circle cx="7" cy="10" r="1.4" />
+                  <circle cx="7" cy="15" r="1.4" />
+                  <circle cx="13" cy="5" r="1.4" />
+                  <circle cx="13" cy="10" r="1.4" />
+                  <circle cx="13" cy="15" r="1.4" />
+                </svg>
+              </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <p className="text-sm font-medium text-foreground truncate">
@@ -243,7 +314,6 @@ function EditModal({
   const [address, setAddress] = useState(initial.address);
   const [phone, setPhone] = useState(initial.phone);
   const [fax, setFax] = useState(initial.fax);
-  const [sortOrder, setSortOrder] = useState(initial.sort_order);
   const [isActive, setIsActive] = useState(initial.is_active);
 
   const handleFormAction = (formData: FormData) => {
@@ -252,7 +322,9 @@ function EditModal({
     formData.set("address", address);
     formData.set("phone", phone);
     formData.set("fax", fax);
-    formData.set("sort_order", String(sortOrder));
+    // create 時のみ末尾に追加されるよう、initial.sort_order をそのまま渡す。
+    // edit 時は updateOffice が sort_order を無視する（D&D で並び替え）。
+    if (!isEdit) formData.set("sort_order", String(initial.sort_order));
     formData.set("is_active", isActive ? "true" : "false");
     onSubmit(formData);
   };
@@ -329,26 +401,15 @@ function EditModal({
                 />
               </FormField>
             </div>
-            <div className="flex items-end gap-4">
-              <FormField label="並び順" className="flex-1">
-                <TextInput
-                  type="number"
-                  value={sortOrder}
-                  onChange={(e) =>
-                    setSortOrder(Number(e.target.value) || 0)
-                  }
-                />
-              </FormField>
-              <label className="flex items-center gap-2 h-10">
-                <input
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                  className="w-4 h-4 accent-accent"
-                />
-                <span className="text-sm text-foreground">公開</span>
-              </label>
-            </div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={isActive}
+                onChange={(e) => setIsActive(e.target.checked)}
+                className="w-4 h-4 accent-accent"
+              />
+              <span className="text-sm text-foreground">公開</span>
+            </label>
           </div>
 
           {error && (

@@ -420,12 +420,10 @@ export async function updateCategory(categoryId: string, formData: FormData) {
   const update: {
     name: string;
     slug: string;
-    sort_order: number;
     image_url?: string;
   } = {
     name: input.name,
     slug: input.slug,
-    sort_order: input.sortOrder,
   };
 
   if (imageFile && imageFile.size > 0) {
@@ -447,6 +445,22 @@ export async function updateCategory(categoryId: string, formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/");
   revalidatePath(`/category/${input.slug}`);
+}
+
+export async function reorderCategories(orderedCategoryIds: string[]) {
+  const tenantId = await getTenantId();
+  for (let i = 0; i < orderedCategoryIds.length; i++) {
+    const { error } = await supabaseAdmin
+      .from("categories")
+      .update({ sort_order: i })
+      .eq("id", orderedCategoryIds[i])
+      .eq("tenant_id", tenantId);
+    if (error) throw new Error(`並び替えに失敗しました: ${error.message}`);
+  }
+
+  revalidatePath("/admin/categories");
+  revalidatePath("/admin");
+  revalidatePath("/");
 }
 
 export async function deleteCategory(categoryId: string) {
@@ -537,12 +551,26 @@ export async function updateOffice(officeId: string, formData: FormData) {
       address: input.address,
       phone: input.phone,
       fax: input.fax,
-      sort_order: input.sortOrder,
       is_active: input.isActive,
     })
     .eq("id", officeId)
     .eq("tenant_id", tenantId);
   if (error) throw new Error(`営業所の更新に失敗しました: ${error.message}`);
+
+  revalidatePath("/admin/offices");
+  revalidatePath("/cart");
+}
+
+export async function reorderOffices(orderedOfficeIds: string[]) {
+  const tenantId = await getTenantId();
+  for (let i = 0; i < orderedOfficeIds.length; i++) {
+    const { error } = await supabaseAdmin
+      .from("offices")
+      .update({ sort_order: i })
+      .eq("id", orderedOfficeIds[i])
+      .eq("tenant_id", tenantId);
+    if (error) throw new Error(`並び替えに失敗しました: ${error.message}`);
+  }
 
   revalidatePath("/admin/offices");
   revalidatePath("/cart");
