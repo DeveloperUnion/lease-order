@@ -1,5 +1,6 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 import { emailChannel } from "./channels/email";
 import { inAppChannel } from "./channels/in-app";
@@ -36,7 +37,8 @@ export async function notifyCustomer(
 ): Promise<void> {
   try {
     const tenantId = await getTenantId();
-    const { data } = await supabaseAdmin
+    const supabase = await getSupabaseTenant();
+    const { data } = await supabase
       .from("orders")
       .select("order_number, company_name, contact_name, email, customer_id")
       .eq("id", orderId)
@@ -68,6 +70,8 @@ export async function notifyCustomer(
 }
 
 // Fan out a notification to every admin in the tenant's allowlist.
+// admin_users lookup uses service_role since it lists multiple recipients
+// (the same pattern as legacy sendAdminEmail bootstrap).
 export async function notifyAdmins(
   tenantId: string,
   kind: NotificationKind,

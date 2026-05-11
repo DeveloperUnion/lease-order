@@ -4,6 +4,10 @@
 --
 -- 顧客が申請しただけでは order_items は変わらず、管理者が
 -- 「受領」した時点で order_items.returned_quantity / lease_end_date を反映する。
+--
+-- 前提:
+--   0009 で lease_extensions に tenant_id が NOT NULL で追加済み。
+--   0010 で全テナントスコープテーブルに tenant_isolation RLS が定義済み。
 -- ============================================================
 
 -- (1) lease_extensions: pending / acknowledged / rejected の状態を持たせる
@@ -46,6 +50,7 @@ create index if not exists idx_lease_extensions_status
 -- (2) return_requests: 返却申請履歴（lease_extensions と対称な構造）
 create table if not exists return_requests (
   id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references tenants(id) on delete cascade,
   order_item_id uuid not null references order_items(id) on delete cascade,
   requested_quantity_delta int not null check (requested_quantity_delta > 0),
   status text not null default 'pending'
@@ -58,14 +63,25 @@ create table if not exists return_requests (
   acknowledged_by_admin_id uuid references admin_users(id),
   rejected_at timestamptz
 );
+create index if not exists idx_return_requests_tenant on return_requests(tenant_id);
 create index if not exists idx_return_requests_order_item on return_requests(order_item_id);
 create index if not exists idx_return_requests_pending
   on return_requests(status) where status = 'pending';
 
 alter table return_requests enable row level security;
 
+create policy "tenant_isolation_select" on return_requests for select to authenticated
+  using (tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid));
+create policy "tenant_isolation_insert" on return_requests for insert to authenticated
+  with check (tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid));
+create policy "tenant_isolation_update" on return_requests for update to authenticated
+  using (tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid))
+  with check (tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid));
+create policy "tenant_isolation_delete" on return_requests for delete to authenticated
+  using (tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid));
+
 -- (3) notifications: アプリ内通知
---   recipient は admin_users.id または customers.id（多態関連、整合性はアプリ側で担保）
+--   recipient_id は admin_users.id または customers.id（多態関連、整合性はアプリ側で担保）
 create table if not exists notifications (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references tenants(id) on delete cascade,
@@ -84,3 +100,13 @@ create index if not exists idx_notifications_unread
   where read_at is null;
 
 alter table notifications enable row level security;
+
+create policy "tenant_isolation_select" on notifications for select to authenticated
+  using (tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid));
+create policy "tenant_isolation_insert" on notifications for insert to authenticated
+  with check (tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid));
+create policy "tenant_isolation_update" on notifications for update to authenticated
+  using (tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid))
+  with check (tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid));
+create policy "tenant_isolation_delete" on notifications for delete to authenticated
+  using (tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid));

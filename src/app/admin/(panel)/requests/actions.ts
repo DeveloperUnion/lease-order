@@ -2,10 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getTenantId } from "@/lib/tenant";
 import { notifyCustomer } from "@/lib/notifications";
 
+// admin_user.id 解決は bootstrap（auth.users.email → admin_users.id mapping）
+// なので service_role を継続使用。
 async function currentAdminUserId(tenantId: string): Promise<string | null> {
   const supabase = await createSupabaseServerClient();
   const {
@@ -16,21 +19,21 @@ async function currentAdminUserId(tenantId: string): Promise<string | null> {
     .from("admin_users")
     .select("id")
     .eq("tenant_id", tenantId)
-    .eq("email", user.email)
+    .eq("email", user.email.toLowerCase())
     .maybeSingle();
   return data?.id ?? null;
 }
 
-// 返却申請のロード（order_item_id + delta + 紐づく order/material 情報まで）
 async function loadReturnRequest(requestId: string, tenantId: string) {
-  const { data: req } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data: req } = await supabase
     .from("return_requests")
     .select("id, status, order_item_id, requested_quantity_delta")
     .eq("id", requestId)
     .maybeSingle();
   if (!req || req.status !== "pending") return null;
 
-  const { data: item } = await supabaseAdmin
+  const { data: item } = await supabase
     .from("order_items")
     .select("id, quantity, returned_quantity, material_name, order_id, orders(id, tenant_id, order_number, customer_id)")
     .eq("id", req.order_item_id)
@@ -59,14 +62,15 @@ async function loadReturnRequest(requestId: string, tenantId: string) {
 }
 
 async function loadExtensionRequest(requestId: string, tenantId: string) {
-  const { data: req } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data: req } = await supabase
     .from("lease_extensions")
     .select("id, status, order_item_id, new_end_date, previous_end_date")
     .eq("id", requestId)
     .maybeSingle();
   if (!req || req.status !== "pending") return null;
 
-  const { data: item } = await supabaseAdmin
+  const { data: item } = await supabase
     .from("order_items")
     .select("id, material_name, orders(id, tenant_id, order_number)")
     .eq("id", req.order_item_id)
@@ -107,6 +111,7 @@ export async function acknowledgeReturn(requestId: string) {
   const loaded = await loadReturnRequest(requestId, tenantId);
   if (!loaded) throw new Error("対象の申請が見つかりません");
   const adminId = await currentAdminUserId(tenantId);
+  const supabase = await getSupabaseTenant();
   const now = new Date().toISOString();
 
   const newReturned = loaded.item.returnedQuantity + loaded.req.delta;
@@ -114,7 +119,7 @@ export async function acknowledgeReturn(requestId: string) {
     throw new Error("返却数量が発注数量を超えるため受領できません");
   }
 
-  const { error: e1 } = await supabaseAdmin
+  const { error: e1 } = await supabase
     .from("return_requests")
     .update({
       status: "acknowledged",
@@ -124,14 +129,13 @@ export async function acknowledgeReturn(requestId: string) {
     .eq("id", requestId);
   if (e1) throw e1;
 
-  const { error: e2 } = await supabaseAdmin
+  const { error: e2 } = await supabase
     .from("order_items")
     .update({ returned_quantity: newReturned })
     .eq("id", loaded.item.id);
   if (e2) throw e2;
 
-  // 全 item が返却完了なら orders.status='completed'
-  const { data: siblings } = await supabaseAdmin
+  const { data: siblings } = await supabase
     .from("order_items")
     .select("quantity, returned_quantity")
     .eq("order_id", loaded.item.orderId);
@@ -139,7 +143,7 @@ export async function acknowledgeReturn(requestId: string) {
     (s) => (s.returned_quantity as number) >= (s.quantity as number)
   );
   if (allReturned) {
-    await supabaseAdmin
+    await supabase
       .from("orders")
       .update({ status: "completed", completed_at: now })
       .eq("id", loaded.item.orderId)
@@ -159,9 +163,10 @@ export async function rejectReturn(requestId: string, reason: string) {
   const adminId = await currentAdminUserId(tenantId);
   const trimmed = reason.trim();
   if (!trimmed) throw new Error("却下理由を入力してください");
+  const supabase = await getSupabaseTenant();
   const now = new Date().toISOString();
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("return_requests")
     .update({
       status: "rejected",
@@ -184,9 +189,10 @@ export async function acknowledgeExtension(requestId: string) {
   const loaded = await loadExtensionRequest(requestId, tenantId);
   if (!loaded) throw new Error("対象の申請が見つかりません");
   const adminId = await currentAdminUserId(tenantId);
+  const supabase = await getSupabaseTenant();
   const now = new Date().toISOString();
 
-  const { error: e1 } = await supabaseAdmin
+  const { error: e1 } = await supabase
     .from("lease_extensions")
     .update({
       status: "acknowledged",
@@ -196,7 +202,7 @@ export async function acknowledgeExtension(requestId: string) {
     .eq("id", requestId);
   if (e1) throw e1;
 
-  const { error: e2 } = await supabaseAdmin
+  const { error: e2 } = await supabase
     .from("order_items")
     .update({ lease_end_date: loaded.req.newEndDate })
     .eq("id", loaded.item.id);
@@ -215,9 +221,10 @@ export async function rejectExtension(requestId: string, reason: string) {
   const adminId = await currentAdminUserId(tenantId);
   const trimmed = reason.trim();
   if (!trimmed) throw new Error("却下理由を入力してください");
+  const supabase = await getSupabaseTenant();
   const now = new Date().toISOString();
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("lease_extensions")
     .update({
       status: "rejected",

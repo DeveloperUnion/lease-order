@@ -1,5 +1,5 @@
 import "server-only";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import type { Channel } from "../types";
 
 export const inAppChannel: Channel = {
@@ -12,7 +12,8 @@ export const inAppChannel: Channel = {
       target.kind === "customer" ? target.customerId : target.adminUserId;
     if (!recipientId) return;
 
-    const { error } = await supabaseAdmin.from("notifications").insert({
+    const supabase = await getSupabaseTenant();
+    const { error } = await supabase.from("notifications").insert({
       tenant_id: tenantId,
       recipient_type: target.kind,
       recipient_id: recipientId,

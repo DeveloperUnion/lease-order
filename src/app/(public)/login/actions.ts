@@ -1,5 +1,7 @@
 "use server";
 
+// 認証 bootstrap: 顧客 JWT 発行前の credential 照合のため supabaseAdmin を使う。
+// RLS の tenant_id 強制は login 後の `getSupabaseTenant()` 経路で効く。
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase-admin";

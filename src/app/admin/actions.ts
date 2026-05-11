@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { notifyCustomer } from "@/lib/notifications";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 
 function slugify(input: string): string {
@@ -23,7 +24,8 @@ async function assertOrderOwnedByTenant(
   orderId: string,
   tenantId: string
 ): Promise<void> {
-  const { data, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
     .from("orders")
     .select("id")
     .eq("id", orderId)
@@ -45,7 +47,8 @@ export async function fetchOrderItemsForApproval(
 ): Promise<ApprovalItem[]> {
   const tenantId = await getTenantId();
   await assertOrderOwnedByTenant(orderId, tenantId);
-  const { data, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
     .from("order_items")
     .select("id, material_name, variant_name, quantity, created_at")
     .eq("order_id", orderId)
@@ -64,10 +67,11 @@ export async function approveOrder(
   approvedQuantities: { itemId: string; approvedQuantity: number }[]
 ) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const now = new Date().toISOString();
 
   for (const { itemId, approvedQuantity } of approvedQuantities) {
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from("order_items")
       .update({ approved_quantity: approvedQuantity })
       .eq("id", itemId)
@@ -75,7 +79,7 @@ export async function approveOrder(
     if (error) throw error;
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("orders")
     .update({ status: "approved", approved_at: now })
     .eq("id", orderId)
@@ -90,8 +94,9 @@ export async function approveOrder(
 
 export async function rejectOrder(orderId: string, reason: string) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const now = new Date().toISOString();
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("orders")
     .update({
       status: "rejected",
@@ -110,8 +115,9 @@ export async function rejectOrder(orderId: string, reason: string) {
 
 export async function shipOrder(orderId: string) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const now = new Date().toISOString();
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("orders")
     .update({ status: "shipped", shipped_at: now })
     .eq("id", orderId)
@@ -125,8 +131,9 @@ export async function shipOrder(orderId: string) {
 
 export async function completeOrder(orderId: string) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const now = new Date().toISOString();
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("orders")
     .update({ status: "completed", completed_at: now })
     .eq("id", orderId)
@@ -139,7 +146,8 @@ export async function completeOrder(orderId: string) {
 
 export async function cancelOrder(orderId: string) {
   const tenantId = await getTenantId();
-  const { error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { error } = await supabase
     .from("orders")
     .update({ status: "cancelled" })
     .eq("id", orderId)
@@ -201,7 +209,8 @@ async function upsertMaterialImage(
   materialId: string,
   imageUrl: string
 ): Promise<void> {
-  const { data: existing } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data: existing } = await supabase
     .from("images")
     .select("id")
     .eq("tenant_id", tenantId)
@@ -211,7 +220,7 @@ async function upsertMaterialImage(
   const imageId =
     existing?.id ??
     (
-      await supabaseAdmin
+      await supabase
         .from("images")
         .insert({ tenant_id: tenantId, url: imageUrl })
         .select("id")
@@ -222,18 +231,25 @@ async function upsertMaterialImage(
         })
     ).id;
 
-  await supabaseAdmin.from("material_images").upsert(
-    { material_id: materialId, image_id: imageId, sort_order: 0, is_primary: true },
+  await supabase.from("material_images").upsert(
+    {
+      tenant_id: tenantId,
+      material_id: materialId,
+      image_id: imageId,
+      sort_order: 0,
+      is_primary: true,
+    },
     { onConflict: "material_id,image_id" }
   );
 }
 
 export async function createMaterial(formData: FormData) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const input = parseMaterialInput(formData);
   const imageFile = formData.get("image") as File | null;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("materials")
     .insert({
       tenant_id: tenantId,
@@ -260,10 +276,11 @@ export async function createMaterial(formData: FormData) {
 
 export async function updateMaterial(materialId: string, formData: FormData) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const input = parseMaterialInput(formData);
   const imageFile = formData.get("image") as File | null;
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("materials")
     .update({
       category_id: input.categoryId,
@@ -289,8 +306,9 @@ export async function reorderMaterials(
   orderedMaterialIds: string[]
 ) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   for (let i = 0; i < orderedMaterialIds.length; i++) {
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from("materials")
       .update({ sort_order: i })
       .eq("id", orderedMaterialIds[i])
@@ -306,7 +324,8 @@ export async function reorderMaterials(
 
 export async function setMaterialActive(materialId: string, active: boolean) {
   const tenantId = await getTenantId();
-  const { error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { error } = await supabase
     .from("materials")
     .update({ is_active: active })
     .eq("id", materialId)
@@ -343,10 +362,11 @@ function parseCategoryInput(formData: FormData): CategoryInput {
 
 export async function createCategory(formData: FormData) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const input = parseCategoryInput(formData);
   const imageFile = formData.get("image") as File | null;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("categories")
     .insert({
       tenant_id: tenantId,
@@ -364,7 +384,7 @@ export async function createCategory(formData: FormData) {
       tenantId,
       `categories/${data.id}`
     );
-    const { error: updErr } = await supabaseAdmin
+    const { error: updErr } = await supabase
       .from("categories")
       .update({ image_url: url })
       .eq("id", data.id)
@@ -379,6 +399,7 @@ export async function createCategory(formData: FormData) {
 
 export async function updateCategory(categoryId: string, formData: FormData) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const input = parseCategoryInput(formData);
   const imageFile = formData.get("image") as File | null;
 
@@ -399,7 +420,7 @@ export async function updateCategory(categoryId: string, formData: FormData) {
     );
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("categories")
     .update(update)
     .eq("id", categoryId)
@@ -414,8 +435,9 @@ export async function updateCategory(categoryId: string, formData: FormData) {
 
 export async function reorderCategories(orderedCategoryIds: string[]) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   for (let i = 0; i < orderedCategoryIds.length; i++) {
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from("categories")
       .update({ sort_order: i })
       .eq("id", orderedCategoryIds[i])
@@ -430,8 +452,9 @@ export async function reorderCategories(orderedCategoryIds: string[]) {
 
 export async function deleteCategory(categoryId: string) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
 
-  const { count, error: countErr } = await supabaseAdmin
+  const { count, error: countErr } = await supabase
     .from("materials")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
@@ -441,7 +464,7 @@ export async function deleteCategory(categoryId: string) {
     throw new Error("このカテゴリには資材が紐付いているため削除できません");
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("categories")
     .delete()
     .eq("id", categoryId)
@@ -488,8 +511,9 @@ function parseOfficeInput(formData: FormData): OfficeInput {
 
 export async function createOffice(formData: FormData) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const input = parseOfficeInput(formData);
-  const { error } = await supabaseAdmin.from("offices").insert({
+  const { error } = await supabase.from("offices").insert({
     tenant_id: tenantId,
     name: input.name,
     area: input.area,
@@ -507,8 +531,9 @@ export async function createOffice(formData: FormData) {
 
 export async function updateOffice(officeId: string, formData: FormData) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const input = parseOfficeInput(formData);
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("offices")
     .update({
       name: input.name,
@@ -528,8 +553,9 @@ export async function updateOffice(officeId: string, formData: FormData) {
 
 export async function reorderOffices(orderedOfficeIds: string[]) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   for (let i = 0; i < orderedOfficeIds.length; i++) {
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from("offices")
       .update({ sort_order: i })
       .eq("id", orderedOfficeIds[i])
@@ -543,8 +569,9 @@ export async function reorderOffices(orderedOfficeIds: string[]) {
 
 export async function deleteOffice(officeId: string) {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
 
-  const { count, error: countErr } = await supabaseAdmin
+  const { count, error: countErr } = await supabase
     .from("orders")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
@@ -556,7 +583,7 @@ export async function deleteOffice(officeId: string) {
     );
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("offices")
     .delete()
     .eq("id", officeId)
@@ -600,7 +627,8 @@ async function assertMaterialOwnedByTenant(
   materialId: string,
   tenantId: string
 ): Promise<void> {
-  const { data, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
     .from("materials")
     .select("id")
     .eq("id", materialId)
@@ -613,9 +641,11 @@ async function assertMaterialOwnedByTenant(
 export async function addVariant(materialId: string, formData: FormData) {
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
+  const supabase = await getSupabaseTenant();
   const input = parseVariantInput(formData);
 
-  const { error } = await supabaseAdmin.from("material_variants").insert({
+  const { error } = await supabase.from("material_variants").insert({
+    tenant_id: tenantId,
     material_id: materialId,
     name: input.name,
     unit: input.unit,
@@ -636,9 +666,10 @@ export async function updateVariant(
 ) {
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
+  const supabase = await getSupabaseTenant();
   const input = parseVariantInput(formData);
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("material_variants")
     .update({
       name: input.name,
@@ -657,8 +688,9 @@ export async function updateVariant(
 export async function deleteVariant(materialId: string, variantId: string) {
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
+  const supabase = await getSupabaseTenant();
 
-  const { count, error: countErr } = await supabaseAdmin
+  const { count, error: countErr } = await supabase
     .from("order_items")
     .select("id", { count: "exact", head: true })
     .eq("variant_id", variantId);
@@ -669,7 +701,7 @@ export async function deleteVariant(materialId: string, variantId: string) {
     );
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("material_variants")
     .delete()
     .eq("id", variantId)
@@ -688,11 +720,12 @@ const MAX_IMAGES_PER_MATERIAL = 5;
 export async function addMaterialImage(materialId: string, formData: FormData) {
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
+  const supabase = await getSupabaseTenant();
 
   const file = formData.get("image") as File | null;
   if (!file || file.size === 0) throw new Error("画像ファイルを選択してください");
 
-  const { data: existing, error: existErr } = await supabaseAdmin
+  const { data: existing, error: existErr } = await supabase
     .from("material_images")
     .select("image_id, sort_order, is_primary")
     .eq("material_id", materialId);
@@ -704,7 +737,7 @@ export async function addMaterialImage(materialId: string, formData: FormData) {
 
   const url = await uploadImageToStorage(file, tenantId, materialId);
 
-  const { data: img, error: imgErr } = await supabaseAdmin
+  const { data: img, error: imgErr } = await supabase
     .from("images")
     .upsert(
       { tenant_id: tenantId, url },
@@ -718,9 +751,10 @@ export async function addMaterialImage(materialId: string, formData: FormData) {
     (existing?.reduce((m, e) => Math.max(m, e.sort_order), -1) ?? -1) + 1;
   const isPrimary = (existing?.length ?? 0) === 0;
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("material_images")
     .insert({
+      tenant_id: tenantId,
       material_id: materialId,
       image_id: img.id,
       sort_order: nextSort,
@@ -739,15 +773,16 @@ export async function removeMaterialImage(
 ) {
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
+  const supabase = await getSupabaseTenant();
 
-  const { data: target } = await supabaseAdmin
+  const { data: target } = await supabase
     .from("material_images")
     .select("is_primary")
     .eq("material_id", materialId)
     .eq("image_id", imageId)
     .maybeSingle();
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("material_images")
     .delete()
     .eq("material_id", materialId)
@@ -756,14 +791,14 @@ export async function removeMaterialImage(
 
   // If we just removed the primary image, promote the first remaining one.
   if (target?.is_primary) {
-    const { data: rest } = await supabaseAdmin
+    const { data: rest } = await supabase
       .from("material_images")
       .select("image_id, sort_order")
       .eq("material_id", materialId)
       .order("sort_order")
       .limit(1);
     if (rest && rest.length > 0) {
-      await supabaseAdmin
+      await supabase
         .from("material_images")
         .update({ is_primary: true })
         .eq("material_id", materialId)
@@ -782,14 +817,15 @@ export async function setPrimaryMaterialImage(
 ) {
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
+  const supabase = await getSupabaseTenant();
 
-  const { error: clearErr } = await supabaseAdmin
+  const { error: clearErr } = await supabase
     .from("material_images")
     .update({ is_primary: false })
     .eq("material_id", materialId);
   if (clearErr) throw clearErr;
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("material_images")
     .update({ is_primary: true })
     .eq("material_id", materialId)
@@ -807,9 +843,10 @@ export async function reorderMaterialImages(
 ) {
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
+  const supabase = await getSupabaseTenant();
 
   for (let i = 0; i < orderedImageIds.length; i++) {
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from("material_images")
       .update({ sort_order: i })
       .eq("material_id", materialId)
@@ -835,7 +872,8 @@ export async function addAdminUser(formData: FormData) {
     throw new Error("有効なメールアドレスを入力してください");
   }
   const tenantId = await getTenantId();
-  const { error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { error } = await supabase
     .from("admin_users")
     .insert({ tenant_id: tenantId, email });
   if (error) {
@@ -849,13 +887,14 @@ export async function addAdminUser(formData: FormData) {
 
 export async function removeAdminUser(id: string) {
   const tenantId = await getTenantId();
-  const supabase = await createSupabaseServerClient();
+  const ssr = await createSupabaseServerClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await ssr.auth.getUser();
   if (!user?.email) throw new Error("認証情報を取得できませんでした");
 
-  const { data: target, error: targetErr } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data: target, error: targetErr } = await supabase
     .from("admin_users")
     .select("email, tenant_id")
     .eq("id", id)
@@ -868,7 +907,7 @@ export async function removeAdminUser(id: string) {
     throw new Error("自分自身は削除できません");
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("admin_users")
     .delete()
     .eq("id", id)

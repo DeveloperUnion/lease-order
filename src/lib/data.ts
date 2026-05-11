@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { supabase } from "./supabase";
+import { getSupabaseTenant } from "./supabase-tenant";
 import { getTenantId } from "./tenant";
 import { Category, Material, Office } from "./types";
 
@@ -40,6 +40,7 @@ function mapMaterial(row: MaterialRow): Material {
 
 export const getCategories = cache(async (): Promise<Category[]> => {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const { data, error } = await supabase
     .from("categories")
     .select("id, name, slug, image_url, sort_order")
@@ -51,6 +52,7 @@ export const getCategories = cache(async (): Promise<Category[]> => {
 
 export const getAllMaterials = cache(async (): Promise<Material[]> => {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const { data, error } = await supabase
     .from("materials")
     .select(
@@ -65,6 +67,7 @@ export const getAllMaterials = cache(async (): Promise<Material[]> => {
 
 export const getOffices = cache(async (): Promise<Office[]> => {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const { data, error } = await supabase
     .from("offices")
     .select("id, name, area, address, phone, fax, sort_order, is_active")

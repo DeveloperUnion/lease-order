@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getCurrentCustomer } from "@/lib/customer-auth";
 import { getTenantId } from "@/lib/tenant";
 import { notifyAdmins } from "@/lib/notifications";
@@ -41,7 +41,9 @@ export async function processItemActions(input: {
   if (!customer) return { ok: false, error: "ログインが必要です" };
   if (!input.actions.length) return { ok: false, error: "操作する項目がありません" };
 
-  const { data: order, error: orderErr } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+
+  const { data: order, error: orderErr } = await supabase
     .from("orders")
     .select(
       "id, customer_id, tenant_id, status, order_number, company_name, contact_name, order_items(id, material_name, quantity, returned_quantity, lease_end_date)"
@@ -72,12 +74,12 @@ export async function processItemActions(input: {
   const pendingExtensionItems = new Set<string>();
   if (itemIds.length > 0) {
     const [{ data: pendingReturns }, { data: pendingExtensions }] = await Promise.all([
-      supabaseAdmin
+      supabase
         .from("return_requests")
         .select("order_item_id, requested_quantity_delta")
         .in("order_item_id", itemIds)
         .eq("status", "pending"),
-      supabaseAdmin
+      supabase
         .from("lease_extensions")
         .select("order_item_id")
         .in("order_item_id", itemIds)
@@ -139,8 +141,9 @@ export async function processItemActions(input: {
   }
 
   if (returns.length > 0) {
-    const { error } = await supabaseAdmin.from("return_requests").insert(
+    const { error } = await supabase.from("return_requests").insert(
       returns.map((r) => ({
+        tenant_id: customer.tenant_id,
         order_item_id: r.item.id,
         requested_quantity_delta: r.delta,
         requested_by_customer_id: customer.id,
@@ -153,8 +156,9 @@ export async function processItemActions(input: {
   }
 
   if (extensions.length > 0) {
-    const { error } = await supabaseAdmin.from("lease_extensions").insert(
+    const { error } = await supabase.from("lease_extensions").insert(
       extensions.map((e) => ({
+        tenant_id: customer.tenant_id,
         order_item_id: e.item.id,
         previous_end_date: e.previousEndDate ?? e.newEndDate,
         new_end_date: e.newEndDate,
