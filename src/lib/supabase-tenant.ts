@@ -18,13 +18,17 @@ const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 //   1. 顧客 session (HMAC cookie) → customer:<id> + customer.tenant_id
 //   2. 管理者 session (Supabase Auth) → admin:<admin_user_id> + admin_user.tenant_id
 //   3. fallback → tenant:<host から解決した tenant_id>（login 前など）
-async function resolveSubjectAndTenant(): Promise<{
-  tenantId: string;
-  subject: string;
-}> {
+export type RecipientIdentity =
+  | { audience: "customer"; recipientId: string; tenantId: string; subject: string }
+  | { audience: "admin"; recipientId: string; tenantId: string; subject: string }
+  | { audience: "anonymous"; tenantId: string; subject: string };
+
+export async function resolveRecipientIdentity(): Promise<RecipientIdentity> {
   const customer = await getCurrentCustomer();
   if (customer) {
     return {
+      audience: "customer",
+      recipientId: customer.id,
       tenantId: customer.tenant_id,
       subject: `customer:${customer.id}`,
     };
@@ -41,12 +45,25 @@ async function resolveSubjectAndTenant(): Promise<{
       .eq("email", user.email.toLowerCase())
       .maybeSingle();
     if (row) {
-      return { tenantId: row.tenant_id, subject: `admin:${row.id}` };
+      return {
+        audience: "admin",
+        recipientId: row.id,
+        tenantId: row.tenant_id,
+        subject: `admin:${row.id}`,
+      };
     }
   }
 
   const tenantId = await getTenantId();
-  return { tenantId, subject: `tenant:${tenantId}` };
+  return { audience: "anonymous", tenantId, subject: `tenant:${tenantId}` };
+}
+
+async function resolveSubjectAndTenant(): Promise<{
+  tenantId: string;
+  subject: string;
+}> {
+  const id = await resolveRecipientIdentity();
+  return { tenantId: id.tenantId, subject: id.subject };
 }
 
 export const getSupabaseTenant = cache(

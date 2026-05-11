@@ -14,6 +14,8 @@ export const emailChannel: Channel = {
     return true;
   },
   async send(target, kind, ctx, tenantId) {
+    // address 未設定 = email 連絡先なし。email_logs にも残さず黙ってスキップする
+    // （in-app チャンネルは別途配信される）。
     if (!target.address) return;
     const { subject, body } = renderTemplate(kind, ctx);
 

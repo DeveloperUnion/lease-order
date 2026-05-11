@@ -19,7 +19,7 @@ function b64urlEncode(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-const TTL_SECONDS = 60 * 5; // 5 分。リクエスト処理に十分な短期トークン
+const DEFAULT_TTL_SECONDS = 60 * 5; // 5 分。リクエスト処理に十分な短期トークン
 
 export type TenantJwtClaims = {
   role: "authenticated";
@@ -39,12 +39,17 @@ export type TenantJwtClaims = {
  *   - 未ログイン (login 画面用): tenant:<tenant_id>
  *
  * RLS ポリシーは `(auth.jwt() ->> 'tenant_id')` を参照する。
+ *
+ * ttlSeconds はデフォルト 5 分。Realtime のような長時間接続用途には
+ * 呼び出し側で延長できる（クライアントは expiresAt 直前に再 fetch する想定）。
  */
 export function mintTenantJwt(opts: {
   tenantId: string;
   subject: string;
+  ttlSeconds?: number;
 }): string {
   const now = Math.floor(Date.now() / 1000);
+  const ttl = opts.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const header = { alg: "ES256", typ: "JWT" };
   const claims: TenantJwtClaims = {
     role: "authenticated",
@@ -52,7 +57,7 @@ export function mintTenantJwt(opts: {
     sub: opts.subject,
     tenant_id: opts.tenantId,
     iat: now,
-    exp: now + TTL_SECONDS,
+    exp: now + ttl,
   };
   const encodedHeader = b64urlEncode(Buffer.from(JSON.stringify(header)));
   const encodedClaims = b64urlEncode(Buffer.from(JSON.stringify(claims)));

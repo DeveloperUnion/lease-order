@@ -72,6 +72,10 @@ export async function notifyCustomer(
 // Fan out a notification to every admin in the tenant's allowlist.
 // admin_users lookup uses service_role since it lists multiple recipients
 // (the same pattern as legacy sendAdminEmail bootstrap).
+//
+// 各 admin に対し in-app と email の両チャンネルへ fanout する。email チャンネルは
+// `target.address` が空なら自身で early-return するので、ここで email 有無の事前
+// フィルタはしない（in-app は email 不要で配信されるべき）。
 export async function notifyAdmins(
   tenantId: string,
   kind: NotificationKind,
@@ -87,7 +91,7 @@ export async function notifyAdmins(
       console.error("notifyAdmins: admin_users lookup failed", error);
       return;
     }
-    const recipients = (data ?? []).filter((r) => r.email);
+    const recipients = data ?? [];
     await Promise.all(
       recipients.map((r) =>
         fanout(
@@ -95,7 +99,7 @@ export async function notifyAdmins(
             kind: "admin",
             adminUserId: r.id,
             orderId,
-            address: r.email,
+            address: r.email ?? "",
           },
           kind,
           ctx,
