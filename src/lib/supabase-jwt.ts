@@ -1,12 +1,18 @@
 import "server-only";
-import { createHmac } from "node:crypto";
+import { createSign, createPrivateKey, type KeyObject } from "node:crypto";
 
-// PostgREST が Authorization: Bearer <jwt> を検証するための HS256 シークレット。
-// Supabase Dashboard → Settings → API → JWT Secret から取得する。
-function getSecret(): string {
-  const secret = process.env.SUPABASE_JWT_SECRET;
-  if (!secret) throw new Error("SUPABASE_JWT_SECRET is not set");
-  return secret;
+// PostgREST が Authorization: Bearer <jwt> を検証するための ES256 (P-256 ECDSA) 秘密鍵。
+// Supabase Dashboard → API → JWT Keys に Standby Key として「Import an existing
+// private key」で登録した PKCS#8 PEM を、同じ値で .env / Vercel env にも入れる。
+let cachedKey: KeyObject | null = null;
+function getPrivateKey(): KeyObject {
+  if (cachedKey) return cachedKey;
+  const raw = process.env.SUPABASE_JWT_PRIVATE_KEY;
+  if (!raw) throw new Error("SUPABASE_JWT_PRIVATE_KEY is not set");
+  // .env で `\n` 文字列として保存されていた場合に実改行へ戻す
+  const pem = raw.includes("\\n") ? raw.replace(/\\n/g, "\n") : raw;
+  cachedKey = createPrivateKey(pem);
+  return cachedKey;
 }
 
 function b64urlEncode(buf: Buffer): string {
@@ -25,7 +31,7 @@ export type TenantJwtClaims = {
 };
 
 /**
- * tenant_id を claim に持つ Supabase 互換の JWT を発行する。
+ * tenant_id を claim に持つ Supabase 互換の ES256 JWT を発行する。
  *
  * subject:
  *   - 顧客ログイン中:  customer:<customer_id>
@@ -39,7 +45,7 @@ export function mintTenantJwt(opts: {
   subject: string;
 }): string {
   const now = Math.floor(Date.now() / 1000);
-  const header = { alg: "HS256", typ: "JWT" };
+  const header = { alg: "ES256", typ: "JWT" };
   const claims: TenantJwtClaims = {
     role: "authenticated",
     aud: "authenticated",
@@ -51,8 +57,13 @@ export function mintTenantJwt(opts: {
   const encodedHeader = b64urlEncode(Buffer.from(JSON.stringify(header)));
   const encodedClaims = b64urlEncode(Buffer.from(JSON.stringify(claims)));
   const signingInput = `${encodedHeader}.${encodedClaims}`;
-  const signature = b64urlEncode(
-    createHmac("sha256", getSecret()).update(signingInput).digest()
-  );
-  return `${signingInput}.${signature}`;
+  // dsaEncoding: "ieee-p1363" は ECDSA 署名を JOSE 互換の R||S (64 byte) で出力する。
+  // 既定の DER 形式だと PostgREST/jose 側で復号できない。
+  const signature = createSign("SHA256")
+    .update(signingInput)
+    .sign({
+      key: getPrivateKey(),
+      dsaEncoding: "ieee-p1363",
+    });
+  return `${signingInput}.${b64urlEncode(signature)}`;
 }
