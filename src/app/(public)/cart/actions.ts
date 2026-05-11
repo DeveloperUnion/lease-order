@@ -1,6 +1,6 @@
 "use server";
 
-import { sendAdminEmail, sendOrderEmail } from "@/lib/email";
+import { notifyAdmins, notifyCustomer } from "@/lib/notifications";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 import { getCurrentCustomer } from "@/lib/customer-auth";
@@ -158,8 +158,6 @@ export async function submitOrder(
     return { ok: false, error: "発注の登録に失敗しました" };
   }
 
-  // Best-effort notifications. Failures are logged in email_logs but never
-  // block the order from being recorded.
   const itemSummary = items
     .slice(0, 5)
     .map((i) => `${materialMap.get(i.materialId)} ×${i.quantity}`)
@@ -171,37 +169,8 @@ export async function submitOrder(
     contactName,
     itemSummary,
   };
-  try {
-    await sendAdminEmail({
-      tenantId,
-      orderId: order.id,
-      kind: "admin_new_order",
-      ctx,
-    });
-  } catch (e) {
-    console.error("submitOrder: admin notification failed", e);
-  }
-  // 顧客向け受付メール: cart form がまだ email 欄を持たないため、
-  // orders.email が null の現状ではスキップされる。将来 email を取れる
-  // ようになれば自動的に送信されるよう、フックだけ先に配置しておく。
-  try {
-    const { data: orderRow } = await supabase
-      .from("orders")
-      .select("email")
-      .eq("id", order.id)
-      .maybeSingle();
-    if (orderRow?.email) {
-      await sendOrderEmail({
-        tenantId,
-        orderId: order.id,
-        to: orderRow.email,
-        kind: "order_received",
-        ctx,
-      });
-    }
-  } catch (e) {
-    console.error("submitOrder: customer notification failed", e);
-  }
+  await notifyAdmins(tenantId, "admin_new_order", ctx, order.id);
+  await notifyCustomer(order.id, "order_received", { itemSummary });
 
   return { ok: true, orderNumber };
 }

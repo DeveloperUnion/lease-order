@@ -1,47 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { sendOrderEmail } from "@/lib/email";
-import type { EmailKind } from "@/lib/email-templates";
+import { notifyCustomer } from "@/lib/notifications";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
-
-// Best-effort customer notification on order status changes.
-// Skips silently if the order has no email captured. Errors are swallowed
-// so the status update itself is never blocked by mail delivery issues.
-async function notifyCustomer(
-  orderId: string,
-  kind: EmailKind,
-  extra?: { rejectReason?: string }
-): Promise<void> {
-  try {
-    const tenantId = await getTenantId();
-    const supabase = await getSupabaseTenant();
-    const { data } = await supabase
-      .from("orders")
-      .select("order_number, company_name, contact_name, email")
-      .eq("id", orderId)
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-    if (!data?.email) return;
-    await sendOrderEmail({
-      tenantId,
-      orderId,
-      to: data.email,
-      kind,
-      ctx: {
-        orderNumber: data.order_number,
-        companyName: data.company_name,
-        contactName: data.contact_name,
-        rejectReason: extra?.rejectReason,
-      },
-    });
-  } catch (e) {
-    console.error(`notifyCustomer failed (${kind}, ${orderId})`, e);
-  }
-}
 
 function slugify(input: string): string {
   const base = input

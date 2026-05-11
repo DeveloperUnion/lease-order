@@ -502,3 +502,167 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
   if (error) throw error;
   return (data ?? []) as AdminUserRow[];
 }
+
+// ============================================================
+// Return / extension pending requests
+// ============================================================
+
+type PendingRequestBase = {
+  order_id: string;
+  order_number: string;
+  site_name: string | null;
+  company_name: string;
+  contact_name: string;
+  order_item_id: string;
+  material_name: string;
+  reason: string | null;
+  requested_at: string;
+};
+
+export type PendingReturnRequest = PendingRequestBase & {
+  type: "return";
+  id: string;
+  requested_quantity_delta: number;
+};
+
+export type PendingExtensionRequest = PendingRequestBase & {
+  type: "extension";
+  id: string;
+  previous_end_date: string;
+  new_end_date: string;
+};
+
+export type PendingRequest = PendingReturnRequest | PendingExtensionRequest;
+
+type ItemInfo = {
+  order_id: string;
+  order_number: string;
+  site_name: string | null;
+  company_name: string;
+  contact_name: string;
+  order_item_id: string;
+  material_name: string;
+};
+
+async function buildItemInfoMap(tenantId: string): Promise<Map<string, ItemInfo>> {
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
+    .from("orders")
+    .select(
+      "id, order_number, site_name, company_name, contact_name, order_items(id, material_name)"
+    )
+    .eq("tenant_id", tenantId);
+  if (error) throw error;
+  const map = new Map<string, ItemInfo>();
+  for (const o of (data ?? []) as {
+    id: string;
+    order_number: string;
+    site_name: string | null;
+    company_name: string;
+    contact_name: string;
+    order_items: { id: string; material_name: string }[] | null;
+  }[]) {
+    for (const it of o.order_items ?? []) {
+      map.set(it.id, {
+        order_id: o.id,
+        order_number: o.order_number,
+        site_name: o.site_name,
+        company_name: o.company_name,
+        contact_name: o.contact_name,
+        order_item_id: it.id,
+        material_name: it.material_name,
+      });
+    }
+  }
+  return map;
+}
+
+export async function listPendingRequests(): Promise<PendingRequest[]> {
+  const tenantId = await getTenantId();
+  const itemInfoMap = await buildItemInfoMap(tenantId);
+  const itemIds = Array.from(itemInfoMap.keys());
+  if (itemIds.length === 0) return [];
+
+  const supabase = await getSupabaseTenant();
+  const [{ data: returns, error: retErr }, { data: extensions, error: extErr }] =
+    await Promise.all([
+      supabase
+        .from("return_requests")
+        .select("id, order_item_id, requested_quantity_delta, reason, requested_at")
+        .in("order_item_id", itemIds)
+        .eq("status", "pending"),
+      supabase
+        .from("lease_extensions")
+        .select("id, order_item_id, previous_end_date, new_end_date, reason, requested_at")
+        .in("order_item_id", itemIds)
+        .eq("status", "pending"),
+    ]);
+  if (retErr) throw retErr;
+  if (extErr) throw extErr;
+
+  const items: PendingRequest[] = [];
+  for (const r of (returns ?? []) as {
+    id: string;
+    order_item_id: string;
+    requested_quantity_delta: number;
+    reason: string | null;
+    requested_at: string;
+  }[]) {
+    const info = itemInfoMap.get(r.order_item_id);
+    if (!info) continue;
+    items.push({
+      type: "return",
+      id: r.id,
+      requested_quantity_delta: r.requested_quantity_delta,
+      reason: r.reason,
+      requested_at: r.requested_at,
+      ...info,
+    });
+  }
+  for (const e of (extensions ?? []) as {
+    id: string;
+    order_item_id: string;
+    previous_end_date: string;
+    new_end_date: string;
+    reason: string | null;
+    requested_at: string;
+  }[]) {
+    const info = itemInfoMap.get(e.order_item_id);
+    if (!info) continue;
+    items.push({
+      type: "extension",
+      id: e.id,
+      previous_end_date: e.previous_end_date,
+      new_end_date: e.new_end_date,
+      reason: e.reason,
+      requested_at: e.requested_at,
+      ...info,
+    });
+  }
+  items.sort((a, b) => b.requested_at.localeCompare(a.requested_at));
+  return items;
+}
+
+export async function countPendingRequests(): Promise<number> {
+  const tenantId = await getTenantId();
+  const itemInfoMap = await buildItemInfoMap(tenantId);
+  const itemIds = Array.from(itemInfoMap.keys());
+  if (itemIds.length === 0) return 0;
+
+  const supabase = await getSupabaseTenant();
+  const [{ count: rc, error: re }, { count: ec, error: ee }] = await Promise.all([
+    supabase
+      .from("return_requests")
+      .select("id", { count: "exact", head: true })
+      .in("order_item_id", itemIds)
+      .eq("status", "pending"),
+    supabase
+      .from("lease_extensions")
+      .select("id", { count: "exact", head: true })
+      .in("order_item_id", itemIds)
+      .eq("status", "pending"),
+  ]);
+  if (re) throw re;
+  if (ee) throw ee;
+  return (rc ?? 0) + (ec ?? 0);
+}
