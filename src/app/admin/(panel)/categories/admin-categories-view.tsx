@@ -5,8 +5,16 @@ import type { AdminCategoryRow } from "@/lib/admin-data";
 import {
   createCategory,
   deleteCategory,
+  reorderCategories,
   updateCategory,
 } from "@/app/admin/actions";
+import {
+  PageHeader,
+  Button,
+  FormField,
+  TextInput,
+  EmptyState,
+} from "@/components/admin/ui";
 
 type EditingState =
   | { mode: "create" }
@@ -21,10 +29,53 @@ export default function AdminCategoriesView({
   const [toastMessage, setToastMessage] = useState("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [order, setOrder] = useState<AdminCategoryRow[]>(categories);
+
+  // Re-sync local order whenever the server-side set changes.
+  if (
+    categories.length !== order.length ||
+    categories.some((c, i) => order[i]?.id !== c.id)
+  ) {
+    const serverIds = new Set(categories.map((c) => c.id));
+    const localIds = new Set(order.map((c) => c.id));
+    const sameSet =
+      serverIds.size === localIds.size &&
+      [...serverIds].every((id) => localIds.has(id));
+    if (!sameSet) {
+      setOrder(categories);
+    }
+  }
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 1800);
+  };
+
+  const handleDrop = (targetId: string) => {
+    if (!dragId || dragId === targetId) {
+      setDragId(null);
+      return;
+    }
+    const next = [...order];
+    const fromIdx = next.findIndex((c) => c.id === dragId);
+    const toIdx = next.findIndex((c) => c.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) {
+      setDragId(null);
+      return;
+    }
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setOrder(next);
+    setDragId(null);
+    startTransition(async () => {
+      try {
+        await reorderCategories(next.map((c) => c.id));
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "並び替えに失敗しました");
+        setOrder(categories);
+      }
+    });
   };
 
   const handleSubmit = (formData: FormData) => {
@@ -62,77 +113,122 @@ export default function AdminCategoriesView({
   };
 
   return (
-    <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6">
-      <h1 className="text-2xl font-bold text-accent mb-6">カテゴリマスタ</h1>
+    <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
+      <PageHeader
+        title="カテゴリマスタ"
+        actions={
+          <Button onClick={() => setEditing({ mode: "create" })}>
+            + 新規追加
+          </Button>
+        }
+      />
 
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-sm text-subtle">{categories.length}件</span>
-        <button
-          onClick={() => setEditing({ mode: "create" })}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          + 新規追加
-        </button>
+      <div className="flex items-center justify-between mb-3">
+        <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-subtle">
+          {categories.length} 件
+        </span>
+        {order.length > 1 && (
+          <span className="text-[11px] text-subtle">
+            行をドラッグで並び替え
+          </span>
+        )}
       </div>
 
-      <div className="space-y-2">
-        {categories.map((cat) => (
-          <div
-            key={cat.id}
-            className="flex items-center justify-between p-4 bg-surface rounded-xl border border-border"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-12 h-12 bg-surface-muted rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden">
-                {cat.image_url ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={cat.image_url}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-subtle text-[10px]">NO IMG</span>
-                )}
+      {categories.length === 0 ? (
+        <EmptyState
+          title="カテゴリはまだ登録されていません"
+          description="新規追加から最初のカテゴリを登録してください。"
+        />
+      ) : (
+        <div className="border-y border-rule divide-y divide-rule">
+          {order.map((cat) => (
+            <div
+              key={cat.id}
+              draggable
+              onDragStart={() => setDragId(cat.id)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => handleDrop(cat.id)}
+              onDragEnd={() => setDragId(null)}
+              className={`flex items-center justify-between px-2 sm:px-3 py-3 bg-surface ${
+                dragId === cat.id ? "opacity-40" : ""
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  aria-hidden
+                  className="flex-shrink-0 text-subtle hover:text-foreground cursor-grab active:cursor-grabbing select-none px-1"
+                  title="ドラッグで並び替え"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <circle cx="7" cy="5" r="1.4" />
+                    <circle cx="7" cy="10" r="1.4" />
+                    <circle cx="7" cy="15" r="1.4" />
+                    <circle cx="13" cy="5" r="1.4" />
+                    <circle cx="13" cy="10" r="1.4" />
+                    <circle cx="13" cy="15" r="1.4" />
+                  </svg>
+                </span>
+                <div className="w-12 h-12 bg-surface-muted border border-rule flex-shrink-0 flex items-center justify-center overflow-hidden">
+                  {cat.image_url ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={cat.image_url}
+                      alt=""
+                      draggable={false}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="font-[family-name:var(--font-mono)] text-[9px] text-subtle uppercase">
+                      no img
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {cat.name}
+                  </p>
+                  <p className="font-[family-name:var(--font-mono)] text-[11px] text-subtle truncate">
+                    {cat.slug} ／ 資材 {cat.material_count} 件
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-accent truncate">
-                  {cat.name}
-                </p>
-                <p className="text-xs text-subtle truncate">
-                  {cat.slug} ・ 資材 {cat.material_count}件
-                </p>
+              <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleDelete(cat)}
+                  disabled={isPending || cat.material_count > 0}
+                  title={
+                    cat.material_count > 0
+                      ? "資材が紐付いているため削除不可"
+                      : "削除"
+                  }
+                >
+                  削除
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setEditing({ mode: "edit", category: cat })}
+                >
+                  編集
+                </Button>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-              <button
-                onClick={() => handleDelete(cat)}
-                disabled={isPending || cat.material_count > 0}
-                className="text-xs px-2.5 py-1.5 bg-surface-muted text-muted rounded-full hover:bg-red-50 hover:text-red-600 disabled:opacity-30 disabled:hover:bg-surface-muted disabled:hover:text-muted"
-                title={
-                  cat.material_count > 0
-                    ? "資材が紐付いているため削除不可"
-                    : "削除"
-                }
-              >
-                削除
-              </button>
-              <button
-                onClick={() => setEditing({ mode: "edit", category: cat })}
-                className="text-sm px-3 py-1.5 bg-surface-muted text-muted rounded-full hover:bg-border transition-colors"
-              >
-                編集
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {toastMessage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px] pointer-events-none">
-          <div className="bg-surface rounded-2xl shadow-2xl px-8 py-6 flex flex-col items-center gap-3">
-            <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
+          <div className="bg-surface border border-rule-strong shadow-2xl px-8 py-6 flex flex-col items-center gap-3">
+            <div className="w-10 h-10 bg-foreground flex items-center justify-center">
               <svg
-                className="h-6 w-6 text-primary-foreground"
+                className="h-5 w-5 text-background"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -145,7 +241,7 @@ export default function AdminCategoriesView({
                 />
               </svg>
             </div>
-            <p className="text-base font-medium text-accent">{toastMessage}</p>
+            <p className="text-sm font-medium text-foreground">{toastMessage}</p>
           </div>
         </div>
       )}
@@ -206,7 +302,6 @@ function EditModal({
 }) {
   const [name, setName] = useState(initial.name);
   const [slug, setSlug] = useState(initial.slug);
-  const [sortOrder, setSortOrder] = useState(initial.sort_order);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(
     initial.image_url
@@ -223,7 +318,9 @@ function EditModal({
   const handleFormAction = (formData: FormData) => {
     formData.set("name", name);
     formData.set("slug", slug);
-    formData.set("sort_order", String(sortOrder));
+    // create 時のみ末尾に追加されるよう、initial.sort_order をそのまま渡す。
+    // edit 時は updateCategory が sort_order を無視する（D&D で並び替え）。
+    if (!isEdit) formData.set("sort_order", String(initial.sort_order));
     if (imageFile) formData.set("image", imageFile);
     onSubmit(formData);
   };
@@ -234,18 +331,19 @@ function EditModal({
       onClick={onClose}
     >
       <div
-        className="bg-surface w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
+        className="bg-surface w-full sm:max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border-t border-rule-strong sm:border sm:border-rule-strong"
         onClick={(e) => e.stopPropagation()}
       >
         <form action={handleFormAction} className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-accent">
+          <div className="flex items-center justify-between mb-5 pb-3 border-b border-rule">
+            <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight text-foreground">
               {isEdit ? "カテゴリを編集" : "カテゴリを追加"}
             </h2>
             <button
               type="button"
               onClick={onClose}
-              className="text-subtle hover:text-muted"
+              className="text-subtle hover:text-foreground"
+              aria-label="閉じる"
             >
               <svg
                 className="h-5 w-5"
@@ -264,37 +362,28 @@ function EditModal({
           </div>
 
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                カテゴリ名 <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
+            <FormField label="カテゴリ名" required>
+              <TextInput
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                slug（URL。空欄なら名前から自動生成）
-              </label>
-              <input
-                type="text"
+            </FormField>
+            <FormField
+              label="slug"
+              hint="URL に使われます。空欄なら名前から自動生成"
+            >
+              <TextInput
                 value={slug}
                 onChange={(e) => setSlug(e.target.value)}
                 placeholder="例: karigakoi"
-                className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
+                className="font-[family-name:var(--font-mono)]"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                画像
-              </label>
+            </FormField>
+            <FormField label="画像">
               <div className="flex items-center gap-4">
                 {imagePreview && (
-                  <div className="w-16 h-16 bg-surface-muted rounded-lg overflow-hidden flex-shrink-0">
+                  <div className="w-16 h-16 bg-surface-muted border border-rule overflow-hidden flex-shrink-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={imagePreview}
@@ -307,41 +396,37 @@ function EditModal({
                   type="file"
                   accept="image/*"
                   onChange={handleImageChange}
-                  className="text-sm text-muted file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-medium file:bg-surface-muted file:text-foreground hover:file:bg-border"
+                  className="text-sm text-muted file:mr-3 file:h-9 file:px-4 file:border-0 file:text-xs file:font-medium file:bg-surface-muted file:text-foreground file:font-[family-name:var(--font-mono)] file:uppercase file:tracking-wider hover:file:bg-rule"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                並び順
-              </label>
-              <input
-                type="number"
-                value={sortOrder}
-                onChange={(e) => setSortOrder(Number(e.target.value) || 0)}
-                className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
-              />
-            </div>
+            </FormField>
           </div>
 
-          {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+          {error && (
+            <p className="mt-4 text-sm text-[var(--color-status-rejected-fg)]">
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-3 mt-6">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="lg"
               onClick={onClose}
               disabled={pending}
-              className="flex-1 py-2.5 border border-border-strong text-foreground rounded-full text-sm font-medium hover:bg-surface-muted disabled:opacity-40"
+              className="flex-1"
             >
               キャンセル
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              size="lg"
               disabled={pending || !name.trim()}
-              className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 disabled:opacity-40"
+              className="flex-1"
             >
-              {pending ? "保存中..." : "保存"}
-            </button>
+              {pending ? "保存中…" : "保存"}
+            </Button>
           </div>
         </form>
       </div>

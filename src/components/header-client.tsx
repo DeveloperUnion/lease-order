@@ -117,7 +117,13 @@ function SearchBar({ className }: { className?: string }) {
   );
 }
 
-export default function HeaderClient({ customer }: { customer: CustomerSummary | null }) {
+export default function HeaderClient({
+  customer,
+  notificationBell,
+}: {
+  customer: CustomerSummary | null;
+  notificationBell: React.ReactNode;
+}) {
   const { totalItems } = useCart();
   const pathname = usePathname();
   const isAdmin = pathname.startsWith("/admin");
@@ -153,7 +159,9 @@ export default function HeaderClient({ customer }: { customer: CustomerSummary |
   return (
     <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur border-b border-border md:pl-56">
       <div className="max-w-6xl mx-auto px-4">
-        <div className="h-16 flex items-center justify-between gap-4">
+        {/* PC: 検索バーを中央配置、アイコン群は absolute で右端固定。
+            モバイル: 通常の flex 並びでロゴ→検索→アイコン。 */}
+        <div className="relative h-16 flex items-center gap-3 md:justify-center">
           {/* モバイルのみロゴを表示 */}
           <Link href="/" className="flex items-center gap-2 flex-shrink-0 md:hidden">
             <Image
@@ -166,30 +174,33 @@ export default function HeaderClient({ customer }: { customer: CustomerSummary |
             />
           </Link>
 
-          <SearchBar className="flex-1 max-w-lg" />
+          <SearchBar className="flex-1 max-w-lg md:flex-none md:w-[28rem]" />
 
           {customer && (
-            <Link
-              href="/cart"
-              aria-label="カート"
-              className="relative inline-flex items-center justify-center h-10 w-10 rounded-lg border border-border hover:border-border-strong hover:bg-surface-muted transition-colors flex-shrink-0"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 text-foreground"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
+            <div className="flex items-center gap-2 flex-shrink-0 md:absolute md:right-0 md:top-1/2 md:-translate-y-1/2">
+              {notificationBell}
+              <Link
+                href="/cart"
+                aria-label="カート"
+                className="relative inline-flex items-center justify-center h-10 w-10 rounded-lg border border-border hover:border-border-strong hover:bg-surface-muted transition-colors"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-              </svg>
-              {totalItems > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-bold bg-accent text-accent-ink">
-                  {totalItems}
-                </span>
-              )}
-            </Link>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 text-foreground"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+                {totalItems > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-bold bg-accent text-accent-ink">
+                    {totalItems}
+                  </span>
+                )}
+              </Link>
+            </div>
           )}
         </div>
       </div>

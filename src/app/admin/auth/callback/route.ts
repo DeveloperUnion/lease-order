@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const { data: allowed, error: allowError } = await supabaseAdmin
     .from("admin_users")
     .select("id")
-    .eq("email", data.user.email)
+    .eq("email", data.user.email.toLowerCase())
     .maybeSingle();
 
   if (allowError || !allowed) {

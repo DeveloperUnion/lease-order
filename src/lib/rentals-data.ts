@@ -3,15 +3,25 @@ import { cache } from "react";
 import { supabaseAdmin } from "./supabase-admin";
 import type { DeliveryMethod } from "./types";
 
+export type PendingExtension = {
+  id: string;
+  new_end_date: string;
+  reason: string | null;
+  requested_at: string;
+};
+
 export type RentalItemRow = {
   id: string;
   material_id: string;
   material_name: string;
   quantity: number;
   returned_quantity: number;
-  remaining: number;
+  pending_return_delta: number;
+  remaining: number;            // quantity - returned_quantity (acknowledged のみ)
+  effective_remaining: number;  // quantity - returned_quantity - pending_return_delta
   lease_end_date: string | null;
   is_overdue: boolean;
+  pending_extension: PendingExtension | null;
 };
 
 export type RentalOrder = {
@@ -26,6 +36,7 @@ export type RentalOrder = {
   lease_end_date: string | null;
   created_at: string;
   items: RentalItemRow[];
+  // 承認済み延長履歴のみ。pending は各 item.pending_extension に格納。
   extensions: Record<string, { previous_end_date: string; new_end_date: string; reason: string | null; requested_at: string }[]>;
 };
 
@@ -180,9 +191,12 @@ export async function listRentalsByCustomer(customerId: string, tenantId: string
             material_name: x.row.material_name,
             quantity: x.row.quantity,
             returned_quantity: x.row.returned_quantity,
+            pending_return_delta: 0,
             remaining: x.remaining,
+            effective_remaining: x.remaining,
             lease_end_date: x.row.lease_end_date,
             is_overdue: true,
+            pending_extension: null,
           },
         });
       }
@@ -306,11 +320,18 @@ type OrderDetailRaw = {
 };
 
 type ExtensionRaw = {
+  id: string;
   order_item_id: string;
   previous_end_date: string;
   new_end_date: string;
   reason: string | null;
   requested_at: string;
+  status: "pending" | "acknowledged" | "rejected";
+};
+
+type ReturnRequestRaw = {
+  order_item_id: string;
+  requested_quantity_delta: number;
 };
 
 export const getRentalOrder = cache(async (orderId: string, customerId: string, tenantId: string): Promise<RentalOrder | null> => {
@@ -327,42 +348,77 @@ export const getRentalOrder = cache(async (orderId: string, customerId: string, 
   const raw = data as unknown as OrderDetailRaw;
   if (raw.customer_id !== customerId) return null;
 
-  const today = todayIsoLocal();
-  const items: RentalItemRow[] = (raw.order_items ?? [])
+  const sortedItems = (raw.order_items ?? [])
     .slice()
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))
-    .map((it) => {
-      const remaining = it.quantity - it.returned_quantity;
-      return {
-        id: it.id,
-        material_id: it.material_id,
-        material_name: it.material_name,
-        quantity: it.quantity,
-        returned_quantity: it.returned_quantity,
-        remaining,
-        lease_end_date: it.lease_end_date,
-        is_overdue: remaining > 0 && isItemOverdue(it.lease_end_date, today),
-      };
-    });
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const itemIds = sortedItems.map((i) => i.id);
 
-  const itemIds = items.map((i) => i.id);
-  const extensions: Record<string, { previous_end_date: string; new_end_date: string; reason: string | null; requested_at: string }[]> = {};
+  const pendingReturnDelta = new Map<string, number>();
+  const pendingExtensionByItem = new Map<string, PendingExtension>();
+  const ackExtensions: Record<string, { previous_end_date: string; new_end_date: string; reason: string | null; requested_at: string }[]> = {};
+
   if (itemIds.length > 0) {
-    const { data: extData, error: extErr } = await supabaseAdmin
-      .from("lease_extensions")
-      .select("order_item_id, previous_end_date, new_end_date, reason, requested_at")
-      .in("order_item_id", itemIds)
-      .order("requested_at", { ascending: false });
+    const [{ data: extData, error: extErr }, { data: retData, error: retErr }] = await Promise.all([
+      supabaseAdmin
+        .from("lease_extensions")
+        .select("id, order_item_id, previous_end_date, new_end_date, reason, requested_at, status")
+        .in("order_item_id", itemIds)
+        .order("requested_at", { ascending: false }),
+      supabaseAdmin
+        .from("return_requests")
+        .select("order_item_id, requested_quantity_delta")
+        .in("order_item_id", itemIds)
+        .eq("status", "pending"),
+    ]);
     if (extErr) throw extErr;
+    if (retErr) throw retErr;
+
     for (const e of (extData ?? []) as ExtensionRaw[]) {
-      (extensions[e.order_item_id] ??= []).push({
-        previous_end_date: e.previous_end_date,
-        new_end_date: e.new_end_date,
-        reason: e.reason,
-        requested_at: e.requested_at,
-      });
+      if (e.status === "pending") {
+        if (!pendingExtensionByItem.has(e.order_item_id)) {
+          pendingExtensionByItem.set(e.order_item_id, {
+            id: e.id,
+            new_end_date: e.new_end_date,
+            reason: e.reason,
+            requested_at: e.requested_at,
+          });
+        }
+      } else if (e.status === "acknowledged") {
+        (ackExtensions[e.order_item_id] ??= []).push({
+          previous_end_date: e.previous_end_date,
+          new_end_date: e.new_end_date,
+          reason: e.reason,
+          requested_at: e.requested_at,
+        });
+      }
+    }
+    for (const r of (retData ?? []) as ReturnRequestRaw[]) {
+      pendingReturnDelta.set(
+        r.order_item_id,
+        (pendingReturnDelta.get(r.order_item_id) ?? 0) + r.requested_quantity_delta
+      );
     }
   }
+
+  const today = todayIsoLocal();
+  const items: RentalItemRow[] = sortedItems.map((it) => {
+    const pendingDelta = pendingReturnDelta.get(it.id) ?? 0;
+    const remaining = it.quantity - it.returned_quantity;
+    const effective_remaining = remaining - pendingDelta;
+    return {
+      id: it.id,
+      material_id: it.material_id,
+      material_name: it.material_name,
+      quantity: it.quantity,
+      returned_quantity: it.returned_quantity,
+      pending_return_delta: pendingDelta,
+      remaining,
+      effective_remaining,
+      lease_end_date: it.lease_end_date,
+      is_overdue: remaining > 0 && isItemOverdue(it.lease_end_date, today),
+      pending_extension: pendingExtensionByItem.get(it.id) ?? null,
+    };
+  });
 
   return {
     id: raw.id,
@@ -376,7 +432,7 @@ export const getRentalOrder = cache(async (orderId: string, customerId: string, 
     lease_end_date: raw.lease_end_date,
     created_at: raw.created_at,
     items,
-    extensions,
+    extensions: ackExtensions,
   };
 });
 

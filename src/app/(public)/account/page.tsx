@@ -1,6 +1,7 @@
 import { requireCustomer } from "@/lib/customer-auth";
 import ProfileForm from "./profile-form";
 import PasswordForm from "./password-form";
+import LogoutButton from "./logout-button";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,10 @@ export default async function AccountPage({
           initialDefaultAddress={customer.default_address ?? ""}
           initialContactEmail={customer.contact_email ?? ""}
         />
+      </Section>
+
+      <Section label="ログアウト">
+        <LogoutButton />
       </Section>
     </main>
   );

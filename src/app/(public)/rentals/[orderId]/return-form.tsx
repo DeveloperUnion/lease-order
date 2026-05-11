@@ -30,7 +30,8 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
     const init: Record<string, RowState> = {};
     for (const it of items) {
       const wasExtended = (extensions[it.id]?.length ?? 0) > 0;
-      init[it.id] = wasExtended ? { kind: "skip" } : { kind: "return" };
+      init[it.id] =
+        it.effective_remaining > 0 && !wasExtended ? { kind: "return" } : { kind: "skip" };
     }
     return init;
   });
@@ -40,7 +41,7 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
   const [isPending, startTransition] = useTransition();
 
   const summary = useMemo(() => {
-    const returns = items.filter((it) => states[it.id]?.kind === "return");
+    const returns = items.filter((it) => states[it.id]?.kind === "return" && it.effective_remaining > 0);
     const extendsItems = items.filter((it) => states[it.id]?.kind === "extend");
     return { returns, extendsItems };
   }, [items, states]);
@@ -59,7 +60,11 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
   }
 
   function handleExtendCancel(itemId: string) {
-    setStates((prev) => ({ ...prev, [itemId]: { kind: "return" } }));
+    const it = items.find((i) => i.id === itemId);
+    setStates((prev) => ({
+      ...prev,
+      [itemId]: it && it.effective_remaining > 0 ? { kind: "return" } : { kind: "skip" },
+    }));
   }
 
   const extendingItem = extendingId ? items.find((it) => it.id === extendingId) ?? null : null;
@@ -70,7 +75,8 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
         const s = states[it.id];
         if (!s) return null;
         if (s.kind === "return") {
-          return { type: "return" as const, orderItemId: it.id, returnedQuantity: it.quantity };
+          if (it.effective_remaining <= 0) return null;
+          return { type: "return" as const, orderItemId: it.id, deltaQuantity: it.effective_remaining };
         }
         if (s.kind === "extend") {
           return { type: "extend" as const, orderItemId: it.id, newEndDate: s.newEndDate, reason: s.reason };
@@ -80,7 +86,7 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
       .filter((a): a is NonNullable<typeof a> => Boolean(a));
 
     if (actions.length === 0) {
-      setErrorMessage("操作対象がありません");
+      setErrorMessage("申請対象がありません");
       return;
     }
 
@@ -103,23 +109,32 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
     <>
       <div className="border border-border bg-surface rounded-xl overflow-hidden">
         {items.map((it) => {
-          const state = states[it.id] ?? { kind: "return" as const };
-          const checked = state.kind === "return";
+          const state = states[it.id] ?? { kind: "skip" as const };
+          const checked = state.kind === "return" && it.effective_remaining > 0;
+          const isReturnable = it.effective_remaining > 0;
+          const hasPendingExtension = it.pending_extension !== null;
           const wasExtended = (extensions[it.id]?.length ?? 0) > 0;
           const overdueBorder = it.is_overdue ? "border-l-2 border-l-danger pl-4" : "pl-5";
           return (
             <div key={it.id} className={`pr-4 sm:pr-5 py-4 border-b border-border last:border-b-0 ${overdueBorder}`}>
               <div className="flex items-start gap-3">
-                <input
-                  id={`r-${it.id}`}
-                  type="checkbox"
-                  checked={checked}
-                  onChange={(e) => handleToggle(it.id, e.target.checked)}
-                  disabled={state.kind === "extend"}
-                  className="mt-1 h-5 w-5 rounded border-border text-accent focus:ring-2 focus:ring-accent/40 disabled:opacity-40"
-                />
+                {isReturnable ? (
+                  <input
+                    id={`r-${it.id}`}
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => handleToggle(it.id, e.target.checked)}
+                    disabled={state.kind === "extend"}
+                    className="mt-1 h-5 w-5 rounded border-border text-accent focus:ring-2 focus:ring-accent/40 disabled:opacity-40"
+                  />
+                ) : (
+                  <div className="mt-1 h-5 w-5 flex-shrink-0" aria-hidden />
+                )}
                 <div className="flex-1 min-w-0">
-                  <label htmlFor={`r-${it.id}`} className="block cursor-pointer">
+                  <label
+                    htmlFor={isReturnable ? `r-${it.id}` : undefined}
+                    className={`block ${isReturnable ? "cursor-pointer" : ""}`}
+                  >
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                       <span className="text-sm font-semibold text-foreground">{it.material_name}</span>
                       {it.is_overdue && (
@@ -127,7 +142,17 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
                           期限超過
                         </span>
                       )}
-                      {wasExtended && !it.is_overdue && (
+                      {it.pending_return_delta > 0 && (
+                        <span className="inline-flex items-center px-2 h-[20px] rounded-full text-[11px] font-semibold bg-info-soft text-info">
+                          返却申請中 {it.pending_return_delta}
+                        </span>
+                      )}
+                      {hasPendingExtension && (
+                        <span className="inline-flex items-center px-2 h-[20px] rounded-full text-[11px] font-semibold bg-info-soft text-info">
+                          延長申請中
+                        </span>
+                      )}
+                      {wasExtended && !hasPendingExtension && !it.is_overdue && (
                         <span className="inline-flex items-center px-2 h-[20px] rounded-full text-[11px] font-semibold bg-info-soft text-info">
                           延長済み
                         </span>
@@ -163,6 +188,12 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
                     </div>
                   )}
 
+                  {it.pending_extension && (
+                    <div className="mt-2 text-xs text-info">
+                      申請中: {formatDate(it.pending_extension.new_end_date)} まで延長
+                    </div>
+                  )}
+
                   {extensions[it.id]?.length > 0 && (
                     <details className="mt-2 text-xs text-subtle">
                       <summary className="cursor-pointer text-xs hover:text-foreground">
@@ -182,7 +213,7 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
                   )}
                 </div>
                 <div className="flex-shrink-0">
-                  {state.kind !== "extend" && (
+                  {state.kind !== "extend" && !hasPendingExtension && (
                     <button
                       type="button"
                       onClick={() => handleExtendOpen(it.id)}
@@ -209,15 +240,15 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
           <div className="flex-1 text-xs text-muted">
             {summary.returns.length > 0 && (
               <span className="mr-3">
-                <span className="text-subtle">返却</span> {summary.returns.length}
+                <span className="text-subtle">返却申請</span> {summary.returns.length}
               </span>
             )}
             {summary.extendsItems.length > 0 && (
               <span className="mr-3">
-                <span className="text-subtle">延長</span> {summary.extendsItems.length}
+                <span className="text-subtle">延長申請</span> {summary.extendsItems.length}
               </span>
             )}
-            {!hasAnyAction && <span className="text-subtle">操作対象を選択してください</span>}
+            {!hasAnyAction && <span className="text-subtle">申請対象を選択してください</span>}
           </div>
           <button
             type="button"
@@ -225,7 +256,7 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
             disabled={!hasAnyAction || isPending}
             className="px-5 h-11 inline-flex items-center gap-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99]"
           >
-            手続きへ進む
+            申請する
             <span aria-hidden>→</span>
           </button>
         </div>

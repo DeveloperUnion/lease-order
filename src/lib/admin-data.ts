@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { supabaseAdmin } from "./supabase-admin";
+import { getSupabaseTenant } from "./supabase-tenant";
 import { getTenantId } from "./tenant";
 import type {
   Category,
@@ -31,7 +31,8 @@ type AdminMaterialRow = {
 export const listCategoriesForAdmin = cache(
   async (): Promise<AdminCategoryRow[]> => {
     const tenantId = await getTenantId();
-    const { data, error } = await supabaseAdmin
+    const supabase = await getSupabaseTenant();
+    const { data, error } = await supabase
       .from("categories")
       .select("id, name, slug, image_url, sort_order, materials(id)")
       .eq("tenant_id", tenantId)
@@ -52,7 +53,8 @@ export const listCategoriesForAdmin = cache(
 
 export const listMaterialsForAdmin = cache(async (): Promise<Material[]> => {
   const tenantId = await getTenantId();
-  const { data, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
     .from("materials")
     .select(
       "id, category_id, name, description, spec, sort_order, is_active, material_images(sort_order, is_primary, images(url))"
@@ -116,7 +118,8 @@ export async function getMaterialDetail(
   id: string
 ): Promise<MaterialDetail | null> {
   const tenantId = await getTenantId();
-  const { data, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
     .from("materials")
     .select(
       "id, category_id, name, description, spec, sort_order, is_active, material_variants(id, material_id, name, unit, sku, spec, sort_order, is_active), material_images(image_id, sort_order, is_primary, images(url, caption))"
@@ -163,7 +166,8 @@ export type AdminOfficeRow = Office & { in_use_count: number };
 export const listOfficesForAdmin = cache(
   async (): Promise<AdminOfficeRow[]> => {
     const tenantId = await getTenantId();
-    const { data, error } = await supabaseAdmin
+    const supabase = await getSupabaseTenant();
+    const { data, error } = await supabase
       .from("offices")
       .select(
         "id, name, area, address, phone, fax, sort_order, is_active, orders(id)"
@@ -257,7 +261,8 @@ export async function listOrders(
   filterStatus?: OrderStatus
 ): Promise<OrderListRow[]> {
   const tenantId = await getTenantId();
-  let query = supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  let query = supabase
     .from("orders")
     .select(
       "id, order_number, company_name, contact_name, status, created_at, order_items(quantity)"
@@ -316,7 +321,8 @@ type OrderDetailRaw = {
 
 export const getOrder = cache(async (id: string): Promise<OrderDetail | null> => {
   const tenantId = await getTenantId();
-  const { data, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
     .from("orders")
     .select(
       "id, order_number, company_name, contact_name, phone, email, note, delivery_method, delivery_address, lease_start_date, lease_end_date, pickup_office_id, status, approved_at, approved_by, reject_reason, rejected_at, shipped_at, completed_at, created_at, order_items(id, material_id, variant_id, material_name, variant_name, quantity, approved_quantity, created_at), offices:pickup_office_id(id, name, area, address, phone)"
@@ -381,7 +387,8 @@ export type AdminCustomerRow = {
 
 export async function listCustomersForAdmin(): Promise<AdminCustomerRow[]> {
   const tenantId = await getTenantId();
-  const { data, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
     .from("customers")
     .select("id, company_id, name, phone, default_address, contact_email, is_active, must_change_password, created_at")
     .eq("tenant_id", tenantId)
@@ -392,7 +399,8 @@ export async function listCustomersForAdmin(): Promise<AdminCustomerRow[]> {
 
 export async function getCustomerForAdmin(id: string): Promise<AdminCustomerRow | null> {
   const tenantId = await getTenantId();
-  const { data, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
     .from("customers")
     .select("id, company_id, name, phone, default_address, contact_email, is_active, must_change_password, created_at")
     .eq("tenant_id", tenantId)
@@ -404,7 +412,8 @@ export async function getCustomerForAdmin(id: string): Promise<AdminCustomerRow 
 
 export async function countCustomers(): Promise<number> {
   const tenantId = await getTenantId();
-  const { count, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { count, error } = await supabase
     .from("customers")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
@@ -415,7 +424,8 @@ export async function countCustomers(): Promise<number> {
 
 export async function countPendingOrders(): Promise<number> {
   const tenantId = await getTenantId();
-  const { count, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { count, error } = await supabase
     .from("orders")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
@@ -426,7 +436,8 @@ export async function countPendingOrders(): Promise<number> {
 
 export async function countActiveMaterials(): Promise<number> {
   const tenantId = await getTenantId();
-  const { count, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { count, error } = await supabase
     .from("materials")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
@@ -437,9 +448,10 @@ export async function countActiveMaterials(): Promise<number> {
 
 export async function countOrdersInMonth(status?: OrderStatus): Promise<number> {
   const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  let query = supabaseAdmin
+  let query = supabase
     .from("orders")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
@@ -460,7 +472,8 @@ export type RecentOrderRow = {
 
 export async function listRecentOrders(limit: number): Promise<RecentOrderRow[]> {
   const tenantId = await getTenantId();
-  const { data, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
     .from("orders")
     .select("id, order_number, company_name, status, created_at")
     .eq("tenant_id", tenantId)
@@ -480,11 +493,176 @@ export type AdminUserRow = {
 
 export async function listAdminUsers(): Promise<AdminUserRow[]> {
   const tenantId = await getTenantId();
-  const { data, error } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
     .from("admin_users")
     .select("id, email, created_at")
     .eq("tenant_id", tenantId)
     .order("created_at");
   if (error) throw error;
   return (data ?? []) as AdminUserRow[];
+}
+
+// ============================================================
+// Return / extension pending requests
+// ============================================================
+
+type PendingRequestBase = {
+  order_id: string;
+  order_number: string;
+  site_name: string | null;
+  company_name: string;
+  contact_name: string;
+  order_item_id: string;
+  material_name: string;
+  reason: string | null;
+  requested_at: string;
+};
+
+export type PendingReturnRequest = PendingRequestBase & {
+  type: "return";
+  id: string;
+  requested_quantity_delta: number;
+};
+
+export type PendingExtensionRequest = PendingRequestBase & {
+  type: "extension";
+  id: string;
+  previous_end_date: string;
+  new_end_date: string;
+};
+
+export type PendingRequest = PendingReturnRequest | PendingExtensionRequest;
+
+type ItemInfo = {
+  order_id: string;
+  order_number: string;
+  site_name: string | null;
+  company_name: string;
+  contact_name: string;
+  order_item_id: string;
+  material_name: string;
+};
+
+async function buildItemInfoMap(tenantId: string): Promise<Map<string, ItemInfo>> {
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
+    .from("orders")
+    .select(
+      "id, order_number, site_name, company_name, contact_name, order_items(id, material_name)"
+    )
+    .eq("tenant_id", tenantId);
+  if (error) throw error;
+  const map = new Map<string, ItemInfo>();
+  for (const o of (data ?? []) as {
+    id: string;
+    order_number: string;
+    site_name: string | null;
+    company_name: string;
+    contact_name: string;
+    order_items: { id: string; material_name: string }[] | null;
+  }[]) {
+    for (const it of o.order_items ?? []) {
+      map.set(it.id, {
+        order_id: o.id,
+        order_number: o.order_number,
+        site_name: o.site_name,
+        company_name: o.company_name,
+        contact_name: o.contact_name,
+        order_item_id: it.id,
+        material_name: it.material_name,
+      });
+    }
+  }
+  return map;
+}
+
+export async function listPendingRequests(): Promise<PendingRequest[]> {
+  const tenantId = await getTenantId();
+  const itemInfoMap = await buildItemInfoMap(tenantId);
+  const itemIds = Array.from(itemInfoMap.keys());
+  if (itemIds.length === 0) return [];
+
+  const supabase = await getSupabaseTenant();
+  const [{ data: returns, error: retErr }, { data: extensions, error: extErr }] =
+    await Promise.all([
+      supabase
+        .from("return_requests")
+        .select("id, order_item_id, requested_quantity_delta, reason, requested_at")
+        .in("order_item_id", itemIds)
+        .eq("status", "pending"),
+      supabase
+        .from("lease_extensions")
+        .select("id, order_item_id, previous_end_date, new_end_date, reason, requested_at")
+        .in("order_item_id", itemIds)
+        .eq("status", "pending"),
+    ]);
+  if (retErr) throw retErr;
+  if (extErr) throw extErr;
+
+  const items: PendingRequest[] = [];
+  for (const r of (returns ?? []) as {
+    id: string;
+    order_item_id: string;
+    requested_quantity_delta: number;
+    reason: string | null;
+    requested_at: string;
+  }[]) {
+    const info = itemInfoMap.get(r.order_item_id);
+    if (!info) continue;
+    items.push({
+      type: "return",
+      id: r.id,
+      requested_quantity_delta: r.requested_quantity_delta,
+      reason: r.reason,
+      requested_at: r.requested_at,
+      ...info,
+    });
+  }
+  for (const e of (extensions ?? []) as {
+    id: string;
+    order_item_id: string;
+    previous_end_date: string;
+    new_end_date: string;
+    reason: string | null;
+    requested_at: string;
+  }[]) {
+    const info = itemInfoMap.get(e.order_item_id);
+    if (!info) continue;
+    items.push({
+      type: "extension",
+      id: e.id,
+      previous_end_date: e.previous_end_date,
+      new_end_date: e.new_end_date,
+      reason: e.reason,
+      requested_at: e.requested_at,
+      ...info,
+    });
+  }
+  items.sort((a, b) => b.requested_at.localeCompare(a.requested_at));
+  return items;
+}
+
+export async function countPendingRequests(): Promise<number> {
+  const tenantId = await getTenantId();
+  const itemInfoMap = await buildItemInfoMap(tenantId);
+  const itemIds = Array.from(itemInfoMap.keys());
+  if (itemIds.length === 0) return 0;
+
+  const supabase = await getSupabaseTenant();
+  const [{ count: rc, error: re }, { count: ec, error: ee }] = await Promise.all([
+    supabase
+      .from("return_requests")
+      .select("id", { count: "exact", head: true })
+      .in("order_item_id", itemIds)
+      .eq("status", "pending"),
+    supabase
+      .from("lease_extensions")
+      .select("id", { count: "exact", head: true })
+      .in("order_item_id", itemIds)
+      .eq("status", "pending"),
+  ]);
+  if (re) throw re;
+  if (ee) throw ee;
+  return (rc ?? 0) + (ec ?? 0);
 }

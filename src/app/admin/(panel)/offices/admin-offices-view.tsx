@@ -5,8 +5,16 @@ import type { AdminOfficeRow } from "@/lib/admin-data";
 import {
   createOffice,
   deleteOffice,
+  reorderOffices,
   updateOffice,
 } from "@/app/admin/actions";
+import {
+  PageHeader,
+  Button,
+  FormField,
+  TextInput,
+  EmptyState,
+} from "@/components/admin/ui";
 
 type EditingState =
   | { mode: "create" }
@@ -21,10 +29,52 @@ export default function AdminOfficesView({
   const [toastMessage, setToastMessage] = useState("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [order, setOrder] = useState<AdminOfficeRow[]>(offices);
+
+  if (
+    offices.length !== order.length ||
+    offices.some((o, i) => order[i]?.id !== o.id)
+  ) {
+    const serverIds = new Set(offices.map((o) => o.id));
+    const localIds = new Set(order.map((o) => o.id));
+    const sameSet =
+      serverIds.size === localIds.size &&
+      [...serverIds].every((id) => localIds.has(id));
+    if (!sameSet) {
+      setOrder(offices);
+    }
+  }
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 1800);
+  };
+
+  const handleDrop = (targetId: string) => {
+    if (!dragId || dragId === targetId) {
+      setDragId(null);
+      return;
+    }
+    const next = [...order];
+    const fromIdx = next.findIndex((o) => o.id === dragId);
+    const toIdx = next.findIndex((o) => o.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) {
+      setDragId(null);
+      return;
+    }
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setOrder(next);
+    setDragId(null);
+    startTransition(async () => {
+      try {
+        await reorderOffices(next.map((o) => o.id));
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "並び替えに失敗しました");
+        setOrder(offices);
+      }
+    });
   };
 
   const handleSubmit = (formData: FormData) => {
@@ -64,81 +114,121 @@ export default function AdminOfficesView({
   };
 
   return (
-    <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6">
-      <h1 className="text-2xl font-bold text-accent mb-6">営業所マスタ</h1>
+    <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
+      <PageHeader
+        title="営業所マスタ"
+        actions={
+          <Button onClick={() => setEditing({ mode: "create" })}>
+            + 新規追加
+          </Button>
+        }
+      />
 
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-sm text-subtle">{offices.length}件</span>
-        <button
-          onClick={() => setEditing({ mode: "create" })}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          + 新規追加
-        </button>
+      <div className="flex items-center justify-between mb-3">
+        <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-subtle">
+          {offices.length} 件
+        </span>
+        {order.length > 1 && (
+          <span className="text-[11px] text-subtle">
+            行をドラッグで並び替え
+          </span>
+        )}
       </div>
 
-      <div className="space-y-2">
-        {offices.map((o) => (
-          <div
-            key={o.id}
-            className={`flex items-start justify-between gap-3 p-4 bg-surface rounded-xl border border-border ${
-              !o.is_active ? "opacity-50" : ""
-            }`}
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <p className="text-sm font-medium text-accent truncate">
-                  {o.name}
-                </p>
-                {o.area && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-muted text-subtle">
-                    {o.area}
-                  </span>
+      {offices.length === 0 ? (
+        <EmptyState
+          title="営業所はまだ登録されていません"
+          description="新規追加から最初の営業所を登録してください。"
+        />
+      ) : (
+        <div className="border-y border-rule divide-y divide-rule">
+          {order.map((o) => (
+            <div
+              key={o.id}
+              draggable
+              onDragStart={() => setDragId(o.id)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => handleDrop(o.id)}
+              onDragEnd={() => setDragId(null)}
+              className={`flex items-start justify-between gap-3 px-2 sm:px-3 py-4 bg-surface ${
+                !o.is_active ? "opacity-50" : ""
+              } ${dragId === o.id ? "opacity-40" : ""}`}
+            >
+              <span
+                aria-hidden
+                className="flex-shrink-0 mt-0.5 text-subtle hover:text-foreground cursor-grab active:cursor-grabbing select-none px-1"
+                title="ドラッグで並び替え"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <circle cx="7" cy="5" r="1.4" />
+                  <circle cx="7" cy="10" r="1.4" />
+                  <circle cx="7" cy="15" r="1.4" />
+                  <circle cx="13" cy="5" r="1.4" />
+                  <circle cx="13" cy="10" r="1.4" />
+                  <circle cx="13" cy="15" r="1.4" />
+                </svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {o.name}
+                  </p>
+                  {o.area && (
+                    <span className="font-[family-name:var(--font-mono)] text-[10px] px-1.5 py-0.5 bg-surface-muted text-subtle uppercase tracking-wider">
+                      {o.area}
+                    </span>
+                  )}
+                </div>
+                {o.address && (
+                  <p className="text-xs text-subtle truncate">{o.address}</p>
                 )}
+                <div className="flex gap-3 mt-1 text-xs text-subtle font-[family-name:var(--font-mono)]">
+                  {o.phone && <span>TEL {o.phone}</span>}
+                  {o.fax && <span>FAX {o.fax}</span>}
+                  {o.in_use_count > 0 && (
+                    <span className="text-[var(--color-status-pending-fg)]">
+                      発注 {o.in_use_count} 件で使用
+                    </span>
+                  )}
+                </div>
               </div>
-              {o.address && (
-                <p className="text-xs text-subtle truncate">{o.address}</p>
-              )}
-              <div className="flex gap-3 mt-1 text-xs text-subtle">
-                {o.phone && <span>TEL {o.phone}</span>}
-                {o.fax && <span>FAX {o.fax}</span>}
-                {o.in_use_count > 0 && (
-                  <span className="text-amber-700">
-                    発注 {o.in_use_count}件で使用
-                  </span>
-                )}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleDelete(o)}
+                  disabled={isPending || o.in_use_count > 0}
+                  title={
+                    o.in_use_count > 0
+                      ? "発注で使われているため削除不可"
+                      : "削除"
+                  }
+                >
+                  削除
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setEditing({ mode: "edit", office: o })}
+                >
+                  編集
+                </Button>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                onClick={() => handleDelete(o)}
-                disabled={isPending || o.in_use_count > 0}
-                className="text-xs px-2.5 py-1.5 bg-surface-muted text-muted rounded-full hover:bg-red-50 hover:text-red-600 disabled:opacity-30 disabled:hover:bg-surface-muted disabled:hover:text-muted"
-                title={
-                  o.in_use_count > 0
-                    ? "発注で使われているため削除不可"
-                    : "削除"
-                }
-              >
-                削除
-              </button>
-              <button
-                onClick={() => setEditing({ mode: "edit", office: o })}
-                className="text-sm px-3 py-1.5 bg-surface-muted text-muted rounded-full hover:bg-border transition-colors"
-              >
-                編集
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {toastMessage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px] pointer-events-none">
-          <div className="bg-surface rounded-2xl shadow-2xl px-8 py-6 flex flex-col items-center gap-3">
-            <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
+          <div className="bg-surface border border-rule-strong shadow-2xl px-8 py-6 flex flex-col items-center gap-3">
+            <div className="w-10 h-10 bg-foreground flex items-center justify-center">
               <svg
-                className="h-6 w-6 text-primary-foreground"
+                className="h-5 w-5 text-background"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -151,7 +241,7 @@ export default function AdminOfficesView({
                 />
               </svg>
             </div>
-            <p className="text-base font-medium text-accent">{toastMessage}</p>
+            <p className="text-sm font-medium text-foreground">{toastMessage}</p>
           </div>
         </div>
       )}
@@ -224,7 +314,6 @@ function EditModal({
   const [address, setAddress] = useState(initial.address);
   const [phone, setPhone] = useState(initial.phone);
   const [fax, setFax] = useState(initial.fax);
-  const [sortOrder, setSortOrder] = useState(initial.sort_order);
   const [isActive, setIsActive] = useState(initial.is_active);
 
   const handleFormAction = (formData: FormData) => {
@@ -233,7 +322,9 @@ function EditModal({
     formData.set("address", address);
     formData.set("phone", phone);
     formData.set("fax", fax);
-    formData.set("sort_order", String(sortOrder));
+    // create 時のみ末尾に追加されるよう、initial.sort_order をそのまま渡す。
+    // edit 時は updateOffice が sort_order を無視する（D&D で並び替え）。
+    if (!isEdit) formData.set("sort_order", String(initial.sort_order));
     formData.set("is_active", isActive ? "true" : "false");
     onSubmit(formData);
   };
@@ -244,18 +335,19 @@ function EditModal({
       onClick={onClose}
     >
       <div
-        className="bg-surface w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
+        className="bg-surface w-full sm:max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border-t border-rule-strong sm:border sm:border-rule-strong"
         onClick={(e) => e.stopPropagation()}
       >
         <form action={handleFormAction} className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-accent">
+          <div className="flex items-center justify-between mb-5 pb-3 border-b border-rule">
+            <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight text-foreground">
               {isEdit ? "営業所を編集" : "営業所を追加"}
             </h2>
             <button
               type="button"
               onClick={onClose}
-              className="text-subtle hover:text-muted"
+              className="text-subtle hover:text-foreground"
+              aria-label="閉じる"
             >
               <svg
                 className="h-5 w-5"
@@ -274,114 +366,80 @@ function EditModal({
           </div>
 
           <div className="space-y-4">
-            <Field label="営業所名" required>
-              <input
-                type="text"
+            <FormField label="営業所名" required>
+              <TextInput
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
               />
-            </Field>
-            <Field label="エリア（例: 関東）">
-              <input
-                type="text"
+            </FormField>
+            <FormField label="エリア（例: 関東）">
+              <TextInput
                 value={area}
                 onChange={(e) => setArea(e.target.value)}
-                className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
               />
-            </Field>
-            <Field label="住所">
-              <input
-                type="text"
+            </FormField>
+            <FormField label="住所">
+              <TextInput
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
               />
-            </Field>
+            </FormField>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="電話番号">
-                <input
+              <FormField label="電話番号">
+                <TextInput
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
                 />
-              </Field>
-              <Field label="FAX">
-                <input
+              </FormField>
+              <FormField label="FAX">
+                <TextInput
                   type="tel"
                   value={fax}
                   onChange={(e) => setFax(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
                 />
-              </Field>
+              </FormField>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-foreground mb-1.5">
-                  並び順
-                </label>
-                <input
-                  type="number"
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(Number(e.target.value) || 0)}
-                  className="w-full px-4 py-2.5 bg-surface-muted rounded-lg text-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-accent"
-                />
-              </div>
-              <label className="flex items-center gap-2 pt-6">
-                <input
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                  className="w-4 h-4 accent-accent"
-                />
-                <span className="text-sm text-foreground">公開</span>
-              </label>
-            </div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={isActive}
+                onChange={(e) => setIsActive(e.target.checked)}
+                className="w-4 h-4 accent-accent"
+              />
+              <span className="text-sm text-foreground">公開</span>
+            </label>
           </div>
 
-          {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+          {error && (
+            <p className="mt-4 text-sm text-[var(--color-status-rejected-fg)]">
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-3 mt-6">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="lg"
               onClick={onClose}
               disabled={pending}
-              className="flex-1 py-2.5 border border-border-strong text-foreground rounded-full text-sm font-medium hover:bg-surface-muted disabled:opacity-40"
+              className="flex-1"
             >
               キャンセル
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              size="lg"
               disabled={pending || !name.trim()}
-              className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 disabled:opacity-40"
+              className="flex-1"
             >
-              {pending ? "保存中..." : "保存"}
-            </button>
+              {pending ? "保存中…" : "保存"}
+            </Button>
           </div>
         </form>
       </div>
-
-    </div>
-  );
-}
-
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-foreground mb-1.5">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      {children}
     </div>
   );
 }

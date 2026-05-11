@@ -3,8 +3,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useTransition } from "react";
-import { logout } from "@/app/(public)/login/actions";
 
 type CustomerSummary = { id: string; company_id: string; name: string };
 
@@ -96,13 +94,6 @@ function Badge({ count }: { count: number }) {
 export default function CustomerNav({ customer, overdueCount }: { customer: CustomerSummary; overdueCount: number }) {
   const pathname = usePathname();
   const items = getNavItems(overdueCount);
-  const [isPending, startTransition] = useTransition();
-
-  function onLogout() {
-    startTransition(async () => {
-      await logout();
-    });
-  }
 
   if (pathname.startsWith("/admin") || pathname === "/login") {
     return null;
@@ -150,14 +141,6 @@ export default function CustomerNav({ customer, overdueCount }: { customer: Cust
         <div className="border-t border-border px-5 py-4">
           <p className="text-sm font-medium text-foreground truncate leading-snug">{customer.name}</p>
           <p className="text-xs text-subtle truncate mt-0.5">{customer.company_id}</p>
-          <button
-            type="button"
-            onClick={onLogout}
-            disabled={isPending}
-            className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted hover:text-foreground disabled:opacity-50 transition-colors"
-          >
-            <span aria-hidden>↪</span> ログアウト
-          </button>
         </div>
       </aside>
 
