@@ -59,8 +59,8 @@ export async function processItemActions(input: {
   const o = order as unknown as OrderRow;
   if (o.tenant_id !== customer.tenant_id) return { ok: false, error: "受注が見つかりません" };
   if (o.customer_id !== customer.id) return { ok: false, error: "この受注を操作する権限がありません" };
-  if (o.status === "cancelled" || o.status === "completed") {
-    return { ok: false, error: "この受注は既にクローズされています" };
+  if (o.status !== "shipped") {
+    return { ok: false, error: "出荷済みの注文のみ申請できます" };
   }
 
   type Item = OrderRow["order_items"] extends (infer U)[] | null ? U : never;

@@ -12,12 +12,6 @@ function parseLocal(iso: string | null): Date | null {
   return new Date(y, m - 1, d);
 }
 
-function formatShort(iso: string | null): string {
-  if (!iso) return "—";
-  const [, m, d] = iso.split("-");
-  return `${Number(m)}/${Number(d)}`;
-}
-
 function formatLong(iso: string | null): string {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
@@ -69,7 +63,7 @@ export default function LeaseTimeline({ startDate, endDate, overdue = false }: P
       </div>
 
       {/* タイムライン帯 */}
-      <div className="relative h-9">
+      <div className="relative h-3">
         {/* baseline line */}
         <div className="absolute top-1/2 left-0 right-0 h-px bg-border -translate-y-1/2" />
         {/* progress fill */}
@@ -82,24 +76,13 @@ export default function LeaseTimeline({ startDate, endDate, overdue = false }: P
           <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-danger -translate-y-1/2 mix-blend-multiply" />
         )}
         {/* start tick */}
-        <Tick position={0} label="開始" sub={formatShort(startDate)} align="start" />
+        <Tick position={0} align="start" />
         {/* today tick (only if within range) */}
         {start && end && today >= start && today <= end && (
-          <Tick
-            position={pct}
-            label="今日"
-            sub={formatShort(new Date().toISOString().slice(0, 10))}
-            highlight
-          />
+          <Tick position={pct} highlight />
         )}
         {/* end tick */}
-        <Tick
-          position={100}
-          label="返却"
-          sub={formatShort(endDate)}
-          align="end"
-          danger={todayPastEnd}
-        />
+        <Tick position={100} align="end" danger={todayPastEnd} />
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4">
@@ -126,35 +109,27 @@ export default function LeaseTimeline({ startDate, endDate, overdue = false }: P
 
 function Tick({
   position,
-  label,
-  sub,
   highlight = false,
   danger = false,
   align = "center",
 }: {
   position: number;
-  label: string;
-  sub: string;
   highlight?: boolean;
   danger?: boolean;
   align?: "start" | "center" | "end";
 }) {
-  const transform =
-    align === "start"
-      ? "translateX(0)"
-      : align === "end"
-      ? "translateX(-100%)"
-      : "translateX(-50%)";
+  const xTranslate =
+    align === "start" ? "0" : align === "end" ? "-100%" : "-50%";
   const left =
     align === "start" ? "0%" : align === "end" ? "100%" : `${position}%`;
 
   return (
     <div
-      className="absolute top-0 bottom-0 flex flex-col items-center"
-      style={{ left, transform }}
+      className="absolute top-1/2"
+      style={{ left, transform: `translate(${xTranslate}, -50%)` }}
     >
       <span
-        className={`block w-[8px] h-[8px] rounded-full mt-[14px] ${
+        className={`block w-[8px] h-[8px] rounded-full ${
           highlight
             ? "bg-accent ring-2 ring-accent/30"
             : danger
@@ -162,20 +137,6 @@ function Tick({
             : "bg-foreground/70"
         }`}
       />
-      <span
-        className={`mt-1 text-[10px] whitespace-nowrap ${
-          danger ? "text-danger" : highlight ? "text-foreground font-semibold" : "text-subtle"
-        }`}
-      >
-        {label}
-      </span>
-      <span
-        className={`text-[10px] whitespace-nowrap tabular-nums ${
-          danger ? "text-danger" : highlight ? "text-foreground" : "text-subtle"
-        }`}
-      >
-        {sub}
-      </span>
     </div>
   );
 }

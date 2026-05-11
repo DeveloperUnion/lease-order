@@ -104,6 +104,12 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
   }
 
   const hasAnyAction = summary.returns.length > 0 || summary.extendsItems.length > 0;
+  const submitLabel =
+    summary.returns.length > 0 && summary.extendsItems.length > 0
+      ? "返却・延長を申請する"
+      : summary.extendsItems.length > 0
+      ? "延長申請をする"
+      : "返却申請をする";
 
   return (
     <>
@@ -256,7 +262,7 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
             disabled={!hasAnyAction || isPending}
             className="px-5 h-11 inline-flex items-center gap-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99]"
           >
-            申請する
+            {submitLabel}
             <span aria-hidden>→</span>
           </button>
         </div>

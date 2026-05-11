@@ -96,7 +96,7 @@ export async function listRentalsByCustomer(customerId: string, tenantId: string
     )
     .eq("tenant_id", tenantId)
     .eq("customer_id", customerId)
-    .not("status", "in", "(cancelled,completed)")
+    .eq("status", "shipped")
     .order("lease_end_date", { ascending: true, nullsFirst: false });
   if (error) throw error;
 
