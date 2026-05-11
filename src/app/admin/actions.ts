@@ -157,6 +157,7 @@ export async function cancelOrder(orderId: string) {
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath("/admin");
+  await notifyCustomer(orderId, "order_cancelled");
 }
 
 // ============================================================

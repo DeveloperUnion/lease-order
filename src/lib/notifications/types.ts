@@ -1,7 +1,7 @@
 export type NotificationKind =
-  | "order_received"
   | "order_approved"
   | "order_rejected"
+  | "order_cancelled"
   | "order_shipped"
   | "admin_new_order"
   | "return_requested"

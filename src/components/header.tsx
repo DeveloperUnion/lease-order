@@ -21,7 +21,7 @@ export default async function Header() {
   const [overdueCount, unreadCount, recent] = await Promise.all([
     countOverdueForCustomer(customer.id, customer.tenant_id),
     countUnreadForCustomer(customer.id, customer.tenant_id),
-    listNotificationsForCustomer(customer.id, customer.tenant_id, 10),
+    listNotificationsForCustomer(customer.id, customer.tenant_id, 100),
   ]);
 
   return (

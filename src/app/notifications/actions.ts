@@ -12,7 +12,6 @@ export async function markCustomerNotificationsRead(ids: string[]) {
     customerId: customer.id,
     tenantId: customer.tenant_id,
   });
-  revalidatePath("/notifications");
   revalidatePath("/", "layout");
 }
 
@@ -24,6 +23,5 @@ export async function markAllCustomerNotificationsRead() {
     customerId: customer.id,
     tenantId: customer.tenant_id,
   });
-  revalidatePath("/notifications");
   revalidatePath("/", "layout");
 }

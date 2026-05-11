@@ -48,7 +48,7 @@ export default async function AdminPanelLayout({
     if (adminId) {
       [unreadCount, recent] = await Promise.all([
         countUnreadForAdmin(adminId, tenantId),
-        listNotificationsForAdmin(adminId, tenantId, 10),
+        listNotificationsForAdmin(adminId, tenantId, 100),
       ]);
     }
   }

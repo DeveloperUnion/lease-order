@@ -26,7 +26,6 @@ export async function markAdminNotificationsRead(ids: string[]) {
   const adminId = await currentAdminUserId(tenantId);
   if (!adminId) return;
   await markRead(ids, { type: "admin", adminUserId: adminId, tenantId });
-  revalidatePath("/admin/notifications");
   revalidatePath("/admin", "layout");
 }
 
@@ -35,6 +34,5 @@ export async function markAllAdminNotificationsRead() {
   const adminId = await currentAdminUserId(tenantId);
   if (!adminId) return;
   await markAllRead({ type: "admin", adminUserId: adminId, tenantId });
-  revalidatePath("/admin/notifications");
   revalidatePath("/admin", "layout");
 }

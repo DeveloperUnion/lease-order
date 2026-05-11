@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -49,17 +48,20 @@ export default function NotificationBell({
   const [isPending, startTransition] = useTransition();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const basePath = audience === "admin" ? "/admin/notifications" : "/notifications";
 
   // server props を初期値とし、その上に realtime で INSERT を被せる。
-  // markRead → revalidatePath/refresh で server props が更新されたら extras はリセット。
+  // markRead → revalidatePath/refresh で server props (recent / unreadCount) が更新されたら
+  // extras はリセット。render 中の setState は React が同一コミットでまとめてくれるので
+  // cascading render は発生しない（useEffect でリセットすると lint で警告される）。
   const [extras, setExtras] = useState<NotificationRow[]>([]);
-  useEffect(() => {
+  const [serverSnapshot, setServerSnapshot] = useState({ unreadCount, recent });
+  if (serverSnapshot.unreadCount !== unreadCount || serverSnapshot.recent !== recent) {
+    setServerSnapshot({ unreadCount, recent });
     setExtras([]);
-  }, [unreadCount, recent]);
+  }
 
   const totalUnread = unreadCount + extras.length;
-  const displayRecent = [...extras, ...recent].slice(0, 10);
+  const displayRecent = [...extras, ...recent];
 
   // 既知 ID を realtime handler から参照するための ref。
   // recent が変わるたびに subscription を張り直したくないので deps には含めない。
@@ -253,15 +255,6 @@ export default function NotificationBell({
               ))}
             </ul>
           )}
-          <div className="px-4 py-3 border-t border-border text-center">
-            <Link
-              href={basePath}
-              onClick={() => setOpen(false)}
-              className="text-xs text-accent hover:underline"
-            >
-              すべて表示
-            </Link>
-          </div>
         </div>
       )}
     </div>

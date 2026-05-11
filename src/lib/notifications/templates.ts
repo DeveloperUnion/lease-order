@@ -11,22 +11,6 @@ export function renderTemplate(
 ): RenderedTemplate {
   const greeting = `${ctx.companyName} ${ctx.contactName} 様`;
   switch (kind) {
-    case "order_received":
-      return {
-        subject: `【ご発注受付】${ctx.orderNumber}`,
-        body: [
-          greeting,
-          "",
-          "ご発注を受け付けました。内容を確認のうえ、改めてご連絡いたします。",
-          "",
-          `発注番号: ${ctx.orderNumber}`,
-          ctx.itemSummary ? `内容: ${ctx.itemSummary}` : "",
-          "",
-          "本メールへの返信は不要です。",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      };
     case "order_approved":
       return {
         subject: `【ご発注 承認】${ctx.orderNumber}`,
@@ -53,6 +37,19 @@ export function renderTemplate(
         ]
           .filter(Boolean)
           .join("\n"),
+      };
+    case "order_cancelled":
+      return {
+        subject: `【ご発注 取消】${ctx.orderNumber}`,
+        body: [
+          greeting,
+          "",
+          "下記のご発注を取り消しました。",
+          "",
+          `発注番号: ${ctx.orderNumber}`,
+          "",
+          "ご不明な点がございましたら担当者までお問い合わせください。",
+        ].join("\n"),
       };
     case "order_shipped":
       return {

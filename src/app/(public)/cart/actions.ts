@@ -1,6 +1,6 @@
 "use server";
 
-import { notifyAdmins, notifyCustomer } from "@/lib/notifications";
+import { notifyAdmins } from "@/lib/notifications";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 import { getCurrentCustomer } from "@/lib/customer-auth";
@@ -170,7 +170,6 @@ export async function submitOrder(
     itemSummary,
   };
   await notifyAdmins(tenantId, "admin_new_order", ctx, order.id);
-  await notifyCustomer(order.id, "order_received", { itemSummary });
 
   return { ok: true, orderNumber };
 }

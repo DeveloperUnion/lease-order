@@ -19,12 +19,12 @@ export function labelForNotification(row: NotificationRow): string {
   const order = row.payload.orderNumber ?? "";
   const company = row.payload.companyName ?? "";
   switch (row.kind) {
-    case "order_received":
-      return `ご発注を受け付けました${order ? ` (${order})` : ""}`;
     case "order_approved":
       return `ご発注を承認しました${order ? ` (${order})` : ""}`;
     case "order_rejected":
       return `ご発注を承認できませんでした${order ? ` (${order})` : ""}`;
+    case "order_cancelled":
+      return `ご発注を取り消しました${order ? ` (${order})` : ""}`;
     case "order_shipped":
       return `ご発注を出荷しました${order ? ` (${order})` : ""}`;
     case "admin_new_order":
@@ -44,15 +44,18 @@ export function labelForNotification(row: NotificationRow): string {
   }
 }
 
+// 通知タップ時の遷移先は、種類によらず常に「その発注の詳細画面」に統一する。
+// 顧客 → /rentals/[orderId]（発注詳細を返却・延長アクション込みで表示）
+// 管理 → /admin/orders/[id]（返却・延長の申請状態も含めて全文脈を確認できる）
+// order_id が無い通知（理論上ほぼない）は audience 別の一覧にフォールバック。
 export function linkForNotification(
   row: NotificationRow,
   audience: "customer" | "admin"
 ): string {
-  if (audience === "admin") {
-    if (row.kind === "return_requested" || row.kind === "extension_requested") {
-      return "/admin/requests";
-    }
-    return row.order_id ? `/admin/orders/${row.order_id}` : "/admin";
+  if (!row.order_id) {
+    return audience === "admin" ? "/admin" : "/rentals";
   }
-  return row.order_id ? `/rentals/${row.order_id}` : "/rentals";
+  return audience === "admin"
+    ? `/admin/orders/${row.order_id}`
+    : `/rentals/${row.order_id}`;
 }
