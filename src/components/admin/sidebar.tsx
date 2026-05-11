@@ -19,11 +19,17 @@ type NavGroup = {
 
 export type SidebarProps = {
   pendingCount: number;
+  pendingRequestCount: number;
   email: string | null;
   onNavigate?: () => void;
 };
 
-export default function Sidebar({ pendingCount, email, onNavigate }: SidebarProps) {
+export default function Sidebar({
+  pendingCount,
+  pendingRequestCount,
+  email,
+  onNavigate,
+}: SidebarProps) {
   const pathname = usePathname();
 
   const groups: NavGroup[] = [
@@ -35,6 +41,11 @@ export default function Sidebar({ pendingCount, email, onNavigate }: SidebarProp
           href: "/admin/orders",
           label: "発注管理",
           badge: pendingCount > 0 ? pendingCount : undefined,
+        },
+        {
+          href: "/admin/requests",
+          label: "返却・延長申請",
+          badge: pendingRequestCount > 0 ? pendingRequestCount : undefined,
         },
       ],
     },

@@ -95,7 +95,7 @@ export default async function RentalDetailPage({
             {order.status === "completed" ? "この発注は完了しています" : "この発注はキャンセルされました"}
           </p>
           <p className="text-xs mt-0.5 opacity-80">
-            参照のみ可能です。返却・延長操作はできません。
+            参照のみ可能です。返却・延長申請はできません。
           </p>
         </div>
       )}
@@ -108,7 +108,7 @@ export default async function RentalDetailPage({
 
       {!isReadOnly && activeItems.length > 0 && (
         <div className="mt-8">
-          <SectionLabel label="返却 / 延長" />
+          <SectionLabel label="返却・延長を申請" />
           <ReturnForm orderId={order.id} items={activeItems} extensions={order.extensions} />
         </div>
       )}

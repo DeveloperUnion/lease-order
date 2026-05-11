@@ -117,7 +117,13 @@ function SearchBar({ className }: { className?: string }) {
   );
 }
 
-export default function HeaderClient({ customer }: { customer: CustomerSummary | null }) {
+export default function HeaderClient({
+  customer,
+  notificationBell,
+}: {
+  customer: CustomerSummary | null;
+  notificationBell: React.ReactNode;
+}) {
   const { totalItems } = useCart();
   const pathname = usePathname();
   const isAdmin = pathname.startsWith("/admin");
@@ -167,6 +173,8 @@ export default function HeaderClient({ customer }: { customer: CustomerSummary |
           </Link>
 
           <SearchBar className="flex-1 max-w-lg" />
+
+          {customer && notificationBell}
 
           {customer && (
             <Link
