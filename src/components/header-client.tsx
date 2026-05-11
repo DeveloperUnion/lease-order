@@ -159,7 +159,9 @@ export default function HeaderClient({
   return (
     <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur border-b border-border md:pl-56">
       <div className="max-w-6xl mx-auto px-4">
-        <div className="h-16 flex items-center gap-3">
+        {/* PC: 検索バーを中央配置、アイコン群は absolute で右端固定。
+            モバイル: 通常の flex 並びでロゴ→検索→アイコン。 */}
+        <div className="relative h-16 flex items-center gap-3 md:justify-center">
           {/* モバイルのみロゴを表示 */}
           <Link href="/" className="flex items-center gap-2 flex-shrink-0 md:hidden">
             <Image
@@ -172,10 +174,10 @@ export default function HeaderClient({
             />
           </Link>
 
-          <SearchBar className="flex-1 max-w-lg" />
+          <SearchBar className="flex-1 max-w-lg md:flex-none md:w-[28rem]" />
 
           {customer && (
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0 md:absolute md:right-0 md:top-1/2 md:-translate-y-1/2">
               {notificationBell}
               <Link
                 href="/cart"
