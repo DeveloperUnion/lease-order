@@ -57,7 +57,7 @@ export type Order = {
   lease_start_date: string | null;
   lease_end_date: string | null;
   pickup_office_id: string | null;
-  status: "pending" | "confirmed" | "shipped" | "completed" | "cancelled";
+  status: "pending" | "approved" | "rejected" | "renting" | "completed" | "cancelled";
   created_at: string;
 };
 

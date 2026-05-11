@@ -96,7 +96,7 @@ export async function listRentalsByCustomer(customerId: string, tenantId: string
     )
     .eq("tenant_id", tenantId)
     .eq("customer_id", customerId)
-    .eq("status", "shipped")
+    .eq("status", "renting")
     .order("lease_end_date", { ascending: true, nullsFirst: false });
   if (error) throw error;
 
@@ -328,7 +328,7 @@ export type CustomerOrderRow = {
   id: string;
   order_number: string;
   site_name: string | null;
-  status: "pending" | "confirmed" | "shipped" | "completed" | "cancelled";
+  status: "pending" | "approved" | "rejected" | "renting" | "completed" | "cancelled";
   lease_start_date: string | null;
   lease_end_date: string | null;
   item_count: number;
@@ -341,7 +341,7 @@ type AllOrdersRaw = {
   id: string;
   order_number: string;
   site_name: string | null;
-  status: "pending" | "confirmed" | "shipped" | "completed" | "cancelled";
+  status: "pending" | "approved" | "rejected" | "renting" | "completed" | "cancelled";
   lease_start_date: string | null;
   lease_end_date: string | null;
   created_at: string;

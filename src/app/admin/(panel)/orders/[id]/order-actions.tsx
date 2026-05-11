@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import {
   approveOrder,
   cancelOrder,
-  completeOrder,
   rejectOrder,
   shipOrder,
 } from "@/app/admin/actions";
@@ -42,11 +41,9 @@ export default function OrderActions({ order }: Props) {
   const canApprove = status === "pending";
   const canReject = status === "pending";
   const canShip = status === "approved";
-  const canComplete = status === "shipped";
   const canCancel =
-    status === "pending" || status === "approved" || status === "shipped";
-  const noActions =
-    !canApprove && !canReject && !canShip && !canComplete && !canCancel;
+    status === "pending" || status === "approved" || status === "renting";
+  const noActions = !canApprove && !canReject && !canShip && !canCancel;
 
   if (noActions) {
     return (
@@ -83,20 +80,7 @@ export default function OrderActions({ order }: Props) {
             }
             disabled={isPending}
           >
-            出荷済にする
-          </Button>
-        )}
-        {canComplete && (
-          <Button
-            variant="secondary"
-            onClick={() =>
-              run(async () => {
-                await completeOrder(order.id);
-              })
-            }
-            disabled={isPending}
-          >
-            完了にする
+            出荷する
           </Button>
         )}
         {canCancel && (

@@ -10,8 +10,9 @@ const STATUS: Record<
   { label: string; tone: "neutral" | "accent" | "info" | "success" | "warning" | "danger" }
 > = {
   pending: { label: "未確認", tone: "warning" },
-  confirmed: { label: "承認済", tone: "info" },
-  shipped: { label: "出荷済", tone: "accent" },
+  approved: { label: "承認済", tone: "info" },
+  rejected: { label: "却下", tone: "danger" },
+  renting: { label: "レンタル中", tone: "accent" },
   completed: { label: "完了", tone: "success" },
   cancelled: { label: "キャンセル", tone: "neutral" },
 };

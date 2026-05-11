@@ -119,7 +119,7 @@ export async function shipOrder(orderId: string) {
   const now = new Date().toISOString();
   const { error } = await supabase
     .from("orders")
-    .update({ status: "shipped", shipped_at: now })
+    .update({ status: "renting", shipped_at: now })
     .eq("id", orderId)
     .eq("tenant_id", tenantId);
   if (error) throw error;
@@ -127,21 +127,6 @@ export async function shipOrder(orderId: string) {
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${orderId}`);
   await notifyCustomer(orderId, "order_shipped");
-}
-
-export async function completeOrder(orderId: string) {
-  const tenantId = await getTenantId();
-  const supabase = await getSupabaseTenant();
-  const now = new Date().toISOString();
-  const { error } = await supabase
-    .from("orders")
-    .update({ status: "completed", completed_at: now })
-    .eq("id", orderId)
-    .eq("tenant_id", tenantId);
-  if (error) throw error;
-
-  revalidatePath("/admin/orders");
-  revalidatePath(`/admin/orders/${orderId}`);
 }
 
 export async function cancelOrder(orderId: string) {

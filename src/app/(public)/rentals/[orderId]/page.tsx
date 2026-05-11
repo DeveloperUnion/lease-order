@@ -31,7 +31,7 @@ export default async function RentalDetailPage({
   const completedItems = order.items.filter((i) => i.remaining === 0);
   const hasOverdue = activeItems.some((i) => i.is_overdue);
   const isClosed = order.status === "completed" || order.status === "cancelled";
-  const isPreShipment = !isClosed && order.status !== "shipped";
+  const isPreShipment = !isClosed && order.status !== "renting";
   const isReadOnly = isClosed || isPreShipment;
 
   const backHref = from === "orders" ? "/orders" : "/rentals";
@@ -104,10 +104,10 @@ export default async function RentalDetailPage({
       {isPreShipment && (
         <div className="mt-6 px-5 py-4 rounded-xl border bg-surface-muted border-border text-muted">
           <p className="text-sm font-semibold text-foreground">
-            出荷前の発注です
+            レンタル開始前の発注です
           </p>
           <p className="text-xs mt-0.5">
-            返却・延長の申請は出荷後に行えます。
+            返却・延長の申請はレンタル開始後に行えます。
           </p>
         </div>
       )}

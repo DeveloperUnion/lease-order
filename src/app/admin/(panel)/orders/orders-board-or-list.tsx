@@ -6,7 +6,6 @@ import { useEffect, useState, useTransition } from "react";
 import {
   approveOrder,
   cancelOrder,
-  completeOrder,
   fetchOrderItemsForApproval,
   rejectOrder,
   shipOrder,
@@ -67,12 +66,11 @@ export default function OrdersBoardOrList({
     runMove(order.id, kind);
   };
 
-  const runMove = (orderId: string, kind: "ship" | "complete") => {
+  const runMove = (orderId: string, kind: "ship") => {
     setPendingMoveId(orderId);
     startTransition(async () => {
       try {
         if (kind === "ship") await shipOrder(orderId);
-        else await completeOrder(orderId);
         router.refresh();
       } catch (e) {
         setErrorMsg(e instanceof Error ? e.message : "更新に失敗しました");

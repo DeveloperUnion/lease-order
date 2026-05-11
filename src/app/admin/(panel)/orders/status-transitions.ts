@@ -4,12 +4,12 @@ export type TransitionKind =
   | "approve"
   | "reject"
   | "ship"
-  | "complete"
   | "cancel";
 
 // 各ステータスからどのステータスへ遷移できるか（および何の操作扱いか）。
 // approve / reject はカンバン上で確認モーダルを開く。
-// ship / complete / cancel は即時実行 + 軽い確認のみ。
+// ship / cancel は即時実行 + 軽い確認のみ。
+// renting → completed は返却申請の全件承認で自動遷移するため、ここには定義しない。
 const TRANSITIONS: Record<
   OrderStatus,
   Partial<Record<OrderStatus, TransitionKind>>
@@ -20,11 +20,10 @@ const TRANSITIONS: Record<
     cancelled: "cancel",
   },
   approved: {
-    shipped: "ship",
+    renting: "ship",
     cancelled: "cancel",
   },
-  shipped: {
-    completed: "complete",
+  renting: {
     cancelled: "cancel",
   },
   completed: {},
@@ -42,7 +41,7 @@ export function transitionFor(
 export const COLUMN_ORDER: OrderStatus[] = [
   "pending",
   "approved",
-  "shipped",
+  "renting",
   "completed",
   "rejected",
   "cancelled",

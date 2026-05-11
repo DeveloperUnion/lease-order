@@ -19,7 +19,7 @@ const STATUS_CLASSES: Record<OrderStatus, { wrapper: string; dot: string }> = {
       "bg-[var(--color-status-rejected-bg)] text-[var(--color-status-rejected-fg)]",
     dot: "bg-[var(--color-status-rejected-dot)]",
   },
-  shipped: {
+  renting: {
     wrapper:
       "bg-[var(--color-status-shipped-bg)] text-[var(--color-status-shipped-fg)]",
     dot: "bg-[var(--color-status-shipped-dot)]",
