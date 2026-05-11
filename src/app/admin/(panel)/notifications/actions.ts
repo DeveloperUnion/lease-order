@@ -16,7 +16,7 @@ async function currentAdminUserId(tenantId: string): Promise<string | null> {
     .from("admin_users")
     .select("id")
     .eq("tenant_id", tenantId)
-    .eq("email", user.email)
+    .eq("email", user.email.toLowerCase())
     .maybeSingle();
   return data?.id ?? null;
 }

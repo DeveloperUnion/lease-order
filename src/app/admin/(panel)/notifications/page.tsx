@@ -23,7 +23,7 @@ export default async function AdminNotificationsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const adminEmail = user?.email ?? "";
+  const adminEmail = user?.email?.toLowerCase() ?? "";
   const { data: adminRow } = adminEmail
     ? await supabaseAdmin
         .from("admin_users")

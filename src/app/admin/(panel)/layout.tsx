@@ -42,7 +42,7 @@ export default async function AdminPanelLayout({
       .from("admin_users")
       .select("id")
       .eq("tenant_id", tenantId)
-      .eq("email", email)
+      .eq("email", email.toLowerCase())
       .maybeSingle();
     const adminId = (adminRow as { id: string } | null)?.id ?? null;
     if (adminId) {
