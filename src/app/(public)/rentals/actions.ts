@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getCurrentCustomer } from "@/lib/customer-auth";
 
 export type ItemAction =
@@ -18,7 +18,9 @@ export async function processItemActions(input: { orderId: string; actions: Item
 
   if (!input.actions.length) return { ok: false, error: "操作する項目がありません" };
 
-  const { data: order, error: orderErr } = await supabaseAdmin
+  const supabase = await getSupabaseTenant();
+
+  const { data: order, error: orderErr } = await supabase
     .from("orders")
     .select("id, customer_id, tenant_id, status, order_items(id, quantity, returned_quantity, lease_end_date)")
     .eq("id", input.orderId)
@@ -57,7 +59,7 @@ export async function processItemActions(input: { orderId: string; actions: Item
       }
       if (requested === item.returned_quantity) continue;
 
-      const { error } = await supabaseAdmin
+      const { error } = await supabase
         .from("order_items")
         .update({ returned_quantity: requested })
         .eq("id", item.id);
@@ -74,7 +76,7 @@ export async function processItemActions(input: { orderId: string; actions: Item
       if (previous && a.newEndDate <= previous) {
         return { ok: false, error: "延長後の期限は現在の期限より後の日付にしてください" };
       }
-      const { error: updErr } = await supabaseAdmin
+      const { error: updErr } = await supabase
         .from("order_items")
         .update({ lease_end_date: a.newEndDate })
         .eq("id", item.id);
@@ -82,7 +84,8 @@ export async function processItemActions(input: { orderId: string; actions: Item
         console.error("processItemActions: update lease_end_date", updErr);
         return { ok: false, error: "期限延長の登録に失敗しました" };
       }
-      const { error: extErr } = await supabaseAdmin.from("lease_extensions").insert({
+      const { error: extErr } = await supabase.from("lease_extensions").insert({
+        tenant_id: customer.tenant_id,
         order_item_id: item.id,
         previous_end_date: previous ?? a.newEndDate,
         new_end_date: a.newEndDate,
@@ -99,7 +102,7 @@ export async function processItemActions(input: { orderId: string; actions: Item
 
   const allReturned = Array.from(itemMap.values()).every((it) => it.returned_quantity >= it.quantity);
   if (allReturned) {
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from("orders")
       .update({ status: "completed", completed_at: new Date().toISOString() })
       .eq("id", input.orderId);

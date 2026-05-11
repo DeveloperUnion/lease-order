@@ -1,7 +1,7 @@
 "use server";
 
 import { sendAdminEmail, sendOrderEmail } from "@/lib/email";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 import { getCurrentCustomer } from "@/lib/customer-auth";
 import type { DeliveryMethod } from "@/lib/types";
@@ -73,8 +73,10 @@ export async function submitOrder(
     return { ok: false, error: "テナントが一致しません" };
   }
 
+  const supabase = await getSupabaseTenant();
+
   if (input.deliveryMethod === "pickup") {
-    const { data: office, error: officeErr } = await supabaseAdmin
+    const { data: office, error: officeErr } = await supabase
       .from("offices")
       .select("id")
       .eq("tenant_id", tenantId)
@@ -88,7 +90,7 @@ export async function submitOrder(
     if (!office) return { ok: false, error: "選択された営業所が見つかりません" };
   }
 
-  const { data: materials, error: matErr } = await supabaseAdmin
+  const { data: materials, error: matErr } = await supabase
     .from("materials")
     .select("id, name")
     .eq("tenant_id", tenantId)
@@ -110,7 +112,7 @@ export async function submitOrder(
 
   const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}`;
 
-  const { data: order, error: orderErr } = await supabaseAdmin
+  const { data: order, error: orderErr } = await supabase
     .from("orders")
     .insert({
       tenant_id: tenantId,
@@ -139,8 +141,9 @@ export async function submitOrder(
     return { ok: false, error: "発注の登録に失敗しました" };
   }
 
-  const { error: itemsErr } = await supabaseAdmin.from("order_items").insert(
+  const { error: itemsErr } = await supabase.from("order_items").insert(
     items.map((i) => ({
+      tenant_id: tenantId,
       order_id: order.id,
       material_id: i.materialId,
       material_name: materialMap.get(i.materialId)!,
@@ -151,7 +154,7 @@ export async function submitOrder(
 
   if (itemsErr) {
     console.error("submitOrder: order_items insert failed", itemsErr);
-    await supabaseAdmin.from("orders").delete().eq("id", order.id);
+    await supabase.from("orders").delete().eq("id", order.id);
     return { ok: false, error: "発注の登録に失敗しました" };
   }
 
@@ -182,7 +185,7 @@ export async function submitOrder(
   // orders.email が null の現状ではスキップされる。将来 email を取れる
   // ようになれば自動的に送信されるよう、フックだけ先に配置しておく。
   try {
-    const { data: orderRow } = await supabaseAdmin
+    const { data: orderRow } = await supabase
       .from("orders")
       .select("email")
       .eq("id", order.id)
