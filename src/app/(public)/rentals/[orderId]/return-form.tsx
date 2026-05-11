@@ -29,8 +29,9 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
   const [states, setStates] = useState<Record<string, RowState>>(() => {
     const init: Record<string, RowState> = {};
     for (const it of items) {
-      // 既定: 操作可能なら「返却」、そうでなければ「skip」（表示のみ）
-      init[it.id] = it.effective_remaining > 0 ? { kind: "return" } : { kind: "skip" };
+      const wasExtended = (extensions[it.id]?.length ?? 0) > 0;
+      init[it.id] =
+        it.effective_remaining > 0 && !wasExtended ? { kind: "return" } : { kind: "skip" };
     }
     return init;
   });
@@ -112,6 +113,7 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
           const checked = state.kind === "return" && it.effective_remaining > 0;
           const isReturnable = it.effective_remaining > 0;
           const hasPendingExtension = it.pending_extension !== null;
+          const wasExtended = (extensions[it.id]?.length ?? 0) > 0;
           const overdueBorder = it.is_overdue ? "border-l-2 border-l-danger pl-4" : "pl-5";
           return (
             <div key={it.id} className={`pr-4 sm:pr-5 py-4 border-b border-border last:border-b-0 ${overdueBorder}`}>
@@ -148,6 +150,11 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
                       {hasPendingExtension && (
                         <span className="inline-flex items-center px-2 h-[20px] rounded-full text-[11px] font-semibold bg-info-soft text-info">
                           延長申請中
+                        </span>
+                      )}
+                      {wasExtended && !hasPendingExtension && !it.is_overdue && (
+                        <span className="inline-flex items-center px-2 h-[20px] rounded-full text-[11px] font-semibold bg-info-soft text-info">
+                          延長済み
                         </span>
                       )}
                     </div>

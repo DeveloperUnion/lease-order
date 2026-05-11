@@ -61,6 +61,39 @@ export type RentalsListResult = {
   hasAny: boolean;
 };
 
+export type RentalItemFlat = {
+  order_id: string;
+  order_number: string;
+  site_key: string;
+  site_name: string | null;
+  item_id: string;
+  material_id: string;
+  material_name: string;
+  quantity: number;
+  returned_quantity: number;
+  remaining: number;
+  lease_end_date: string | null;
+  is_overdue: boolean;
+  days_to_due: number | null;
+};
+
+export type RentalSiteTab = {
+  key: string;
+  label: string;
+  item_count: number;
+  overdue_count: number;
+};
+
+export type RentalsFlatResult = {
+  items: RentalItemFlat[];
+  sites: RentalSiteTab[];
+  totalOverdueCount: number;
+  hasAny: boolean;
+};
+
+const UNSET_SITE_KEY = "__unset__";
+const UNSET_SITE_LABEL = "現場未設定";
+
 function todayIsoLocal(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -177,6 +210,85 @@ export async function listRentalsByCustomer(customerId: string, tenantId: string
   });
 
   return { overdueItems, sites, hasAny: sites.length > 0 };
+}
+
+function diffDays(fromIso: string, toIso: string): number {
+  const a = new Date(`${fromIso}T00:00:00`).getTime();
+  const b = new Date(`${toIso}T00:00:00`).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
+export async function listRentalItemsByCustomer(customerId: string, tenantId: string): Promise<RentalsFlatResult> {
+  const { data, error } = await supabaseAdmin
+    .from("orders")
+    .select(
+      "id, order_number, site_name, status, order_items(id, material_id, material_name, quantity, returned_quantity, lease_end_date)"
+    )
+    .eq("tenant_id", tenantId)
+    .eq("customer_id", customerId)
+    .not("status", "in", "(cancelled,completed)");
+  if (error) throw error;
+
+  const today = todayIsoLocal();
+  const items: RentalItemFlat[] = [];
+  const siteMap = new Map<string, RentalSiteTab>();
+
+  for (const raw of (data ?? []) as RentalsListRaw[]) {
+    const siteKey = raw.site_name ? raw.site_name : UNSET_SITE_KEY;
+    const siteLabel = raw.site_name ?? UNSET_SITE_LABEL;
+    for (const it of raw.order_items ?? []) {
+      const remaining = it.quantity - it.returned_quantity;
+      if (remaining <= 0) continue;
+      const overdue = isItemOverdue(it.lease_end_date, today);
+      items.push({
+        order_id: raw.id,
+        order_number: raw.order_number,
+        site_key: siteKey,
+        site_name: raw.site_name,
+        item_id: it.id,
+        material_id: it.material_id,
+        material_name: it.material_name,
+        quantity: it.quantity,
+        returned_quantity: it.returned_quantity,
+        remaining,
+        lease_end_date: it.lease_end_date,
+        is_overdue: overdue,
+        days_to_due: it.lease_end_date ? diffDays(today, it.lease_end_date) : null,
+      });
+
+      let site = siteMap.get(siteKey);
+      if (!site) {
+        site = { key: siteKey, label: siteLabel, item_count: 0, overdue_count: 0 };
+        siteMap.set(siteKey, site);
+      }
+      site.item_count += 1;
+      if (overdue) site.overdue_count += 1;
+    }
+  }
+
+  items.sort((a, b) => {
+    if (a.is_overdue !== b.is_overdue) return a.is_overdue ? -1 : 1;
+    if (a.lease_end_date && b.lease_end_date) {
+      const cmp = a.lease_end_date.localeCompare(b.lease_end_date);
+      if (cmp !== 0) return cmp;
+    } else if (a.lease_end_date) {
+      return -1;
+    } else if (b.lease_end_date) {
+      return 1;
+    }
+    return a.material_name.localeCompare(b.material_name);
+  });
+
+  const sites = Array.from(siteMap.values()).sort((a, b) => {
+    if (a.overdue_count !== b.overdue_count) return b.overdue_count - a.overdue_count;
+    if (a.key === UNSET_SITE_KEY) return 1;
+    if (b.key === UNSET_SITE_KEY) return -1;
+    return a.label.localeCompare(b.label);
+  });
+
+  const totalOverdueCount = items.reduce((acc, x) => acc + (x.is_overdue ? 1 : 0), 0);
+
+  return { items, sites, totalOverdueCount, hasAny: items.length > 0 };
 }
 
 type OrderDetailRaw = {
