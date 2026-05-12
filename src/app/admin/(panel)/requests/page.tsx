@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listPendingRequests, type PendingRequest } from "@/lib/admin-data";
 import { PageHeader, EmptyState } from "@/components/admin/ui";
 import RequestActions from "./request-actions";
+import BulkActions from "./bulk-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -76,7 +77,7 @@ export default async function AdminRequestsPage() {
                 key={g.orderId}
                 className="border border-rule rounded-[var(--radius-lg)] bg-surface overflow-hidden"
               >
-                <header className="px-5 py-4 border-b border-rule flex items-center justify-between gap-3 flex-wrap">
+                <header className="px-5 py-4 border-b border-rule flex items-start justify-between gap-3 flex-wrap">
                   <div className="min-w-0">
                     <p className="font-[family-name:var(--font-mono)] text-xs text-subtle">
                       {g.orderNumber}
@@ -88,12 +89,19 @@ export default async function AdminRequestsPage() {
                       {g.companyName} ／ {g.contactName}
                     </p>
                   </div>
-                  <Link
-                    href={`/admin/orders/${g.orderId}`}
-                    className="text-xs text-accent hover:underline whitespace-nowrap"
-                  >
-                    発注詳細 →
-                  </Link>
+                  <div className="flex flex-col items-end gap-2">
+                    <Link
+                      href={`/admin/orders/${g.orderId}`}
+                      className="text-xs text-accent hover:underline whitespace-nowrap"
+                    >
+                      発注詳細 →
+                    </Link>
+                    <BulkActions
+                      orderId={g.orderId}
+                      returnCount={g.items.filter((it) => it.type === "return").length}
+                      extensionCount={g.items.filter((it) => it.type === "extension").length}
+                    />
+                  </div>
                 </header>
                 <ul className="divide-y divide-rule">
                   {g.items.map((r) => (

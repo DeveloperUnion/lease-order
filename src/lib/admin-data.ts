@@ -703,6 +703,7 @@ export async function listPendingRequests(): Promise<PendingRequest[]> {
   return items;
 }
 
+// 申請は発注単位で一括承認するため、バッジは「申請が来ている発注数」をカウントする。
 export async function countPendingRequests(): Promise<number> {
   const tenantId = await getTenantId();
   const itemInfoMap = await buildItemInfoMap(tenantId);
@@ -710,19 +711,29 @@ export async function countPendingRequests(): Promise<number> {
   if (itemIds.length === 0) return 0;
 
   const supabase = await getSupabaseTenant();
-  const [{ count: rc, error: re }, { count: ec, error: ee }] = await Promise.all([
+  const [{ data: returns, error: re }, { data: extensions, error: ee }] = await Promise.all([
     supabase
       .from("return_requests")
-      .select("id", { count: "exact", head: true })
+      .select("order_item_id")
       .in("order_item_id", itemIds)
       .eq("status", "pending"),
     supabase
       .from("lease_extensions")
-      .select("id", { count: "exact", head: true })
+      .select("order_item_id")
       .in("order_item_id", itemIds)
       .eq("status", "pending"),
   ]);
   if (re) throw re;
   if (ee) throw ee;
-  return (rc ?? 0) + (ec ?? 0);
+
+  const orderIds = new Set<string>();
+  for (const r of (returns ?? []) as { order_item_id: string }[]) {
+    const info = itemInfoMap.get(r.order_item_id);
+    if (info) orderIds.add(info.order_id);
+  }
+  for (const e of (extensions ?? []) as { order_item_id: string }[]) {
+    const info = itemInfoMap.get(e.order_item_id);
+    if (info) orderIds.add(info.order_id);
+  }
+  return orderIds.size;
 }
