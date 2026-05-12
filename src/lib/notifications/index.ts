@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
@@ -30,43 +31,49 @@ async function fanout(
 
 // Notify the customer who owns the order. Failures are swallowed so the
 // caller's business logic never blocks on delivery issues.
-export async function notifyCustomer(
+//
+// after() でレスポンス送信後に fanout を走らせる。これにより email (Resend)
+// 送信完了を待たずにフォームのレスポンスが返り、in-app 反映（realtime 経由）
+// も結果的に体感が早くなる。
+export function notifyCustomer(
   orderId: string,
   kind: NotificationKind,
   extra?: { rejectReason?: string; itemSummary?: string }
-): Promise<void> {
-  try {
-    const tenantId = await getTenantId();
-    const supabase = await getSupabaseTenant();
-    const { data } = await supabase
-      .from("orders")
-      .select("order_number, company_name, contact_name, email, customer_id")
-      .eq("id", orderId)
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-    if (!data) return;
-    if (!data.email && !data.customer_id) return;
-    const ctx: NotificationContext = {
-      orderNumber: data.order_number,
-      companyName: data.company_name,
-      contactName: data.contact_name,
-      rejectReason: extra?.rejectReason,
-      itemSummary: extra?.itemSummary,
-    };
-    await fanout(
-      {
-        kind: "customer",
-        customerId: data.customer_id,
-        orderId,
-        address: data.email ?? "",
-      },
-      kind,
-      ctx,
-      tenantId
-    );
-  } catch (e) {
-    console.error(`notifyCustomer failed (${kind}, ${orderId})`, e);
-  }
+): void {
+  after(async () => {
+    try {
+      const tenantId = await getTenantId();
+      const supabase = await getSupabaseTenant();
+      const { data } = await supabase
+        .from("orders")
+        .select("order_number, company_name, contact_name, email, customer_id")
+        .eq("id", orderId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (!data) return;
+      if (!data.email && !data.customer_id) return;
+      const ctx: NotificationContext = {
+        orderNumber: data.order_number,
+        companyName: data.company_name,
+        contactName: data.contact_name,
+        rejectReason: extra?.rejectReason,
+        itemSummary: extra?.itemSummary,
+      };
+      await fanout(
+        {
+          kind: "customer",
+          customerId: data.customer_id,
+          orderId,
+          address: data.email ?? "",
+        },
+        kind,
+        ctx,
+        tenantId
+      );
+    } catch (e) {
+      console.error(`notifyCustomer failed (${kind}, ${orderId})`, e);
+    }
+  });
 }
 
 // Fan out a notification to every admin in the tenant's allowlist.
@@ -76,38 +83,42 @@ export async function notifyCustomer(
 // 各 admin に対し in-app と email の両チャンネルへ fanout する。email チャンネルは
 // `target.address` が空なら自身で early-return するので、ここで email 有無の事前
 // フィルタはしない（in-app は email 不要で配信されるべき）。
-export async function notifyAdmins(
+//
+// notifyCustomer 同様 after() でレスポンス後に走らせ、フォームのレイテンシを下げる。
+export function notifyAdmins(
   tenantId: string,
   kind: NotificationKind,
   ctx: NotificationContext,
   orderId: string | null = null
-): Promise<void> {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("admin_users")
-      .select("id, email")
-      .eq("tenant_id", tenantId);
-    if (error) {
-      console.error("notifyAdmins: admin_users lookup failed", error);
-      return;
-    }
-    const recipients = data ?? [];
-    await Promise.all(
-      recipients.map((r) =>
-        fanout(
-          {
-            kind: "admin",
-            adminUserId: r.id,
-            orderId,
-            address: r.email ?? "",
-          },
-          kind,
-          ctx,
-          tenantId
+): void {
+  after(async () => {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("admin_users")
+        .select("id, email")
+        .eq("tenant_id", tenantId);
+      if (error) {
+        console.error("notifyAdmins: admin_users lookup failed", error);
+        return;
+      }
+      const recipients = data ?? [];
+      await Promise.all(
+        recipients.map((r) =>
+          fanout(
+            {
+              kind: "admin",
+              adminUserId: r.id,
+              orderId,
+              address: r.email ?? "",
+            },
+            kind,
+            ctx,
+            tenantId
+          )
         )
-      )
-    );
-  } catch (e) {
-    console.error(`notifyAdmins failed (${kind}, ${tenantId})`, e);
-  }
+      );
+    } catch (e) {
+      console.error(`notifyAdmins failed (${kind}, ${tenantId})`, e);
+    }
+  });
 }
