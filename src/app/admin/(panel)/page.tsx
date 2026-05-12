@@ -4,7 +4,9 @@ import {
   countOrdersInMonth,
   countPendingOrders,
   listRecentOrders,
+  listUpcomingShipments,
   type RecentOrderRow,
+  type UpcomingShipmentRow,
 } from "@/lib/admin-data";
 import {
   PageHeader,
@@ -55,14 +57,27 @@ function IconBox() {
   );
 }
 
+const SHIPMENT_BUCKET_LABEL: Record<UpcomingShipmentRow["bucket"], string> = {
+  overdue: "遅延",
+  today: "今日",
+  tomorrow: "明日",
+};
+
+const SHIPMENT_BUCKET_CLASS: Record<UpcomingShipmentRow["bucket"], string> = {
+  overdue: "bg-danger-soft text-danger",
+  today: "bg-warning-soft text-warning",
+  tomorrow: "bg-info-soft text-info",
+};
+
 export default async function AdminPage() {
-  const [pending, monthlyTotal, monthlyCompleted, materialCount, recent] =
+  const [pending, monthlyTotal, monthlyCompleted, materialCount, recent, upcoming] =
     await Promise.all([
       countPendingOrders(),
       countOrdersInMonth(),
       countOrdersInMonth("completed"),
       countActiveMaterials(),
       listRecentOrders(5),
+      listUpcomingShipments(),
     ]);
 
   const today = new Date().toLocaleDateString("ja-JP", {
@@ -70,6 +85,53 @@ export default async function AdminPage() {
     month: "2-digit",
     day: "2-digit",
   });
+
+  const upcomingColumns: Column<UpcomingShipmentRow>[] = [
+    {
+      key: "bucket",
+      header: "区分",
+      width: "80px",
+      cell: (o) => (
+        <span
+          className={`inline-flex items-center px-2 h-5 rounded-full text-[11px] font-semibold ${SHIPMENT_BUCKET_CLASS[o.bucket]}`}
+        >
+          {SHIPMENT_BUCKET_LABEL[o.bucket]}
+        </span>
+      ),
+    },
+    {
+      key: "order_number",
+      header: "発注番号",
+      width: "160px",
+      mono: true,
+      cell: (o) => o.order_number,
+    },
+    {
+      key: "company",
+      header: "顧客",
+      width: "minmax(160px, 1fr)",
+      cell: (o) => <span className="text-foreground">{o.company_name}</span>,
+    },
+    {
+      key: "site",
+      header: "現場",
+      width: "minmax(140px, 1fr)",
+      cell: (o) => (
+        <span className="text-muted">{o.site_name ?? "—"}</span>
+      ),
+    },
+    {
+      key: "lease_start",
+      header: "出荷予定日",
+      width: "120px",
+      align: "right",
+      cell: (o) =>
+        new Date(o.lease_start_date).toLocaleDateString("ja-JP", {
+          month: "2-digit",
+          day: "2-digit",
+        }),
+    },
+  ];
 
   const recentColumns: Column<RecentOrderRow>[] = [
     {
@@ -147,6 +209,28 @@ export default async function AdminPage() {
             icon={<IconBox />}
           />
         </div>
+      </section>
+
+      <section className="mb-10">
+        <SectionRule
+          label="出荷予定・遅延"
+          className="mb-3"
+        />
+        {upcoming.length === 0 ? (
+          <EmptyState
+            title="今日・明日の出荷予定はありません"
+            description="lease_start_date が今日または明日の承認済み発注がここに並びます。"
+          />
+        ) : (
+          <DataTable
+            columns={upcomingColumns}
+            rows={upcoming}
+            rowKey={(o) => o.id}
+            rowHref={(o) => `/admin/orders/${o.id}`}
+            density="compact"
+            caption="出荷予定・遅延"
+          />
+        )}
       </section>
 
       <section>

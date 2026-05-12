@@ -483,6 +483,66 @@ export async function listRecentOrders(limit: number): Promise<RecentOrderRow[]>
   return (data ?? []) as unknown as RecentOrderRow[];
 }
 
+export type UpcomingShipmentBucket = "overdue" | "today" | "tomorrow";
+
+export type UpcomingShipmentRow = {
+  id: string;
+  order_number: string;
+  company_name: string;
+  site_name: string | null;
+  lease_start_date: string;
+  bucket: UpcomingShipmentBucket;
+};
+
+function isoDateInTz(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export async function listUpcomingShipments(): Promise<UpcomingShipmentRow[]> {
+  const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
+
+  const today = new Date();
+  const todayStr = isoDateInTz(today);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = isoDateInTz(tomorrow);
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id, order_number, company_name, site_name, lease_start_date")
+    .eq("tenant_id", tenantId)
+    .eq("status", "approved")
+    .not("lease_start_date", "is", null)
+    .lte("lease_start_date", tomorrowStr)
+    .order("lease_start_date", { ascending: true });
+  if (error) throw error;
+
+  return ((data ?? []) as {
+    id: string;
+    order_number: string;
+    company_name: string;
+    site_name: string | null;
+    lease_start_date: string;
+  }[]).map((row) => {
+    let bucket: UpcomingShipmentBucket;
+    if (row.lease_start_date < todayStr) bucket = "overdue";
+    else if (row.lease_start_date === todayStr) bucket = "today";
+    else bucket = "tomorrow";
+    return {
+      id: row.id,
+      order_number: row.order_number,
+      company_name: row.company_name,
+      site_name: row.site_name,
+      lease_start_date: row.lease_start_date,
+      bucket,
+    };
+  });
+}
+
 export { statusLabels } from "./order-status";
 
 export type AdminUserRow = {
