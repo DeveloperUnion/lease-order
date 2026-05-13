@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRef, useState, useTransition } from "react";
 import type {
   AdminCategoryRow,
@@ -337,11 +338,13 @@ function ImagesSection({
               img.is_primary ? "border-accent border-2" : "border-rule"
             } ${dragId === img.image_id ? "opacity-50" : ""}`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={img.url}
               alt=""
-              className="w-full h-full object-contain pointer-events-none"
+              fill
+              sizes="(min-width: 768px) 20vw, (min-width: 640px) 33vw, 50vw"
+              className="object-contain pointer-events-none"
+              unoptimized={img.url.endsWith(".svg")}
             />
             {img.is_primary && (
               <span className="absolute top-1 left-1 font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-wider bg-accent text-white px-1.5 py-0.5">

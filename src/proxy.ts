@@ -29,18 +29,22 @@ async function adminProxy(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // getClaims は JWKS をクライアントキャッシュして JWT 署名をローカル検証する。
+  // getUser のような /auth/v1/user への HTTP 往復が無いため middleware の TTFB が大幅に減る。
+  // 未ログイン時は data === null になるので optional chaining で受ける。
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims ?? null;
 
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_ADMIN_PATHS.some((p) => pathname.startsWith(p));
 
-  if (!user && !isPublic) {
+  if (!claims && !isPublic) {
     const loginUrl = new URL("/admin/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  if (user && pathname === "/admin/login") {
+  if (claims && pathname === "/admin/login") {
     return NextResponse.redirect(new URL("/admin", request.url));
   }
 

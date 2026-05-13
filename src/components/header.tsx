@@ -1,38 +1,48 @@
+import { Suspense } from "react";
 import { getCurrentCustomer } from "@/lib/customer-auth";
-import { countOverdueForCustomer } from "@/lib/rentals-data";
-import {
-  countUnreadForCustomer,
-  listNotificationsForCustomer,
-} from "@/lib/notifications-data";
+import { getCustomerHeaderData } from "@/lib/header-data";
 import HeaderClient from "./header-client";
 import CustomerNav from "./customer-nav";
-import CustomerNotificationBell from "./customer-notification-bell";
+import {
+  CustomerNavWithData,
+  CustomerNotificationBellWithData,
+} from "./header-badges";
+
+function BellSkeleton() {
+  return (
+    <div className="h-10 w-10 rounded-lg border border-border bg-surface-muted/40 animate-pulse" />
+  );
+}
 
 export default async function Header() {
   const customer = await getCurrentCustomer();
-  const customerProp = customer
-    ? { id: customer.id, company_id: customer.company_id, name: customer.name }
-    : null;
-
   if (!customer) {
     return <HeaderClient customer={null} notificationBell={null} />;
   }
+  const customerProp = {
+    id: customer.id,
+    company_id: customer.company_id,
+    name: customer.name,
+  };
 
-  const [overdueCount, unreadCount, recent] = await Promise.all([
-    countOverdueForCustomer(customer.id, customer.tenant_id),
-    countUnreadForCustomer(customer.id, customer.tenant_id),
-    listNotificationsForCustomer(customer.id, customer.tenant_id, 100),
-  ]);
+  // Promise のまま渡して各 Suspense 境界で並列ストリーミング。
+  // Header シェルとカテゴリ nav (overdueCount=0 で先に出す) は即座に描画され、
+  // バッジは確定し次第差し替わる。
+  const dataPromise = getCustomerHeaderData(customer.id, customer.tenant_id);
 
   return (
     <>
       <HeaderClient
         customer={customerProp}
         notificationBell={
-          <CustomerNotificationBell unreadCount={unreadCount} recent={recent} />
+          <Suspense fallback={<BellSkeleton />}>
+            <CustomerNotificationBellWithData promise={dataPromise} />
+          </Suspense>
         }
       />
-      <CustomerNav customer={customerProp!} overdueCount={overdueCount} />
+      <Suspense fallback={<CustomerNav customer={customerProp} overdueCount={0} />}>
+        <CustomerNavWithData customer={customerProp} promise={dataPromise} />
+      </Suspense>
     </>
   );
 }
