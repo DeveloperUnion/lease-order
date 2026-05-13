@@ -26,17 +26,17 @@ export type NotificationBellData = {
 const getAdminContext = cache(
   async (): Promise<{ adminId: string | null; email: string | null }> => {
     const ssr = await createSupabaseServerClient();
-    const { data } = await ssr.auth.getClaims();
-    const email = (data?.claims?.email as string | undefined) ?? null;
+    const { data: claimsData } = await ssr.auth.getClaims();
+    const email = (claimsData?.claims?.email as string | undefined) ?? null;
     if (!email) return { adminId: null, email: null };
     const tenantId = await getTenantId();
-    const { data } = await supabaseAdmin
+    const { data: adminRow } = await supabaseAdmin
       .from("admin_users")
       .select("id")
       .eq("tenant_id", tenantId)
       .eq("email", email.toLowerCase())
       .maybeSingle();
-    const adminId = (data as { id: string } | null)?.id ?? null;
+    const adminId = (adminRow as { id: string } | null)?.id ?? null;
     return { adminId, email };
   }
 );
