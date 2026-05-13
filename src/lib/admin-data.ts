@@ -434,113 +434,37 @@ export async function countPendingOrders(): Promise<number> {
   return count ?? 0;
 }
 
-export async function countActiveMaterials(): Promise<number> {
-  const tenantId = await getTenantId();
-  const supabase = await getSupabaseTenant();
-  const { count, error } = await supabase
-    .from("materials")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", tenantId)
-    .eq("is_active", true);
-  if (error) throw error;
-  return count ?? 0;
-}
-
-export async function countOrdersInMonth(status?: OrderStatus): Promise<number> {
-  const tenantId = await getTenantId();
-  const supabase = await getSupabaseTenant();
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  let query = supabase
-    .from("orders")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", tenantId)
-    .gte("created_at", monthStart);
-  if (status) query = query.eq("status", status);
-  const { count, error } = await query;
-  if (error) throw error;
-  return count ?? 0;
-}
-
-export type RecentOrderRow = {
-  id: string;
-  order_number: string;
-  company_name: string;
-  status: OrderStatus;
-  created_at: string;
-};
-
-export async function listRecentOrders(limit: number): Promise<RecentOrderRow[]> {
-  const tenantId = await getTenantId();
-  const supabase = await getSupabaseTenant();
-  const { data, error } = await supabase
-    .from("orders")
-    .select("id, order_number, company_name, status, created_at")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  return (data ?? []) as unknown as RecentOrderRow[];
-}
-
-export type UpcomingShipmentBucket = "overdue" | "today" | "tomorrow";
-
-export type UpcomingShipmentRow = {
+export type CalendarOrderRow = {
   id: string;
   order_number: string;
   company_name: string;
   site_name: string | null;
-  lease_start_date: string;
-  bucket: UpcomingShipmentBucket;
+  lease_start_date: string | null;
+  lease_end_date: string | null;
+  status: OrderStatus;
 };
 
-function isoDateInTz(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-export async function listUpcomingShipments(): Promise<UpcomingShipmentRow[]> {
+export async function listOrdersInRange(
+  fromISO: string,
+  toISO: string,
+): Promise<CalendarOrderRow[]> {
   const tenantId = await getTenantId();
   const supabase = await getSupabaseTenant();
 
-  const today = new Date();
-  const todayStr = isoDateInTz(today);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = isoDateInTz(tomorrow);
-
   const { data, error } = await supabase
     .from("orders")
-    .select("id, order_number, company_name, site_name, lease_start_date")
+    .select(
+      "id, order_number, company_name, site_name, lease_start_date, lease_end_date, status",
+    )
     .eq("tenant_id", tenantId)
-    .eq("status", "approved")
-    .not("lease_start_date", "is", null)
-    .lte("lease_start_date", tomorrowStr)
+    .not("status", "in", "(cancelled,rejected)")
+    .or(
+      `and(lease_start_date.gte.${fromISO},lease_start_date.lte.${toISO}),and(lease_end_date.gte.${fromISO},lease_end_date.lte.${toISO})`,
+    )
     .order("lease_start_date", { ascending: true });
   if (error) throw error;
 
-  return ((data ?? []) as {
-    id: string;
-    order_number: string;
-    company_name: string;
-    site_name: string | null;
-    lease_start_date: string;
-  }[]).map((row) => {
-    let bucket: UpcomingShipmentBucket;
-    if (row.lease_start_date < todayStr) bucket = "overdue";
-    else if (row.lease_start_date === todayStr) bucket = "today";
-    else bucket = "tomorrow";
-    return {
-      id: row.id,
-      order_number: row.order_number,
-      company_name: row.company_name,
-      site_name: row.site_name,
-      lease_start_date: row.lease_start_date,
-      bucket,
-    };
-  });
+  return (data ?? []) as unknown as CalendarOrderRow[];
 }
 
 export { statusLabels } from "./order-status";
