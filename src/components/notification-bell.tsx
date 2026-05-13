@@ -149,6 +149,17 @@ export default function NotificationBell({
     };
   }, [audience]);
 
+  // Polling fallback: Realtime が届かない場合の保険。30 秒ごとに server props を
+  // 再フェッチする。タブが非アクティブな間はスキップして無駄打ちを避ける。
+  useEffect(() => {
+    const POLL_MS = 30_000;
+    const id = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      router.refresh();
+    }, POLL_MS);
+    return () => clearInterval(id);
+  }, [router]);
+
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
