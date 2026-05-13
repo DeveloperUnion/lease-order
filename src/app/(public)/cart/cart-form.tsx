@@ -161,14 +161,14 @@ export default function CartForm({ offices, customer }: Props) {
         <div className="mt-8 flex flex-col sm:flex-row gap-3">
           <Link
             href="/orders"
-            className="flex-1 h-11 inline-flex items-center justify-center gap-2 border border-border bg-surface text-foreground rounded-lg text-sm font-semibold hover:bg-surface-muted transition-colors"
+            className="flex-1 h-12 inline-flex items-center justify-center gap-2 border border-border bg-surface text-foreground rounded-lg text-sm font-semibold hover:bg-surface-muted transition-colors"
           >
             発注履歴を見る
             <span aria-hidden>→</span>
           </Link>
           <Link
             href="/"
-            className="flex-1 h-11 inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99]"
+            className="flex-1 h-12 inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99]"
           >
             発注画面に戻る
             <span aria-hidden>→</span>
