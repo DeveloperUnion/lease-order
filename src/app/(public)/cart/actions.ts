@@ -13,11 +13,20 @@ type SubmitOrderInput = {
   note: string;
   deliveryMethod: DeliveryMethod;
   deliveryAddress: string;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
   pickupOfficeId: string;
   leaseStartDate: string;
   leaseEndDate: string;
   items: { materialId: string; quantity: number }[];
 };
+
+function sanitizeCoord(v: number | null, min: number, max: number): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < min || n > max) return null;
+  return n;
+}
 
 export type SubmitOrderResult =
   | { ok: true; orderNumber: string }
@@ -127,6 +136,14 @@ export async function submitOrder(
       delivery_method: input.deliveryMethod,
       delivery_address:
         input.deliveryMethod === "delivery" ? deliveryAddress : null,
+      delivery_lat:
+        input.deliveryMethod === "delivery"
+          ? sanitizeCoord(input.deliveryLat, -90, 90)
+          : null,
+      delivery_lng:
+        input.deliveryMethod === "delivery"
+          ? sanitizeCoord(input.deliveryLng, -180, 180)
+          : null,
       pickup_office_id:
         input.deliveryMethod === "pickup" ? pickupOfficeId : null,
       lease_start_date: input.leaseStartDate,

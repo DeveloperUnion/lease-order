@@ -170,7 +170,7 @@ export const listOfficesForAdmin = cache(
     const { data, error } = await supabase
       .from("offices")
       .select(
-        "id, name, area, address, phone, fax, sort_order, is_active, orders(id)"
+        "id, name, area, address, phone, fax, lat, lng, sort_order, is_active, orders(id)"
       )
       .eq("tenant_id", tenantId)
       .order("sort_order");
@@ -184,6 +184,8 @@ export const listOfficesForAdmin = cache(
       address: row.address,
       phone: row.phone,
       fax: row.fax,
+      lat: row.lat,
+      lng: row.lng,
       sort_order: row.sort_order,
       is_active: row.is_active,
       in_use_count: row.orders?.length ?? 0,
@@ -221,6 +223,8 @@ export type OrderPickupOffice = {
   area: string | null;
   address: string | null;
   phone: string | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 export type OrderDetail = {
@@ -233,6 +237,8 @@ export type OrderDetail = {
   note: string | null;
   delivery_method: DeliveryMethod;
   delivery_address: string | null;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
   lease_start_date: string | null;
   lease_end_date: string | null;
   pickup_office: OrderPickupOffice | null;
@@ -302,6 +308,8 @@ type OrderDetailRaw = {
   note: string | null;
   delivery_method: DeliveryMethod;
   delivery_address: string | null;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
   lease_start_date: string | null;
   lease_end_date: string | null;
   pickup_office_id: string | null;
@@ -315,7 +323,15 @@ type OrderDetailRaw = {
   created_at: string;
   order_items: (OrderItemRow & { created_at: string })[] | null;
   offices:
-    | { id: string; name: string; area: string | null; address: string | null; phone: string | null }
+    | {
+        id: string;
+        name: string;
+        area: string | null;
+        address: string | null;
+        phone: string | null;
+        lat: number | null;
+        lng: number | null;
+      }
     | null;
 };
 
@@ -325,7 +341,7 @@ export const getOrder = cache(async (id: string): Promise<OrderDetail | null> =>
   const { data, error } = await supabase
     .from("orders")
     .select(
-      "id, order_number, company_name, contact_name, phone, email, note, delivery_method, delivery_address, lease_start_date, lease_end_date, pickup_office_id, status, approved_at, approved_by, reject_reason, rejected_at, shipped_at, completed_at, created_at, order_items(id, material_id, variant_id, material_name, variant_name, quantity, approved_quantity, created_at), offices:pickup_office_id(id, name, area, address, phone)"
+      "id, order_number, company_name, contact_name, phone, email, note, delivery_method, delivery_address, delivery_lat, delivery_lng, lease_start_date, lease_end_date, pickup_office_id, status, approved_at, approved_by, reject_reason, rejected_at, shipped_at, completed_at, created_at, order_items(id, material_id, variant_id, material_name, variant_name, quantity, approved_quantity, created_at), offices:pickup_office_id(id, name, area, address, phone, lat, lng)"
     )
     .eq("tenant_id", tenantId)
     .eq("id", id)
@@ -358,6 +374,8 @@ export const getOrder = cache(async (id: string): Promise<OrderDetail | null> =>
     note: raw.note,
     delivery_method: raw.delivery_method,
     delivery_address: raw.delivery_address,
+    delivery_lat: raw.delivery_lat,
+    delivery_lng: raw.delivery_lng,
     lease_start_date: raw.lease_start_date,
     lease_end_date: raw.lease_end_date,
     pickup_office: raw.offices ?? null,

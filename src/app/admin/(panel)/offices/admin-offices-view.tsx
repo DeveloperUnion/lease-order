@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import type { AdminOfficeRow } from "@/lib/admin-data";
 import {
   createOffice,
@@ -15,6 +16,8 @@ import {
   TextInput,
   EmptyState,
 } from "@/components/admin/ui";
+import MapPicker, { type LatLng } from "@/components/map/map-picker";
+import MapView from "@/components/map/map-view";
 
 type EditingState =
   | { mode: "create" }
@@ -195,6 +198,31 @@ export default function AdminOfficesView({
                     </span>
                   )}
                 </div>
+                {o.lat != null && o.lng != null && (
+                  <details className="mt-2 group">
+                    <summary className="text-[11px] text-subtle hover:text-foreground cursor-pointer select-none inline-flex items-center gap-1">
+                      <svg
+                        className="w-3 h-3 transition-transform group-open:rotate-90"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-hidden
+                      >
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                      地図を表示
+                    </summary>
+                    <div className="mt-2 max-w-md">
+                      <MapView
+                        lat={o.lat}
+                        lng={o.lng}
+                        height={180}
+                        markerLabel={o.name}
+                      />
+                    </div>
+                  </details>
+                )}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <Button
@@ -257,6 +285,8 @@ export default function AdminOfficesView({
                   address: editing.office.address ?? "",
                   phone: editing.office.phone ?? "",
                   fax: editing.office.fax ?? "",
+                  lat: editing.office.lat,
+                  lng: editing.office.lng,
                   sort_order: editing.office.sort_order,
                   is_active: editing.office.is_active,
                 }
@@ -266,6 +296,8 @@ export default function AdminOfficesView({
                   address: "",
                   phone: "",
                   fax: "",
+                  lat: null,
+                  lng: null,
                   sort_order: (offices.at(-1)?.sort_order ?? 0) + 1,
                   is_active: true,
                 }
@@ -290,6 +322,8 @@ type EditInitial = {
   address: string;
   phone: string;
   fax: string;
+  lat: number | null;
+  lng: number | null;
   sort_order: number;
   is_active: boolean;
 };
@@ -315,6 +349,43 @@ function EditModal({
   const [phone, setPhone] = useState(initial.phone);
   const [fax, setFax] = useState(initial.fax);
   const [isActive, setIsActive] = useState(initial.is_active);
+  const [location, setLocation] = useState<LatLng | null>(
+    initial.lat != null && initial.lng != null
+      ? { lat: initial.lat, lng: initial.lng }
+      : null
+  );
+  const [geocoding, setGeocoding] = useState(false);
+  const [geocodeError, setGeocodeError] = useState<string | null>(null);
+
+  const handleGeocodeFromAddress = async () => {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      setGeocodeError("Google Maps API キーが未設定です");
+      return;
+    }
+    if (!address.trim()) {
+      setGeocodeError("住所を入力してください");
+      return;
+    }
+    setGeocodeError(null);
+    setGeocoding(true);
+    try {
+      setOptions({ key: apiKey, language: "ja", region: "JP" });
+      await importLibrary("geocoding");
+      const geocoder = new google.maps.Geocoder();
+      const { results } = await geocoder.geocode({ address });
+      if (results[0]?.geometry?.location) {
+        const loc = results[0].geometry.location;
+        setLocation({ lat: loc.lat(), lng: loc.lng() });
+      } else {
+        setGeocodeError("住所から座標を取得できませんでした");
+      }
+    } catch {
+      setGeocodeError("住所の検索に失敗しました");
+    } finally {
+      setGeocoding(false);
+    }
+  };
 
   const handleFormAction = (formData: FormData) => {
     formData.set("name", name);
@@ -322,6 +393,8 @@ function EditModal({
     formData.set("address", address);
     formData.set("phone", phone);
     formData.set("fax", fax);
+    formData.set("lat", location ? String(location.lat) : "");
+    formData.set("lng", location ? String(location.lng) : "");
     // create 時のみ末尾に追加されるよう、initial.sort_order をそのまま渡す。
     // edit 時は updateOffice が sort_order を無視する（D&D で並び替え）。
     if (!isEdit) formData.set("sort_order", String(initial.sort_order));
@@ -385,6 +458,33 @@ function EditModal({
                 onChange={(e) => setAddress(e.target.value)}
               />
             </FormField>
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-sm font-medium text-foreground">
+                  地図上のピン位置
+                </span>
+                <button
+                  type="button"
+                  onClick={handleGeocodeFromAddress}
+                  disabled={geocoding || !address.trim()}
+                  className="text-xs text-accent hover:text-accent-hover disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {geocoding ? "検索中…" : "住所からピンを配置"}
+                </button>
+              </div>
+              <MapPicker
+                value={location}
+                onChange={setLocation}
+                onAddressReverseGeocoded={setAddress}
+                defaultCenter={{ lat: 33.2382, lng: 131.6126 }}
+                height={220}
+              />
+              {geocodeError && (
+                <p className="mt-1 text-xs text-[var(--color-status-rejected-fg)]">
+                  {geocodeError}
+                </p>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <FormField label="電話番号">
                 <TextInput

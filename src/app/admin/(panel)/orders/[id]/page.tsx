@@ -11,6 +11,7 @@ import {
   type MetaItem,
 } from "@/components/admin/ui";
 import OrderActions from "./order-actions";
+import MapView from "@/components/map/map-view";
 
 type OrderDetailItem = NonNullable<Awaited<ReturnType<typeof getOrder>>>["items"][number];
 
@@ -198,6 +199,30 @@ export default async function OrderDetailPage({
       <section className="mb-10">
         <SectionRule label="配送・リース" className="mb-3" />
         <MetaList items={deliveryItems} columns={2} />
+        {order.delivery_method === "delivery" &&
+          order.delivery_lat !== null &&
+          order.delivery_lng !== null && (
+            <div className="mt-4">
+              <MapView
+                lat={order.delivery_lat}
+                lng={order.delivery_lng}
+                height={260}
+                markerLabel={order.delivery_address ?? "現場"}
+              />
+            </div>
+          )}
+        {order.delivery_method === "pickup" &&
+          order.pickup_office?.lat != null &&
+          order.pickup_office?.lng != null && (
+            <div className="mt-4">
+              <MapView
+                lat={order.pickup_office.lat}
+                lng={order.pickup_office.lng}
+                height={260}
+                markerLabel={order.pickup_office.name}
+              />
+            </div>
+          )}
       </section>
 
       <section className="mb-10">

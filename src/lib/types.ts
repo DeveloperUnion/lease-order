@@ -36,6 +36,8 @@ export type Office = {
   address: string | null;
   phone: string | null;
   fax: string | null;
+  lat: number | null;
+  lng: number | null;
   sort_order: number;
   is_active: boolean;
 };
@@ -54,6 +56,8 @@ export type Order = {
   note: string | null;
   delivery_method: DeliveryMethod;
   delivery_address: string | null;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
   lease_start_date: string | null;
   lease_end_date: string | null;
   pickup_office_id: string | null;
