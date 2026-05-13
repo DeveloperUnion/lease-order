@@ -70,6 +70,8 @@ export default function NotificationBell({
     knownIdsRef.current = new Set([...recent.map((r) => r.id), ...extras.map((r) => r.id)]);
   }, [recent, extras]);
 
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+
   // Realtime subscription
   useEffect(() => {
     let cancelled = false;
@@ -135,7 +137,10 @@ export default function NotificationBell({
             setExtras((prev) => [row, ...prev]);
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          if (cancelled) return;
+          setRealtimeConnected(status === "SUBSCRIBED");
+        });
 
       scheduleNext(token.expiresAt);
     }
@@ -144,21 +149,24 @@ export default function NotificationBell({
 
     return () => {
       cancelled = true;
+      setRealtimeConnected(false);
       if (refreshTimer) clearTimeout(refreshTimer);
       if (channel && supabase) supabase.removeChannel(channel);
     };
   }, [audience]);
 
-  // Polling fallback: Realtime が届かない場合の保険。30 秒ごとに server props を
-  // 再フェッチする。タブが非アクティブな間はスキップして無駄打ちを避ける。
+  // Polling fallback: Realtime が SUBSCRIBED の間は走らせない (router.refresh() は
+  // RSC ツリー全体を再フェッチするためコストが高い)。接続失敗・切断時のみ 60 秒間隔で
+  // 保険として server props を取り直す。タブ非アクティブ中もスキップ。
   useEffect(() => {
-    const POLL_MS = 30_000;
+    if (realtimeConnected) return;
+    const POLL_MS = 60_000;
     const id = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       router.refresh();
     }, POLL_MS);
     return () => clearInterval(id);
-  }, [router]);
+  }, [router, realtimeConnected]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {

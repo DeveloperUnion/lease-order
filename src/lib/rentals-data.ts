@@ -398,20 +398,13 @@ export async function listAllOrdersByCustomer(
 }
 
 export async function countOverdueForCustomer(customerId: string, tenantId: string): Promise<number> {
-  const { data, error } = await supabaseAdmin
-    .from("orders")
-    .select("order_items(id, quantity, returned_quantity, lease_end_date)")
-    .eq("tenant_id", tenantId)
-    .eq("customer_id", customerId)
-    .not("status", "in", "(cancelled,completed,rejected)");
+  // overdue 判定は (quantity - returned_quantity > 0) という算術述語が必要で
+  // PostgREST のフィルタでは表現できないため RPC (migration 0015) に委譲する。
+  // 以前はテナントの全 orders + order_items をメモリロードしていた。
+  const { data, error } = await supabaseAdmin.rpc("count_overdue_for_customer", {
+    p_customer: customerId,
+    p_tenant: tenantId,
+  });
   if (error) throw error;
-  const today = todayIsoLocal();
-  let count = 0;
-  for (const row of (data ?? []) as { order_items: { id: string; quantity: number; returned_quantity: number; lease_end_date: string | null }[] | null }[]) {
-    for (const it of row.order_items ?? []) {
-      const remaining = it.quantity - it.returned_quantity;
-      if (remaining > 0 && isItemOverdue(it.lease_end_date, today)) count++;
-    }
-  }
-  return count;
+  return (data as number | null) ?? 0;
 }

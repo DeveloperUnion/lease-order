@@ -1,14 +1,10 @@
-import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
-import { countPendingOrders, countPendingRequests } from "@/lib/admin-data";
 import {
-  countUnreadForAdmin,
-  listNotificationsForAdmin,
-} from "@/lib/notifications-data";
-import { getTenantId, getTenantSlug } from "@/lib/tenant";
+  getNotificationBellData,
+  getSidebarData,
+} from "@/lib/admin-shell-data";
+import { getTenantSlug } from "@/lib/tenant";
 import { adminFontVariables } from "@/lib/admin-fonts";
 import AdminShell from "@/components/admin/admin-shell";
-import AdminNotificationBell from "@/components/admin/admin-notification-bell";
 
 export const dynamic = "force-dynamic";
 
@@ -17,41 +13,12 @@ export default async function AdminPanelLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const supabase = await createSupabaseServerClient();
-  const [
-    {
-      data: { user },
-    },
-    pendingCount,
-    pendingRequestCount,
-    tenantSlug,
-    tenantId,
-  ] = await Promise.all([
-    supabase.auth.getUser(),
-    countPendingOrders(),
-    countPendingRequests(),
-    getTenantSlug(),
-    getTenantId(),
-  ]);
-
-  const email = user?.email ?? null;
-  let unreadCount = 0;
-  let recent: Awaited<ReturnType<typeof listNotificationsForAdmin>> = [];
-  if (email) {
-    const { data: adminRow } = await supabaseAdmin
-      .from("admin_users")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("email", email.toLowerCase())
-      .maybeSingle();
-    const adminId = (adminRow as { id: string } | null)?.id ?? null;
-    if (adminId) {
-      [unreadCount, recent] = await Promise.all([
-        countUnreadForAdmin(adminId, tenantId),
-        listNotificationsForAdmin(adminId, tenantId, 100),
-      ]);
-    }
-  }
+  // 認証チェックは proxy で済んでいる。layout は tenant slug の解決だけ即座に行い、
+  // sidebar / 通知ベルのデータ取得は await せずに promise のまま AdminShell へ渡す。
+  // AdminShell 内の <Suspense> + use() で個別にストリーミング描画される。
+  const tenantSlug = await getTenantSlug();
+  const sidebarPromise = getSidebarData();
+  const notificationPromise = getNotificationBellData();
 
   return (
     <div
@@ -59,12 +26,8 @@ export default async function AdminPanelLayout({
       className={`${adminFontVariables} fixed inset-0 flex overflow-hidden bg-surface-muted font-[family-name:var(--font-body)]`}
     >
       <AdminShell
-        pendingCount={pendingCount}
-        pendingRequestCount={pendingRequestCount}
-        email={email}
-        notificationBell={
-          <AdminNotificationBell unreadCount={unreadCount} recent={recent} />
-        }
+        sidebarPromise={sidebarPromise}
+        notificationPromise={notificationPromise}
       >
         {children}
       </AdminShell>

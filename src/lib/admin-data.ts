@@ -594,101 +594,79 @@ export type PendingExtensionRequest = PendingRequestBase & {
 
 export type PendingRequest = PendingReturnRequest | PendingExtensionRequest;
 
-type ItemInfo = {
-  order_id: string;
-  order_number: string;
-  site_name: string | null;
-  company_name: string;
-  contact_name: string;
+// PostgREST のネスト selectで return_requests / lease_extensions から
+// 直接 order_items → orders までを 1 クエリで JOIN する。
+// 以前は orders 全件と order_items 全件をアプリ側で先にメモリロードしてから
+// 紐付けていたが、pending な申請の件数は通常少数なので、ここを起点に逆引きする方が
+// 圧倒的に安い (テナントの注文数に依存しない)。
+type RequestRowBase = {
+  id: string;
   order_item_id: string;
-  material_name: string;
+  reason: string | null;
+  requested_at: string;
+  order_items: {
+    id: string;
+    material_name: string;
+    orders: {
+      id: string;
+      order_number: string;
+      site_name: string | null;
+      company_name: string;
+      contact_name: string;
+    } | null;
+  } | null;
+};
+type ReturnRequestRow = RequestRowBase & { requested_quantity_delta: number };
+type ExtensionRequestRow = RequestRowBase & {
+  previous_end_date: string;
+  new_end_date: string;
 };
 
-async function buildItemInfoMap(tenantId: string): Promise<Map<string, ItemInfo>> {
-  const supabase = await getSupabaseTenant();
-  const { data, error } = await supabase
-    .from("orders")
-    .select(
-      "id, order_number, site_name, company_name, contact_name, order_items(id, material_name)"
-    )
-    .eq("tenant_id", tenantId);
-  if (error) throw error;
-  const map = new Map<string, ItemInfo>();
-  for (const o of (data ?? []) as {
-    id: string;
-    order_number: string;
-    site_name: string | null;
-    company_name: string;
-    contact_name: string;
-    order_items: { id: string; material_name: string }[] | null;
-  }[]) {
-    for (const it of o.order_items ?? []) {
-      map.set(it.id, {
-        order_id: o.id,
-        order_number: o.order_number,
-        site_name: o.site_name,
-        company_name: o.company_name,
-        contact_name: o.contact_name,
-        order_item_id: it.id,
-        material_name: it.material_name,
-      });
-    }
-  }
-  return map;
-}
+const PENDING_REQUEST_SELECT =
+  "id, order_item_id, reason, requested_at, order_items!inner(id, material_name, orders!inner(id, order_number, site_name, company_name, contact_name))";
 
 export async function listPendingRequests(): Promise<PendingRequest[]> {
   const tenantId = await getTenantId();
-  const itemInfoMap = await buildItemInfoMap(tenantId);
-  const itemIds = Array.from(itemInfoMap.keys());
-  if (itemIds.length === 0) return [];
-
   const supabase = await getSupabaseTenant();
-  const [{ data: returns, error: retErr }, { data: extensions, error: extErr }] =
-    await Promise.all([
-      supabase
-        .from("return_requests")
-        .select("id, order_item_id, requested_quantity_delta, reason, requested_at")
-        .in("order_item_id", itemIds)
-        .eq("status", "pending"),
-      supabase
-        .from("lease_extensions")
-        .select("id, order_item_id, previous_end_date, new_end_date, reason, requested_at")
-        .in("order_item_id", itemIds)
-        .eq("status", "pending"),
-    ]);
-  if (retErr) throw retErr;
-  if (extErr) throw extErr;
+  const [returnsRes, extensionsRes] = await Promise.all([
+    supabase
+      .from("return_requests")
+      .select(`${PENDING_REQUEST_SELECT}, requested_quantity_delta`)
+      .eq("tenant_id", tenantId)
+      .eq("status", "pending"),
+    supabase
+      .from("lease_extensions")
+      .select(`${PENDING_REQUEST_SELECT}, previous_end_date, new_end_date`)
+      .eq("tenant_id", tenantId)
+      .eq("status", "pending"),
+  ]);
+  if (returnsRes.error) throw returnsRes.error;
+  if (extensionsRes.error) throw extensionsRes.error;
 
   const items: PendingRequest[] = [];
-  for (const r of (returns ?? []) as {
-    id: string;
-    order_item_id: string;
-    requested_quantity_delta: number;
-    reason: string | null;
-    requested_at: string;
-  }[]) {
-    const info = itemInfoMap.get(r.order_item_id);
-    if (!info) continue;
+  for (const r of (returnsRes.data ?? []) as unknown as ReturnRequestRow[]) {
+    const oi = r.order_items;
+    const order = oi?.orders;
+    if (!oi || !order) continue;
     items.push({
       type: "return",
       id: r.id,
       requested_quantity_delta: r.requested_quantity_delta,
       reason: r.reason,
       requested_at: r.requested_at,
-      ...info,
+      order_id: order.id,
+      order_number: order.order_number,
+      site_name: order.site_name,
+      company_name: order.company_name,
+      contact_name: order.contact_name,
+      order_item_id: oi.id,
+      material_name: oi.material_name,
     });
   }
-  for (const e of (extensions ?? []) as {
-    id: string;
-    order_item_id: string;
-    previous_end_date: string;
-    new_end_date: string;
-    reason: string | null;
-    requested_at: string;
-  }[]) {
-    const info = itemInfoMap.get(e.order_item_id);
-    if (!info) continue;
+  for (const e of (extensionsRes.data ?? []) as unknown as ExtensionRequestRow[]) {
+    const oi = e.order_items;
+    const order = oi?.orders;
+    if (!oi || !order) continue;
     items.push({
       type: "extension",
       id: e.id,
@@ -696,7 +674,13 @@ export async function listPendingRequests(): Promise<PendingRequest[]> {
       new_end_date: e.new_end_date,
       reason: e.reason,
       requested_at: e.requested_at,
-      ...info,
+      order_id: order.id,
+      order_number: order.order_number,
+      site_name: order.site_name,
+      company_name: order.company_name,
+      contact_name: order.contact_name,
+      order_item_id: oi.id,
+      material_name: oi.material_name,
     });
   }
   items.sort((a, b) => b.requested_at.localeCompare(a.requested_at));
@@ -704,36 +688,35 @@ export async function listPendingRequests(): Promise<PendingRequest[]> {
 }
 
 // 申請は発注単位で一括承認するため、バッジは「申請が来ている発注数」をカウントする。
+// pending な申請数 × order_item の JOIN だけ取り、order_id で dedupe する。
 export async function countPendingRequests(): Promise<number> {
   const tenantId = await getTenantId();
-  const itemInfoMap = await buildItemInfoMap(tenantId);
-  const itemIds = Array.from(itemInfoMap.keys());
-  if (itemIds.length === 0) return 0;
-
   const supabase = await getSupabaseTenant();
-  const [{ data: returns, error: re }, { data: extensions, error: ee }] = await Promise.all([
+  const [returnsRes, extensionsRes] = await Promise.all([
     supabase
       .from("return_requests")
-      .select("order_item_id")
-      .in("order_item_id", itemIds)
+      .select("order_items!inner(order_id)")
+      .eq("tenant_id", tenantId)
       .eq("status", "pending"),
     supabase
       .from("lease_extensions")
-      .select("order_item_id")
-      .in("order_item_id", itemIds)
+      .select("order_items!inner(order_id)")
+      .eq("tenant_id", tenantId)
       .eq("status", "pending"),
   ]);
-  if (re) throw re;
-  if (ee) throw ee;
+  if (returnsRes.error) throw returnsRes.error;
+  if (extensionsRes.error) throw extensionsRes.error;
 
   const orderIds = new Set<string>();
-  for (const r of (returns ?? []) as { order_item_id: string }[]) {
-    const info = itemInfoMap.get(r.order_item_id);
-    if (info) orderIds.add(info.order_id);
+  for (const row of (returnsRes.data ?? []) as unknown as Array<{
+    order_items: { order_id: string } | null;
+  }>) {
+    if (row.order_items?.order_id) orderIds.add(row.order_items.order_id);
   }
-  for (const e of (extensions ?? []) as { order_item_id: string }[]) {
-    const info = itemInfoMap.get(e.order_item_id);
-    if (info) orderIds.add(info.order_id);
+  for (const row of (extensionsRes.data ?? []) as unknown as Array<{
+    order_items: { order_id: string } | null;
+  }>) {
+    if (row.order_items?.order_id) orderIds.add(row.order_items.order_id);
   }
   return orderIds.size;
 }

@@ -1,20 +1,79 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, use, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "./sidebar";
+import AdminNotificationBell from "./admin-notification-bell";
+import type {
+  NotificationBellData,
+  SidebarData,
+} from "@/lib/admin-shell-data";
+
+function SidebarWithData({
+  promise,
+  onNavigate,
+}: {
+  promise: Promise<SidebarData>;
+  onNavigate?: () => void;
+}) {
+  const { pendingCount, pendingRequestCount, email } = use(promise);
+  return (
+    <Sidebar
+      pendingCount={pendingCount}
+      pendingRequestCount={pendingRequestCount}
+      email={email}
+      onNavigate={onNavigate}
+    />
+  );
+}
+
+function BellWithData({
+  promise,
+}: {
+  promise: Promise<NotificationBellData>;
+}) {
+  const { unreadCount, recent } = use(promise);
+  return <AdminNotificationBell unreadCount={unreadCount} recent={recent} />;
+}
+
+function SidebarSkeleton() {
+  return (
+    <div className="flex h-full w-full flex-col bg-surface">
+      <div className="px-5 py-5 border-b border-rule">
+        <div className="h-5 w-32 bg-surface-muted rounded animate-pulse" />
+      </div>
+      <div className="flex-1 px-3 py-5 space-y-6">
+        {[0, 1, 2].map((g) => (
+          <div key={g} className="space-y-2">
+            <div className="px-3 h-3 w-16 bg-surface-muted rounded animate-pulse" />
+            <div className="space-y-1">
+              {[0, 1].map((i) => (
+                <div
+                  key={i}
+                  className="h-8 mx-1 bg-surface-muted rounded animate-pulse"
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BellSkeleton() {
+  return (
+    <div className="h-10 w-10 rounded-lg border border-border bg-surface-muted/40 animate-pulse" />
+  );
+}
 
 export default function AdminShell({
-  pendingCount,
-  pendingRequestCount,
-  email,
-  notificationBell,
+  sidebarPromise,
+  notificationPromise,
   children,
 }: {
-  pendingCount: number;
-  pendingRequestCount: number;
-  email: string | null;
-  notificationBell: React.ReactNode;
+  sidebarPromise: Promise<SidebarData>;
+  notificationPromise: Promise<NotificationBellData>;
   children: React.ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -30,7 +89,9 @@ export default function AdminShell({
   return (
     <div className="flex flex-1 min-h-0">
       <aside className="hidden lg:flex w-64 flex-shrink-0 border-r border-rule">
-        <Sidebar pendingCount={pendingCount} pendingRequestCount={pendingRequestCount} email={email} />
+        <Suspense fallback={<SidebarSkeleton />}>
+          <SidebarWithData promise={sidebarPromise} />
+        </Suspense>
       </aside>
 
       {drawerOpen && (
@@ -45,12 +106,12 @@ export default function AdminShell({
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <Sidebar
-          pendingCount={pendingCount}
-          pendingRequestCount={pendingRequestCount}
-          email={email}
-          onNavigate={() => setDrawerOpen(false)}
-        />
+        <Suspense fallback={<SidebarSkeleton />}>
+          <SidebarWithData
+            promise={sidebarPromise}
+            onNavigate={() => setDrawerOpen(false)}
+          />
+        </Suspense>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
@@ -74,7 +135,11 @@ export default function AdminShell({
           <span className="lg:hidden font-[family-name:var(--font-display)] text-base tracking-tight text-foreground">
             管理コンソール
           </span>
-          <div className="ml-auto">{notificationBell}</div>
+          <div className="ml-auto">
+            <Suspense fallback={<BellSkeleton />}>
+              <BellWithData promise={notificationPromise} />
+            </Suspense>
+          </div>
         </header>
 
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">{children}</div>

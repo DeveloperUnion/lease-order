@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState, useTransition } from "react";
 import type { AdminCategoryRow } from "@/lib/admin-data";
 import {
@@ -172,14 +173,15 @@ export default function AdminCategoriesView({
                     <circle cx="13" cy="15" r="1.4" />
                   </svg>
                 </span>
-                <div className="w-12 h-12 bg-surface-muted border border-rule flex-shrink-0 flex items-center justify-center overflow-hidden">
+                <div className="relative w-12 h-12 bg-surface-muted border border-rule flex-shrink-0 flex items-center justify-center overflow-hidden">
                   {cat.image_url ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
+                    <Image
                       src={cat.image_url}
                       alt=""
+                      fill
+                      sizes="48px"
                       draggable={false}
-                      className="w-full h-full object-cover"
+                      className="object-cover"
                     />
                   ) : (
                     <span className="font-[family-name:var(--font-mono)] text-[9px] text-subtle uppercase">
