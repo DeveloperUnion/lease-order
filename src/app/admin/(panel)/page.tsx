@@ -219,7 +219,7 @@ export default async function AdminPage() {
         {upcoming.length === 0 ? (
           <EmptyState
             title="今日・明日の出荷予定はありません"
-            description="lease_start_date が今日または明日の承認済み発注がここに並びます。"
+            description="リース開始日が今日または明日の承認済み発注がここに並びます。"
           />
         ) : (
           <DataTable
