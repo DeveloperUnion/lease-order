@@ -50,7 +50,14 @@ export function mintTenantJwt(opts: {
 }): string {
   const now = Math.floor(Date.now() / 1000);
   const ttl = opts.ttlSeconds ?? DEFAULT_TTL_SECONDS;
-  const header = { alg: "ES256", typ: "JWT" };
+  // kid は Supabase Dashboard の JWT Keys → Current Key の ID。Realtime の
+  // verify は JWKS から kid 完全一致のキーを引くため、header.kid が必須。
+  // kid と private key の対応が崩れると Realtime だけが落ちる（PostgREST は
+  // JWKS の全鍵 fallback で通るため）ので、rotation 時は private key と
+  // SUPABASE_JWT_KID を必ずペアで更新する。
+  const kid = process.env.SUPABASE_JWT_KID;
+  if (!kid) throw new Error("SUPABASE_JWT_KID is not set");
+  const header = { alg: "ES256", typ: "JWT", kid };
   const claims: TenantJwtClaims = {
     role: "authenticated",
     aud: "authenticated",
