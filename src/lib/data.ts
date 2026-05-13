@@ -70,7 +70,7 @@ export const getOffices = cache(async (): Promise<Office[]> => {
   const supabase = await getSupabaseTenant();
   const { data, error } = await supabase
     .from("offices")
-    .select("id, name, area, address, phone, fax, sort_order, is_active")
+    .select("id, name, area, address, phone, fax, lat, lng, sort_order, is_active")
     .eq("tenant_id", tenantId)
     .eq("is_active", true)
     .order("sort_order");

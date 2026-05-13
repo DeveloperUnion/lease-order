@@ -7,6 +7,7 @@ import type { CustomerSession } from "@/lib/customer-auth";
 import type { DeliveryMethod, Office } from "@/lib/types";
 import { submitOrder } from "./actions";
 import AddressAutocomplete from "./address-autocomplete";
+import MapPicker, { type LatLng } from "@/components/map/map-picker";
 
 type Props = { offices: Office[]; customer: CustomerSession };
 
@@ -69,6 +70,7 @@ export default function CartForm({ offices, customer }: Props) {
   const [note, setNote] = useState("");
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("delivery");
   const [deliveryAddress, setDeliveryAddress] = useState(customer.default_address ?? "");
+  const [deliveryLocation, setDeliveryLocation] = useState<LatLng | null>(null);
   const [pickupOfficeId, setPickupOfficeId] = useState("");
   const [leaseStartDate, setLeaseStartDate] = useState("");
   const [leaseEndDate, setLeaseEndDate] = useState("");
@@ -107,6 +109,10 @@ export default function CartForm({ offices, customer }: Props) {
         note,
         deliveryMethod,
         deliveryAddress: deliveryMethod === "delivery" ? deliveryAddress : "",
+        deliveryLat:
+          deliveryMethod === "delivery" ? deliveryLocation?.lat ?? null : null,
+        deliveryLng:
+          deliveryMethod === "delivery" ? deliveryLocation?.lng ?? null : null,
         pickupOfficeId: deliveryMethod === "pickup" ? pickupOfficeId : "",
         leaseStartDate,
         leaseEndDate,
@@ -337,8 +343,18 @@ export default function CartForm({ offices, customer }: Props) {
                   <AddressAutocomplete
                     value={deliveryAddress}
                     onChange={setDeliveryAddress}
+                    onLocationChange={setDeliveryLocation}
                     placeholder="例: 大分県大分市新貝6番7号"
                   />
+                  <div className="mt-3">
+                    <MapPicker
+                      value={deliveryLocation}
+                      onChange={setDeliveryLocation}
+                      onAddressReverseGeocoded={setDeliveryAddress}
+                      defaultCenter={{ lat: 33.2382, lng: 131.6126 }}
+                      height={240}
+                    />
+                  </div>
                 </Field>
               )}
 

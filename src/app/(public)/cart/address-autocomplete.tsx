@@ -7,6 +7,7 @@ type Props = {
   value: string;
   onChange: (combined: string) => void;
   placeholder?: string;
+  onLocationChange?: (loc: { lat: number; lng: number } | null) => void;
 };
 
 type Suggestion = {
@@ -14,7 +15,7 @@ type Suggestion = {
   description: string;
 };
 
-export default function AddressAutocomplete({ value, onChange, placeholder }: Props) {
+export default function AddressAutocomplete({ value, onChange, placeholder, onLocationChange }: Props) {
   const [query, setQuery] = useState(value);
   const [buildingDetail, setBuildingDetail] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -97,18 +98,23 @@ export default function AddressAutocomplete({ value, onChange, placeholder }: Pr
     placesServiceRef.current.getDetails(
       {
         placeId: s.placeId,
-        fields: ["formatted_address"],
+        fields: ["formatted_address", "geometry.location"],
         sessionToken: sessionTokenRef.current,
       },
       (place, status) => {
+        const ok = status === google.maps.places.PlacesServiceStatus.OK && place;
         const address =
-          status === google.maps.places.PlacesServiceStatus.OK && place?.formatted_address
+          ok && place?.formatted_address
             ? place.formatted_address
             : s.description;
         setQuery(address);
         setSuggestions([]);
         setShowSuggestions(false);
         sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
+        const loc = ok ? place?.geometry?.location : undefined;
+        if (loc && onLocationChange) {
+          onLocationChange({ lat: loc.lat(), lng: loc.lng() });
+        }
       },
     );
   };
@@ -134,6 +140,7 @@ export default function AddressAutocomplete({ value, onChange, placeholder }: Pr
             setQuery(results[0].formatted_address ?? "");
             setSuggestions([]);
             setShowSuggestions(false);
+            onLocationChange?.(latlng);
           } else {
             setGeoError("住所の取得に失敗しました");
           }

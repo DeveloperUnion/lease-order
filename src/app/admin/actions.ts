@@ -472,6 +472,8 @@ type OfficeInput = {
   address: string | null;
   phone: string | null;
   fax: string | null;
+  lat: number | null;
+  lng: number | null;
   sortOrder: number;
   isActive: boolean;
 };
@@ -483,12 +485,21 @@ function parseOfficeInput(formData: FormData): OfficeInput {
     const v = String(formData.get(k) ?? "").trim();
     return v.length > 0 ? v : null;
   };
+  const getCoord = (k: string, min: number, max: number): number | null => {
+    const raw = String(formData.get(k) ?? "").trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < min || n > max) return null;
+    return n;
+  };
   return {
     name,
     area: get("area"),
     address: get("address"),
     phone: get("phone"),
     fax: get("fax"),
+    lat: getCoord("lat", -90, 90),
+    lng: getCoord("lng", -180, 180),
     sortOrder: Number(formData.get("sort_order") ?? 0) || 0,
     isActive:
       formData.get("is_active") === "on" || formData.get("is_active") === "true",
@@ -506,6 +517,8 @@ export async function createOffice(formData: FormData) {
     address: input.address,
     phone: input.phone,
     fax: input.fax,
+    lat: input.lat,
+    lng: input.lng,
     sort_order: input.sortOrder,
     is_active: input.isActive,
   });
@@ -527,6 +540,8 @@ export async function updateOffice(officeId: string, formData: FormData) {
       address: input.address,
       phone: input.phone,
       fax: input.fax,
+      lat: input.lat,
+      lng: input.lng,
       is_active: input.isActive,
     })
     .eq("id", officeId)
