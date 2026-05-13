@@ -369,9 +369,9 @@ export async function listAllOrdersByCustomer(
   if (statusFilter === "completed") {
     query = query.eq("status", "completed");
   } else if (statusFilter === "cancelled") {
-    query = query.eq("status", "cancelled");
+    query = query.in("status", ["cancelled", "rejected"]);
   } else if (statusFilter === "active") {
-    query = query.not("status", "in", "(cancelled,completed)");
+    query = query.not("status", "in", "(cancelled,completed,rejected)");
   }
 
   const { data, error } = await query;
@@ -403,7 +403,7 @@ export async function countOverdueForCustomer(customerId: string, tenantId: stri
     .select("order_items(id, quantity, returned_quantity, lease_end_date)")
     .eq("tenant_id", tenantId)
     .eq("customer_id", customerId)
-    .not("status", "in", "(cancelled,completed)");
+    .not("status", "in", "(cancelled,completed,rejected)");
   if (error) throw error;
   const today = todayIsoLocal();
   let count = 0;

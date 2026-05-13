@@ -30,7 +30,10 @@ export default async function RentalDetailPage({
   const activeItems = order.items.filter((i) => i.remaining > 0);
   const completedItems = order.items.filter((i) => i.remaining === 0);
   const hasOverdue = activeItems.some((i) => i.is_overdue);
-  const isClosed = order.status === "completed" || order.status === "cancelled";
+  const isClosed =
+    order.status === "completed" ||
+    order.status === "cancelled" ||
+    order.status === "rejected";
   const isPreShipment = !isClosed && order.status !== "renting";
   const isReadOnly = isClosed || isPreShipment;
 
@@ -52,8 +55,20 @@ export default async function RentalDetailPage({
           {order.site_name ?? "現場未設定"}
         </h1>
         {isClosed && (
-          <StatusBadge tone={order.status === "completed" ? "success" : "neutral"}>
-            {order.status === "completed" ? "完了" : "キャンセル"}
+          <StatusBadge
+            tone={
+              order.status === "completed"
+                ? "success"
+                : order.status === "rejected"
+                  ? "danger"
+                  : "neutral"
+            }
+          >
+            {order.status === "completed"
+              ? "完了"
+              : order.status === "rejected"
+                ? "却下"
+                : "キャンセル"}
           </StatusBadge>
         )}
         {hasOverdue && !isClosed && (
@@ -93,7 +108,11 @@ export default async function RentalDetailPage({
           }`}
         >
           <p className="text-sm font-semibold">
-            {order.status === "completed" ? "この発注は完了しています" : "この発注はキャンセルされました"}
+            {order.status === "completed"
+              ? "この発注は完了しています"
+              : order.status === "rejected"
+                ? "この発注は却下されました"
+                : "この発注はキャンセルされました"}
           </p>
           <p className="text-xs mt-0.5 opacity-80">
             参照のみ可能です。返却・延長申請はできません。
