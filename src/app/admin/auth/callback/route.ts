@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { extractSlugFromHost } from "@/lib/tenant";
+import { isAdminAllowedForTenant } from "@/lib/admin-access";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -18,13 +19,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/admin/login?error=invalid_code", request.url));
   }
 
-  const { data: allowed, error: allowError } = await supabaseAdmin
-    .from("admin_users")
-    .select("id")
-    .eq("email", data.user.email.toLowerCase())
-    .maybeSingle();
+  // host から解決した tenant に紐付く admin_users 行があるか確認する。
+  // メールが他テナントの admin として登録されていてもこの tenant では拒否する。
+  const slug = extractSlugFromHost(request.headers.get("host") ?? "");
+  const allowed = slug
+    ? await isAdminAllowedForTenant(data.user.email, slug)
+    : false;
 
-  if (allowError || !allowed) {
+  if (!allowed) {
     await supabase.auth.signOut();
     return NextResponse.redirect(new URL("/admin/login?error=not_allowed", request.url));
   }

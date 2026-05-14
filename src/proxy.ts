@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { verifySessionToken, CUSTOMER_COOKIE_NAME } from "@/lib/customer-auth";
+import { extractSlugFromHost } from "@/lib/tenant";
+import { isAdminAllowedForTenant } from "@/lib/admin-access";
 
 const PUBLIC_ADMIN_PATHS = ["/admin/login", "/admin/auth"];
 const PUBLIC_CUSTOMER_PATHS = ["/login"];
@@ -46,6 +48,20 @@ async function adminProxy(request: NextRequest) {
 
   if (claims && pathname === "/admin/login") {
     return NextResponse.redirect(new URL("/admin", request.url));
+  }
+
+  // ログイン済みかつ保護ルートのとき、host が指す tenant の admin として
+  // 登録されているか確認する。Supabase Auth に有効な session があっても、
+  // admin_users に当該 tenant の行が無ければアクセスを拒否する。
+  // signOut はせず redirect のみ — 自分の所属 tenant の URL に行けばそのまま使えるようにする。
+  if (claims && !isPublic) {
+    const email = (claims.email as string | undefined) ?? null;
+    const slug = extractSlugFromHost(request.headers.get("host") ?? "");
+    if (!email || !slug || !(await isAdminAllowedForTenant(email, slug))) {
+      const loginUrl = new URL("/admin/login", request.url);
+      loginUrl.searchParams.set("error", "tenant_mismatch");
+      return NextResponse.redirect(loginUrl);
+    }
   }
 
   return response;
