@@ -80,7 +80,7 @@ export default function CustomerChatView({
   );
   useEffect(() => {
     if (!hasUnreadFromOther) return;
-    fetch(`/api/chat/conversations/${conversationId}/read`, {
+    fetch(`/api/chat/customer/conversations/${conversationId}/read`, {
       method: "POST",
       cache: "no-store",
     }).catch(() => {});
@@ -199,6 +199,7 @@ export default function CustomerChatView({
     setExtras((prev) => [...prev, optimistic]);
 
     const result = await sendChatMessage({
+      audience: "customer",
       conversationId,
       body: input.body,
       attachments: input.attachments,
@@ -255,6 +256,7 @@ export default function CustomerChatView({
         onSend={handleSend}
         quoted={quoted}
         onClearQuoted={() => setQuoted(null)}
+        uploadUrl="/api/chat/customer/uploads"
       />
     </div>
   );

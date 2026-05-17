@@ -16,6 +16,7 @@ export default function ChatComposer({
   quoted,
   onClearQuoted,
   disabled,
+  uploadUrl,
 }: {
   onSend: (input: {
     body: string;
@@ -25,6 +26,7 @@ export default function ChatComposer({
   quoted: QuotedOrder;
   onClearQuoted: () => void;
   disabled?: boolean;
+  uploadUrl: string;
 }) {
   const [body, setBody] = useState("");
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
@@ -76,7 +78,7 @@ export default function ChatComposer({
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/chat/uploads", { method: "POST", body: fd });
+      const res = await fetch(uploadUrl, { method: "POST", body: fd });
       const json = await res.json();
       if (!res.ok || !json.ok) {
         setError(json.error ?? "アップロードに失敗しました");

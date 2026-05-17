@@ -92,7 +92,7 @@ export default function AdminChatScreen({
   );
   useEffect(() => {
     if (!selectedId || !hasUnreadFromCustomer) return;
-    fetch(`/api/chat/conversations/${selectedId}/read`, {
+    fetch(`/api/chat/admin/conversations/${selectedId}/read`, {
       method: "POST",
       cache: "no-store",
     }).catch(() => {});
@@ -230,6 +230,7 @@ export default function AdminChatScreen({
     setExtras((prev) => [...prev, optimistic]);
 
     const result = await sendChatMessage({
+      audience: "admin",
       conversationId: selected.conversationId,
       body: input.body,
       attachments: input.attachments,
@@ -350,6 +351,7 @@ export default function AdminChatScreen({
               onSend={handleSend}
               quoted={null}
               onClearQuoted={() => {}}
+              uploadUrl="/api/chat/admin/uploads"
             />
           </>
         ) : (

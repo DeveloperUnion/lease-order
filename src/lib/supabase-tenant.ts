@@ -23,11 +23,28 @@ export type RecipientIdentity =
   | { audience: "admin"; recipientId: string; tenantId: string; subject: string }
   | { audience: "anonymous"; tenantId: string; subject: string };
 
-export async function resolveRecipientIdentity(): Promise<RecipientIdentity> {
-  // 管理者 Supabase Auth を先にチェックする。
-  // 理由: DISABLE_AUTH=1 のとき getCurrentCustomer がゲスト顧客を返してしまうため、
-  // 顧客チェックを先にやると admin ページからの API 呼び出しが「顧客発」と誤判定される。
-  // 実セッション (=明示的に認証されている) は常に正としたい。
+// 明示的 audience 解決ヘルパー。/api/chat/* など、クライアントが
+// 「自分は customer/admin のどちらか」を申告できるエンドポイントで使う。
+// セッションが該当する側になければ anonymous を返す → 呼び出し側で 401 に。
+//
+// resolveRecipientIdentity が「先に見つかった方を使う」推論ベースなのに対し、
+// こちらは UI から明示された側に固定するので、同一ブラウザに両セッションが
+// 同居していても誤判定しない。
+export async function resolveAsCustomer(): Promise<RecipientIdentity> {
+  const customer = await getCurrentCustomer();
+  if (customer) {
+    return {
+      audience: "customer",
+      recipientId: customer.id,
+      tenantId: customer.tenant_id,
+      subject: `customer:${customer.id}`,
+    };
+  }
+  const tenantId = await getTenantId();
+  return { audience: "anonymous", tenantId, subject: `tenant:${tenantId}` };
+}
+
+export async function resolveAsAdmin(): Promise<RecipientIdentity> {
   const ssr = await createSupabaseServerClient();
   const {
     data: { user },
@@ -47,7 +64,34 @@ export async function resolveRecipientIdentity(): Promise<RecipientIdentity> {
       };
     }
   }
+  // DISABLE_AUTH=1 のときはゲスト admin（テナント最古の admin_users）にフォールバック
+  if (process.env.DISABLE_AUTH === "1") {
+    const tenantId = await getTenantId();
+    const { data } = await supabaseAdmin
+      .from("admin_users")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (data?.id) {
+      return {
+        audience: "admin",
+        recipientId: data.id,
+        tenantId,
+        subject: `admin:${data.id}`,
+      };
+    }
+  }
+  const tenantId = await getTenantId();
+  return { audience: "anonymous", tenantId, subject: `tenant:${tenantId}` };
+}
 
+// 推論ベース（先に見つかった方を採用）。realtime-token など、エンドポイント側で
+// 「どっち側か」を確定できない用途用。
+// 送信や既読のように「どっち側として処理するか」を明確に分けたい場合は、
+// このではなく resolveAsCustomer / resolveAsAdmin を URL ごとに使い分ける。
+export async function resolveRecipientIdentity(): Promise<RecipientIdentity> {
   const customer = await getCurrentCustomer();
   if (customer) {
     return {
@@ -56,6 +100,26 @@ export async function resolveRecipientIdentity(): Promise<RecipientIdentity> {
       tenantId: customer.tenant_id,
       subject: `customer:${customer.id}`,
     };
+  }
+
+  const ssr = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await ssr.auth.getUser();
+  if (user?.email) {
+    const { data: row } = await supabaseAdmin
+      .from("admin_users")
+      .select("id, tenant_id")
+      .eq("email", user.email.toLowerCase())
+      .maybeSingle();
+    if (row) {
+      return {
+        audience: "admin",
+        recipientId: row.id,
+        tenantId: row.tenant_id,
+        subject: `admin:${row.id}`,
+      };
+    }
   }
 
   const tenantId = await getTenantId();
