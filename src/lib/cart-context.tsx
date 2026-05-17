@@ -1,46 +1,73 @@
 "use client";
 
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
-import { CartItem, Material } from "./types";
+import { CartItem, Material, SpecSelectionLabel } from "./types";
+import { buildCartLineId } from "./spec-resolver";
+
+type AddItemInput = {
+  material: Material;
+  quantity: number;
+  variantId?: string;
+  variantName?: string;
+  selections?: SpecSelectionLabel[];
+};
 
 type CartContextType = {
   items: CartItem[];
-  addItem: (material: Material, quantity: number) => void;
-  updateQuantity: (materialId: string, quantity: number) => void;
-  removeItem: (materialId: string) => void;
+  addItem: (input: AddItemInput) => void;
+  addItems: (inputs: AddItemInput[]) => void;
+  updateQuantity: (cartLineId: string, quantity: number) => void;
+  removeItem: (cartLineId: string) => void;
   clearCart: () => void;
   totalItems: number;
 };
 
 const CartContext = createContext<CartContextType | null>(null);
 
+function toCartItem(input: AddItemInput): CartItem {
+  return {
+    cartLineId: buildCartLineId(input.material.id, input.variantId),
+    material: input.material,
+    quantity: input.quantity,
+    variantId: input.variantId,
+    variantName: input.variantName,
+    selections: input.selections,
+  };
+}
+
+function mergeItem(prev: CartItem[], item: CartItem): CartItem[] {
+  const existing = prev.find((i) => i.cartLineId === item.cartLineId);
+  if (existing) {
+    return prev.map((i) =>
+      i.cartLineId === item.cartLineId
+        ? { ...i, quantity: i.quantity + item.quantity }
+        : i
+    );
+  }
+  return [...prev, item];
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
 
-  const addItem = useCallback((material: Material, quantity: number) => {
-    setItems((prev) => {
-      const existing = prev.find((item) => item.material.id === material.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.material.id === material.id
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        );
-      }
-      return [...prev, { material, quantity }];
-    });
+  const addItem = useCallback((input: AddItemInput) => {
+    setItems((prev) => mergeItem(prev, toCartItem(input)));
   }, []);
 
-  const updateQuantity = useCallback((materialId: string, quantity: number) => {
+  const addItems = useCallback((inputs: AddItemInput[]) => {
+    setItems((prev) => inputs.reduce((acc, i) => mergeItem(acc, toCartItem(i)), prev));
+  }, []);
+
+  const updateQuantity = useCallback((cartLineId: string, quantity: number) => {
     setItems((prev) =>
       prev.map((item) =>
-        item.material.id === materialId ? { ...item, quantity } : item
+        item.cartLineId === cartLineId ? { ...item, quantity } : item
       )
     );
   }, []);
 
-  const removeItem = useCallback((materialId: string) => {
-    setItems((prev) => prev.filter((item) => item.material.id !== materialId));
+  const removeItem = useCallback((cartLineId: string) => {
+    setItems((prev) => prev.filter((item) => item.cartLineId !== cartLineId));
   }, []);
 
   const clearCart = useCallback(() => setItems([]), []);
@@ -49,7 +76,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, updateQuantity, removeItem, clearCart, totalItems }}
+      value={{ items, addItem, addItems, updateQuantity, removeItem, clearCart, totalItems }}
     >
       {children}
     </CartContext.Provider>
