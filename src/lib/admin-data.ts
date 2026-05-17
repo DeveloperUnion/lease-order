@@ -5,8 +5,11 @@ import type {
   Category,
   DeliveryMethod,
   Material,
-  MaterialVariant,
+  MaterialVariantWithOptions,
   Office,
+  SpecGroup,
+  SpecOption,
+  SpecSelectionType,
 } from "./types";
 
 export type AdminCategoryRow = Category & { material_count: number };
@@ -91,8 +94,47 @@ export type MaterialImageRow = {
 };
 
 export type MaterialDetail = Material & {
-  variants: MaterialVariant[];
+  variants: MaterialVariantWithOptions[];
+  spec_groups: SpecGroup[];
   images: MaterialImageRow[];
+};
+
+type SpecOptionRaw = {
+  id: string;
+  spec_group_id: string;
+  label: string;
+  short_code: string | null;
+  sort_order: number;
+  is_active: boolean;
+};
+
+type SpecGroupRaw = {
+  id: string;
+  material_id: string;
+  name: string;
+  description: string | null;
+  selection_type: SpecSelectionType;
+  is_required: boolean;
+  sort_order: number;
+  is_active: boolean;
+  spec_options: SpecOptionRaw[] | null;
+};
+
+type VariantOptionJoin = {
+  spec_group_id: string;
+  spec_option_id: string;
+};
+
+type VariantRaw = {
+  id: string;
+  material_id: string;
+  name: string;
+  unit: string | null;
+  sku: string | null;
+  spec: Record<string, string> | null;
+  sort_order: number;
+  is_active: boolean;
+  material_variant_options: VariantOptionJoin[] | null;
 };
 
 type MaterialDetailRaw = {
@@ -103,7 +145,8 @@ type MaterialDetailRaw = {
   spec: Record<string, string> | null;
   sort_order: number;
   is_active: boolean;
-  material_variants: MaterialVariant[] | null;
+  material_variants: VariantRaw[] | null;
+  spec_groups: SpecGroupRaw[] | null;
   material_images:
     | {
         image_id: string;
@@ -114,6 +157,51 @@ type MaterialDetailRaw = {
     | null;
 };
 
+function mapSpecOption(row: SpecOptionRaw): SpecOption {
+  return {
+    id: row.id,
+    spec_group_id: row.spec_group_id,
+    label: row.label,
+    short_code: row.short_code,
+    sort_order: row.sort_order,
+    is_active: row.is_active,
+  };
+}
+
+function mapSpecGroup(row: SpecGroupRaw): SpecGroup {
+  return {
+    id: row.id,
+    material_id: row.material_id,
+    name: row.name,
+    description: row.description,
+    selection_type: row.selection_type,
+    is_required: row.is_required,
+    sort_order: row.sort_order,
+    is_active: row.is_active,
+    options: (row.spec_options ?? [])
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map(mapSpecOption),
+  };
+}
+
+function mapVariant(row: VariantRaw): MaterialVariantWithOptions {
+  return {
+    id: row.id,
+    material_id: row.material_id,
+    name: row.name,
+    unit: row.unit,
+    sku: row.sku,
+    spec: row.spec,
+    sort_order: row.sort_order,
+    is_active: row.is_active,
+    options: (row.material_variant_options ?? []).map((o) => ({
+      spec_group_id: o.spec_group_id,
+      spec_option_id: o.spec_option_id,
+    })),
+  };
+}
+
 export async function getMaterialDetail(
   id: string
 ): Promise<MaterialDetail | null> {
@@ -122,7 +210,12 @@ export async function getMaterialDetail(
   const { data, error } = await supabase
     .from("materials")
     .select(
-      "id, category_id, name, description, spec, sort_order, is_active, material_variants(id, material_id, name, unit, sku, spec, sort_order, is_active), material_images(image_id, sort_order, is_primary, images(url, caption))"
+      `id, category_id, name, description, spec, sort_order, is_active,
+       material_variants(id, material_id, name, unit, sku, spec, sort_order, is_active,
+         material_variant_options(spec_group_id, spec_option_id)),
+       spec_groups(id, material_id, name, description, selection_type, is_required, sort_order, is_active,
+         spec_options(id, spec_group_id, label, short_code, sort_order, is_active)),
+       material_images(image_id, sort_order, is_primary, images(url, caption))`
     )
     .eq("tenant_id", tenantId)
     .eq("id", id)
@@ -144,7 +237,12 @@ export async function getMaterialDetail(
   const primary = images.find((i) => i.is_primary) ?? images[0];
   const variants = (raw.material_variants ?? [])
     .slice()
-    .sort((a, b) => a.sort_order - b.sort_order);
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map(mapVariant);
+  const spec_groups = (raw.spec_groups ?? [])
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map(mapSpecGroup);
 
   return {
     id: raw.id,
@@ -157,6 +255,7 @@ export async function getMaterialDetail(
     image_url: primary?.url ?? null,
     catalog_pages: images.map((i) => i.url),
     variants,
+    spec_groups,
     images,
   };
 }

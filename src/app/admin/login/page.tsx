@@ -7,6 +7,8 @@ type SearchParams = Promise<{ error?: string; next?: string }>;
 const ERROR_MESSAGES: Record<string, string> = {
   not_allowed: "このメールアドレスは管理画面のアクセス権がありません。",
   invalid_code: "ログインリンクが無効か期限切れです。再度メールを送信してください。",
+  tenant_mismatch:
+    "このアカウントは別テナントの管理者として登録されています。所属テナントの URL からアクセスしてください。",
 };
 
 export default async function LoginPage({
