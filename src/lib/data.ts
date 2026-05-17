@@ -27,7 +27,6 @@ type SpecGroupRow = {
   id: string;
   material_id: string;
   name: string;
-  is_required: boolean;
   sort_order: number;
   is_active: boolean;
   spec_options: SpecOptionRow[] | null;
@@ -63,7 +62,6 @@ function mapSpecGroup(row: SpecGroupRow): SpecGroup {
     id: row.id,
     material_id: row.material_id,
     name: row.name,
-    is_required: row.is_required,
     sort_order: row.sort_order,
     options,
   };
@@ -112,7 +110,7 @@ export const getAllMaterials = cache(async (): Promise<Material[]> => {
     .select(
       `id, category_id, name, description, spec, sort_order, is_active,
        material_images(sort_order, is_primary, images(url)),
-       spec_groups(id, material_id, name, is_required, sort_order, is_active,
+       spec_groups(id, material_id, name, sort_order, is_active,
          spec_options(id, spec_group_id, label, sort_order, is_active))`
     )
     .eq("tenant_id", tenantId)

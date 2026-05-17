@@ -30,7 +30,6 @@ export type SpecGroup = {
   id: string;
   material_id: string;
   name: string;
-  is_required: boolean;
   sort_order: number;
   options: SpecOption[];
 };

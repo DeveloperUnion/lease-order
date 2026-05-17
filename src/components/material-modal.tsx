@@ -35,11 +35,9 @@ export default function MaterialModal({ material, onClose }: Props) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // 必須仕様がすべて選ばれているか
-  const allRequiredSatisfied = specGroups
-    .filter((g) => g.is_required)
-    .every((g) => selections[g.id]);
-  const ctaEnabled = allRequiredSatisfied;
+  // 仕様は常に必須として扱うので、全 spec_groups が選択済みかチェック
+  const allSelected = specGroups.every((g) => selections[g.id]);
+  const ctaEnabled = allSelected;
 
   function selectOption(groupId: string, optionId: string) {
     setSelections((prev) => ({ ...prev, [groupId]: optionId }));
@@ -49,7 +47,7 @@ export default function MaterialModal({ material, onClose }: Props) {
     const labels: SpecSelectionLabel[] = [];
     for (const g of specGroups) {
       const optId = selections[g.id];
-      if (!optId) continue; // 任意で未選択はスキップ
+      if (!optId) continue;
       const opt = g.options.find((o) => o.id === optId);
       if (!opt) continue;
       labels.push({
@@ -227,11 +225,6 @@ function SpecGroupBlock({
     <div>
       <div className="flex items-center gap-2 mb-2">
         <span className="text-sm font-bold text-foreground">{group.name}</span>
-        {group.is_required && (
-          <span className="text-[10px] font-semibold text-white bg-rose-500 px-1.5 py-0.5 rounded">
-            必須
-          </span>
-        )}
       </div>
       <div className="grid grid-cols-2 gap-2">
         {group.options.map((opt) => {
