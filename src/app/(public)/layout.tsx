@@ -5,6 +5,7 @@ import { getAllMaterials, getCategories } from "@/lib/data";
 import { getCurrentCustomer } from "@/lib/customer-auth";
 import Header from "@/components/header";
 import MainPadding from "@/components/main-padding";
+import SyncRunner from "@/lib/offline/sync-runner";
 
 export default async function PublicLayout({
   children,
@@ -18,7 +19,11 @@ export default async function PublicLayout({
 
   return (
     <CatalogProvider catalogPromise={catalogPromise}>
-      <CartProvider>
+      <CartProvider
+        tenantId={customer?.tenant_id ?? null}
+        customerId={customer?.id ?? null}
+      >
+        <SyncRunner />
         <Suspense fallback={<div className="h-14 border-b border-border bg-surface" />}>
           <Header />
         </Suspense>
