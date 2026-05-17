@@ -31,8 +31,12 @@ export function labelForNotification(row: NotificationRow): string {
       return `新規発注: ${company}${order ? ` ${order}` : ""}`;
     case "return_requested":
       return `返却申請: ${company}`;
-    case "return_acknowledged":
+    case "return_scheduled":
+      return `返却予定を確定しました${order ? ` (${order})` : ""}`;
+    case "return_completed":
       return `返却を受領しました${order ? ` (${order})` : ""}`;
+    case "return_cancelled":
+      return `返却予定を取りやめました${order ? ` (${order})` : ""}`;
     case "return_rejected":
       return `返却の確認が必要です${order ? ` (${order})` : ""}`;
     case "extension_requested":

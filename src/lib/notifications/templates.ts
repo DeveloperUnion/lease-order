@@ -94,7 +94,30 @@ export function renderTemplate(
           .filter(Boolean)
           .join("\n"),
       };
-    case "return_acknowledged":
+    case "return_scheduled": {
+      const transportLabel =
+        ctx.transportMethod === "pickup"
+          ? "弊社が取りに伺います"
+          : ctx.transportMethod === "dropoff"
+          ? `お持ち込み${ctx.dropoffOfficeName ? `（${ctx.dropoffOfficeName}）` : ""}`
+          : "";
+      return {
+        subject: `【返却 予定確定】${ctx.orderNumber}`,
+        body: [
+          greeting,
+          "",
+          "返却の予定を確定いたしました。",
+          "",
+          `発注番号: ${ctx.orderNumber}`,
+          ctx.scheduledDate ? `予定日: ${ctx.scheduledDate}` : "",
+          transportLabel ? `方法: ${transportLabel}` : "",
+          ctx.itemSummary ? `内容: ${ctx.itemSummary}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      };
+    }
+    case "return_completed":
       return {
         subject: `【返却 受領完了】${ctx.orderNumber}`,
         body: [
@@ -104,6 +127,23 @@ export function renderTemplate(
           "",
           `発注番号: ${ctx.orderNumber}`,
           ctx.itemSummary ? `内容: ${ctx.itemSummary}` : "",
+          ctx.damageNotes ? `備考: ${ctx.damageNotes}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      };
+    case "return_cancelled":
+      return {
+        subject: `【返却予定 取りやめ】${ctx.orderNumber}`,
+        body: [
+          greeting,
+          "",
+          "返却の予定を取りやめいたしました。",
+          "",
+          `発注番号: ${ctx.orderNumber}`,
+          ctx.rejectReason ? `理由: ${ctx.rejectReason}` : "",
+          "",
+          "改めて返却申請をお願いいたします。",
         ]
           .filter(Boolean)
           .join("\n"),

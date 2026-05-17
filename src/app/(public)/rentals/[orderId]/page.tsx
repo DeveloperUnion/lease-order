@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCustomer } from "@/lib/customer-auth";
 import { getRentalOrder } from "@/lib/rentals-data";
+import { getOffices } from "@/lib/data";
 import ReturnForm from "./return-form";
 import LeaseTimeline from "@/components/ui/lease-timeline";
 import StatusBadge from "@/components/ui/status-badge";
@@ -26,6 +27,7 @@ export default async function RentalDetailPage({
   const { from } = await searchParams;
   const order = await getRentalOrder(orderId, customer.id, customer.tenant_id);
   if (!order) notFound();
+  const offices = await getOffices();
 
   const activeItems = order.items.filter((i) => i.remaining > 0);
   const completedItems = order.items.filter((i) => i.remaining === 0);
@@ -131,6 +133,33 @@ export default async function RentalDetailPage({
         </div>
       )}
 
+      {!isReadOnly && order.scheduled_returns.length > 0 && (
+        <section className="mt-8">
+          <SectionLabel label="返却予定" />
+          <div className="border border-info/30 bg-info-soft rounded-2xl overflow-hidden">
+            {order.scheduled_returns.map((s) => (
+              <div
+                key={s.id}
+                className="px-5 py-3 border-b border-info/20 last:border-b-0 flex items-baseline justify-between gap-3 flex-wrap"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm text-foreground">
+                    {s.material_name}{" "}
+                    <span className="text-subtle tabular-nums">× {s.requested_quantity_delta}</span>
+                  </p>
+                  <p className="text-xs text-info mt-0.5">
+                    {formatDateLong(s.scheduled_date)} ・{" "}
+                    {s.transport_method === "pickup"
+                      ? "取りに来てもらう"
+                      : `業所に持ち込み${s.dropoff_office_name ? `（${s.dropoff_office_name}）` : ""}`}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {!isReadOnly && activeItems.length === 0 ? (
         <div className="mt-8 border border-border bg-surface rounded-2xl p-8 text-center">
           <p className="text-sm text-muted">すべて返却済みです</p>
@@ -140,7 +169,13 @@ export default async function RentalDetailPage({
       {!isReadOnly && activeItems.length > 0 && (
         <div className="mt-8">
           <SectionLabel label="返却・延長を申請" />
-          <ReturnForm orderId={order.id} items={activeItems} extensions={order.extensions} />
+          <ReturnForm
+            orderId={order.id}
+            items={activeItems}
+            extensions={order.extensions}
+            offices={offices.map((o) => ({ id: o.id, name: o.name }))}
+            defaultDropoffOfficeId={order.pickup_office?.id ?? null}
+          />
         </div>
       )}
 

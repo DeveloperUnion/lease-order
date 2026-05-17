@@ -38,7 +38,14 @@ async function fanout(
 export function notifyCustomer(
   orderId: string,
   kind: NotificationKind,
-  extra?: { rejectReason?: string; itemSummary?: string }
+  extra?: {
+    rejectReason?: string;
+    itemSummary?: string;
+    scheduledDate?: string;
+    transportMethod?: "pickup" | "dropoff";
+    dropoffOfficeName?: string;
+    damageNotes?: string;
+  }
 ): void {
   after(async () => {
     try {
@@ -58,6 +65,10 @@ export function notifyCustomer(
         contactName: data.contact_name,
         rejectReason: extra?.rejectReason,
         itemSummary: extra?.itemSummary,
+        scheduledDate: extra?.scheduledDate,
+        transportMethod: extra?.transportMethod,
+        dropoffOfficeName: extra?.dropoffOfficeName,
+        damageNotes: extra?.damageNotes,
       };
       await fanout(
         {

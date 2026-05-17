@@ -5,8 +5,10 @@ export type NotificationKind =
   | "order_shipped"
   | "admin_new_order"
   | "return_requested"
-  | "return_acknowledged"
+  | "return_scheduled"
+  | "return_completed"
   | "return_rejected"
+  | "return_cancelled"
   | "extension_requested"
   | "extension_acknowledged"
   | "extension_rejected";
@@ -18,6 +20,11 @@ export type NotificationContext = {
   itemSummary?: string;
   rejectReason?: string;
   adminUrl?: string;
+  // 返却フロー拡張: 予定確定・受領完了の通知で使う
+  scheduledDate?: string;       // yyyy-mm-dd
+  transportMethod?: "pickup" | "dropoff";
+  dropoffOfficeName?: string;
+  damageNotes?: string;
 };
 
 export type NotificationTarget =

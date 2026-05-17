@@ -8,6 +8,8 @@ import ConfirmModal from "./confirm-modal";
 
 type Mode = "return" | "extend";
 
+type OfficeOption = { id: string; name: string };
+
 type Props = {
   orderId: string;
   items: RentalItemRow[];
@@ -15,6 +17,8 @@ type Props = {
     string,
     { previous_end_date: string; new_end_date: string; reason: string | null; requested_at: string }[]
   >;
+  offices: OfficeOption[];
+  defaultDropoffOfficeId: string | null;
 };
 
 function formatDate(iso: string | null): string {
@@ -35,7 +39,13 @@ function addDays(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export default function ReturnForm({ orderId, items, extensions }: Props) {
+export default function ReturnForm({
+  orderId,
+  items,
+  extensions,
+  offices,
+  defaultDropoffOfficeId,
+}: Props) {
   const router = useRouter();
 
   const returnableItems = useMemo(
@@ -53,6 +63,13 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
 
   // 返却モード: デフォルトで全品目チェック。除外したい品目を保持
   const [returnExcluded, setReturnExcluded] = useState<Set<string>>(new Set());
+
+  // 返却モード: 輸送手段と希望日
+  const [transportMethod, setTransportMethod] = useState<"pickup" | "dropoff">("pickup");
+  const [desiredDate, setDesiredDate] = useState<string>(tomorrowIso());
+  const [dropoffOfficeId, setDropoffOfficeId] = useState<string>(
+    defaultDropoffOfficeId ?? offices[0]?.id ?? ""
+  );
 
   // 延長モード: 単一の新返却日 + 理由をデフォルトで全品目に適用
   const latestEnd = useMemo(() => {
@@ -92,6 +109,9 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
         type: "return" as const,
         orderItemId: it.id,
         deltaQuantity: it.effective_remaining,
+        transportMethod,
+        desiredDate,
+        dropoffOfficeId: transportMethod === "dropoff" ? dropoffOfficeId : null,
       }));
     }
     if (!extendDate) return [];
@@ -101,11 +121,26 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
       newEndDate: extendOverrides[it.id] ?? extendDate,
       reason: extendReason || undefined,
     }));
-  }, [mode, returnTargets, extendTargets, extendDate, extendReason, extendOverrides]);
+  }, [
+    mode,
+    returnTargets,
+    extendTargets,
+    extendDate,
+    extendReason,
+    extendOverrides,
+    transportMethod,
+    desiredDate,
+    dropoffOfficeId,
+  ]);
 
+  const minDesiredDate = tomorrowIso();
+  const isReturnTransportValid =
+    Boolean(desiredDate) &&
+    desiredDate >= minDesiredDate &&
+    (transportMethod === "pickup" || Boolean(dropoffOfficeId));
   const canSubmit =
     mode === "return"
-      ? returnTargets.length > 0
+      ? returnTargets.length > 0 && isReturnTransportValid
       : Boolean(extendDate) && extendDate >= minExtendDate && extendTargets.length > 0;
 
   function toggleReturnExclude(id: string) {
@@ -212,17 +247,104 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
       </div>
 
       {mode === "return" && returnableItems.length > 0 && (
-        <section className="border border-border bg-surface rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-foreground">
-            この発注の資材を一括で返却申請します
-          </h3>
-          <p className="text-xs text-muted mt-1">
-            対象: <span className="font-semibold text-foreground tabular-nums">{returnTargets.length}</span>{" "}
-            / {returnableItems.length} 品目
-            {returnExcluded.size > 0 && (
-              <span className="ml-2 text-subtle">（{returnExcluded.size} 件を除外中）</span>
+        <section className="border border-border bg-surface rounded-xl p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              この発注の資材を一括で返却申請します
+            </h3>
+            <p className="text-xs text-muted mt-1">
+              対象: <span className="font-semibold text-foreground tabular-nums">{returnTargets.length}</span>{" "}
+              / {returnableItems.length} 品目
+              {returnExcluded.size > 0 && (
+                <span className="ml-2 text-subtle">（{returnExcluded.size} 件を除外中）</span>
+              )}
+            </p>
+          </div>
+
+          <div className="border-t border-border pt-4 space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                返却方法 <span className="text-danger">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label
+                  className={`flex items-center gap-2 px-3 h-11 rounded-lg border cursor-pointer transition-colors ${
+                    transportMethod === "pickup"
+                      ? "border-accent bg-accent/5 text-foreground"
+                      : "border-border bg-surface text-muted hover:text-foreground"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="transport"
+                    value="pickup"
+                    checked={transportMethod === "pickup"}
+                    onChange={() => setTransportMethod("pickup")}
+                    className="h-4 w-4 text-accent focus:ring-2 focus:ring-accent/40"
+                  />
+                  <span className="text-sm">取りに来てもらう</span>
+                </label>
+                <label
+                  className={`flex items-center gap-2 px-3 h-11 rounded-lg border cursor-pointer transition-colors ${
+                    transportMethod === "dropoff"
+                      ? "border-accent bg-accent/5 text-foreground"
+                      : "border-border bg-surface text-muted hover:text-foreground"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="transport"
+                    value="dropoff"
+                    checked={transportMethod === "dropoff"}
+                    onChange={() => setTransportMethod("dropoff")}
+                    className="h-4 w-4 text-accent focus:ring-2 focus:ring-accent/40"
+                  />
+                  <span className="text-sm">業所に持ち込む</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                返却希望日 <span className="text-danger">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                min={minDesiredDate}
+                value={desiredDate}
+                onChange={(e) => setDesiredDate(e.target.value)}
+                className="w-full h-11 px-3.5 bg-surface border border-border rounded-lg text-sm focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors"
+              />
+              <p className="text-xs text-subtle mt-1.5">
+                希望日は {minDesiredDate} 以降。リース会社で調整・確定します。
+              </p>
+            </div>
+
+            {transportMethod === "dropoff" && (
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">
+                  持ち込み先 <span className="text-danger">*</span>
+                </label>
+                {offices.length === 0 ? (
+                  <p className="text-xs text-danger">業所が登録されていません。リース会社にお問い合わせください。</p>
+                ) : (
+                  <select
+                    required
+                    value={dropoffOfficeId}
+                    onChange={(e) => setDropoffOfficeId(e.target.value)}
+                    className="w-full h-11 px-3.5 bg-surface border border-border rounded-lg text-sm focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors"
+                  >
+                    {offices.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
             )}
-          </p>
+          </div>
 
           <details className="mt-4 border-t border-border pt-3 group">
             <summary className="cursor-pointer text-xs font-medium text-muted hover:text-foreground inline-flex items-center gap-1.5">
@@ -397,8 +519,15 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
       <div className="fixed bottom-0 left-0 right-0 md:left-56 bg-surface/95 backdrop-blur border-t border-border px-4 py-3 z-40 pb-[calc(0.75rem+env(safe-area-inset-bottom,0))] md:pb-3">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <div className="flex-1 text-xs text-muted">
-            {!canSubmit && mode === "return" && (
+            {!canSubmit && mode === "return" && returnTargets.length === 0 && (
               <span className="text-subtle">返却対象を選択してください</span>
+            )}
+            {!canSubmit && mode === "return" && returnTargets.length > 0 && !isReturnTransportValid && (
+              <span className="text-subtle">
+                {transportMethod === "dropoff" && !dropoffOfficeId
+                  ? "持ち込み先を選択してください"
+                  : "返却希望日を入力してください"}
+              </span>
             )}
             {!canSubmit && mode === "extend" && (
               <span className="text-subtle">新しい返却期限を入力してください</span>
@@ -419,6 +548,18 @@ export default function ReturnForm({ orderId, items, extensions }: Props) {
       {showConfirm && (
         <ConfirmModal
           returns={mode === "return" ? returnTargets : []}
+          returnTransport={
+            mode === "return"
+              ? {
+                  transportMethod,
+                  desiredDate,
+                  dropoffOfficeName:
+                    transportMethod === "dropoff"
+                      ? offices.find((o) => o.id === dropoffOfficeId)?.name ?? null
+                      : null,
+                }
+              : null
+          }
           extensions={mode === "extend" ? extendPreview : []}
           isPending={isPending}
           onConfirm={handleSubmit}
