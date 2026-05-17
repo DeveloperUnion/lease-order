@@ -109,7 +109,6 @@ type SpecGroupRaw = {
   id: string;
   material_id: string;
   name: string;
-  is_required: boolean;
   sort_order: number;
   is_active: boolean;
   spec_options: SpecOptionRaw[] | null;
@@ -149,7 +148,6 @@ function mapSpecGroup(row: SpecGroupRaw): SpecGroup {
     id: row.id,
     material_id: row.material_id,
     name: row.name,
-    is_required: row.is_required,
     sort_order: row.sort_order,
     options: (row.spec_options ?? [])
       .filter((o) => o.is_active)
@@ -168,7 +166,7 @@ export async function getMaterialDetail(
     .from("materials")
     .select(
       `id, category_id, name, description, spec, sort_order, is_active,
-       spec_groups(id, material_id, name, is_required, sort_order, is_active,
+       spec_groups(id, material_id, name, sort_order, is_active,
          spec_options(id, spec_group_id, label, sort_order, is_active)),
        material_images(image_id, sort_order, is_primary, images(url, caption))`
     )

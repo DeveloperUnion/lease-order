@@ -844,7 +844,6 @@ export async function removeAdminUser(id: string) {
 
 export type SpecGroupInput = {
   name: string;
-  isRequired: boolean;
 };
 
 export type SpecOptionInput = {
@@ -918,7 +917,7 @@ export async function createSpecGroupWithOptions(
       tenant_id: tenantId,
       material_id: materialId,
       name: input.name.trim(),
-      is_required: input.isRequired,
+      is_required: true, // v3: 仕様は常に必須として扱う
       sort_order: sortOrder,
       is_active: true,
     })
@@ -958,7 +957,6 @@ export async function updateSpecGroup(
     .from("spec_groups")
     .update({
       name: input.name.trim(),
-      is_required: input.isRequired,
       updated_at: new Date().toISOString(),
     })
     .eq("id", groupId)

@@ -423,12 +423,11 @@ function ImagesSection({
 
 type GroupDraft = {
   name: string;
-  is_required: boolean;
   options: { label: string }[]; // 新規作成時のバリエーション入力欄
 };
 
 function emptyGroupDraft(): GroupDraft {
-  return { name: "", is_required: false, options: [{ label: "" }, { label: "" }] };
+  return { name: "", options: [{ label: "" }, { label: "" }] };
 }
 
 function SpecGroupsSection({
@@ -440,7 +439,7 @@ function SpecGroupsSection({
 }) {
   const [creating, setCreating] = useState<GroupDraft | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<{ name: string; is_required: boolean } | null>(null);
+  const [editDraft, setEditDraft] = useState<{ name: string } | null>(null);
   const [order, setOrder] = useState<SpecGroup[]>(material.spec_groups);
   const [dragId, setDragId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -466,7 +465,7 @@ function SpecGroupsSection({
     setError(null);
     setCreating(null);
     setEditingId(g.id);
-    setEditDraft({ name: g.name, is_required: g.is_required });
+    setEditDraft({ name: g.name });
   };
 
   const cancel = () => {
@@ -484,7 +483,7 @@ function SpecGroupsSection({
     }
     const cleaned = creating.options.filter((o) => o.label.trim().length > 0);
     if (cleaned.length === 0) {
-      setError("バリエーションを 1 件以上入力してください");
+      setError("選択肢を 1 件以上入力してください");
       return;
     }
     setError(null);
@@ -492,7 +491,7 @@ function SpecGroupsSection({
       try {
         await createSpecGroupWithOptions(
           material.id,
-          { name: creating.name, isRequired: creating.is_required },
+          { name: creating.name },
           cleaned
         );
         onToast("追加しました");
@@ -512,10 +511,7 @@ function SpecGroupsSection({
     setError(null);
     startTransition(async () => {
       try {
-        await updateSpecGroup(material.id, groupId, {
-          name: editDraft.name,
-          isRequired: editDraft.is_required,
-        });
+        await updateSpecGroup(material.id, groupId, { name: editDraft.name });
         onToast("更新しました");
         cancel();
       } catch (e) {
@@ -573,7 +569,7 @@ function SpecGroupsSection({
 
       {order.length === 0 && !creating ? (
         <p className="text-sm text-subtle py-6 text-center border-y border-rule">
-          仕様は未登録です。「+ 仕様追加」から色やサイズなどを作成してください。
+          仕様は未登録です。「+ 仕様追加」から規格などを作成してください。
         </p>
       ) : (
         <div className="space-y-3">
@@ -659,21 +655,12 @@ function SpecGroupCreateForm({
         autoFocus
         value={draft.name}
         onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-        placeholder="仕様名 (例: 色)"
+        placeholder="仕様名 (例: 規格)"
         className="w-full h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
-      <label className="flex items-center gap-1 text-xs text-muted">
-        <input
-          type="checkbox"
-          checked={draft.is_required}
-          onChange={(e) => setDraft({ ...draft, is_required: e.target.checked })}
-          className="w-3.5 h-3.5 accent-accent"
-        />
-        必須（顧客が選ばないと発注できない）
-      </label>
       <div>
         <p className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider text-subtle mb-2">
-          バリエーション
+          選択肢
         </p>
         <div className="space-y-1">
           {draft.options.map((o, idx) => (
@@ -681,7 +668,7 @@ function SpecGroupCreateForm({
               <input
                 value={o.label}
                 onChange={(e) => updateOption(idx, e.target.value)}
-                placeholder={idx === 0 ? "例: 赤" : idx === 1 ? "例: 青" : "バリエーション名"}
+                placeholder={idx === 0 ? "例: 2M" : idx === 1 ? "例: 3M" : "選択肢名"}
                 className="flex-1 h-8 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
               />
               <Button
@@ -700,7 +687,7 @@ function SpecGroupCreateForm({
           onClick={addOption}
           className="mt-2 text-xs text-accent hover:underline"
         >
-          + バリエーション追加
+          + 選択肢を追加
         </button>
       </div>
       <div className="flex justify-end gap-2 pt-1 border-t border-rule">
@@ -722,8 +709,8 @@ function SpecGroupEditForm({
   onCancel,
   pending,
 }: {
-  draft: { name: string; is_required: boolean };
-  setDraft: (d: { name: string; is_required: boolean }) => void;
+  draft: { name: string };
+  setDraft: (d: { name: string }) => void;
   onSave: () => void;
   onCancel: () => void;
   pending: boolean;
@@ -737,24 +724,13 @@ function SpecGroupEditForm({
         placeholder="仕様名"
         className="w-full h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
-      <div className="flex items-center justify-between">
-        <label className="flex items-center gap-1 text-xs text-muted">
-          <input
-            type="checkbox"
-            checked={draft.is_required}
-            onChange={(e) => setDraft({ ...draft, is_required: e.target.checked })}
-            className="w-3.5 h-3.5 accent-accent"
-          />
-          必須
-        </label>
-        <div className="flex gap-2">
-          <Button size="sm" variant="secondary" onClick={onCancel} disabled={pending}>
-            取消
-          </Button>
-          <Button size="sm" onClick={onSave} disabled={pending || !draft.name.trim()}>
-            保存
-          </Button>
-        </div>
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="secondary" onClick={onCancel} disabled={pending}>
+          取消
+        </Button>
+        <Button size="sm" onClick={onSave} disabled={pending || !draft.name.trim()}>
+          保存
+        </Button>
       </div>
     </div>
   );
@@ -792,23 +768,20 @@ function SpecGroupRow({
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      className={`border border-rule p-3 space-y-3 ${
+      className={`border border-rule px-5 py-4 ${
         isDragging ? "opacity-50" : ""
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <div className="flex items-center gap-3 min-w-0">
           <span className="cursor-grab text-subtle text-base select-none" aria-hidden>
             ⠿
           </span>
-          <span className="font-semibold text-foreground">{group.name}</span>
-          {group.is_required && (
-            <span className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider px-1.5 py-0.5 bg-[var(--color-status-rejected-bg)] text-[var(--color-status-rejected-fg)]">
-              必須
-            </span>
-          )}
+          <span className="text-lg font-bold text-foreground truncate">
+            {group.name}
+          </span>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex items-center gap-3 flex-shrink-0">
           <Button size="sm" variant="ghost" onClick={onDelete} disabled={pending}>
             削除
           </Button>
@@ -869,7 +842,7 @@ function SpecOptionsList({
   const handleCreate = () => {
     if (creatingLabel === null) return;
     if (!creatingLabel.trim()) {
-      setError("バリエーション名は必須です");
+      setError("選択肢名は必須です");
       return;
     }
     setError(null);
@@ -886,7 +859,7 @@ function SpecOptionsList({
 
   const handleUpdate = (optionId: string) => {
     if (!editLabel.trim()) {
-      setError("バリエーション名は必須です");
+      setError("選択肢名は必須です");
       return;
     }
     setError(null);
@@ -902,7 +875,7 @@ function SpecOptionsList({
   };
 
   const handleDelete = (o: SpecOption) => {
-    if (!confirm(`バリエーション「${o.label}」を削除します。よろしいですか？`)) return;
+    if (!confirm(`選択肢「${o.label}」を削除します。よろしいですか？`)) return;
     startTransition(async () => {
       try {
         await deleteSpecOption(materialId, group.id, o.id);
@@ -934,14 +907,14 @@ function SpecOptionsList({
   };
 
   return (
-    <div className="border-t border-rule pt-2">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider text-subtle">
-          バリエーション ({order.length})
+    <div className="border-t border-rule pt-3 mt-3">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs text-subtle">
+          選択肢 ({order.length})
         </span>
         {creatingLabel === null && !editingId && (
           <Button size="sm" variant="ghost" onClick={startCreate}>
-            + バリエーション追加
+            + 選択肢を追加
           </Button>
         )}
       </div>
@@ -950,13 +923,13 @@ function SpecOptionsList({
           editingId === o.id ? (
             <div
               key={o.id}
-              className="flex items-center gap-2 px-2 py-1.5 bg-[var(--color-status-pending-bg)]/40 border-l-2 border-accent"
+              className="flex items-center gap-2 px-3 py-2 bg-[var(--color-status-pending-bg)]/40 border-l-2 border-accent"
             >
               <input
                 autoFocus
                 value={editLabel}
                 onChange={(e) => setEditLabel(e.target.value)}
-                placeholder="バリエーション名"
+                placeholder="選択肢名 (例: 2M)"
                 className="flex-1 h-8 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
               />
               <Button size="sm" variant="ghost" onClick={cancel} disabled={isPending}>
@@ -978,14 +951,14 @@ function SpecOptionsList({
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleDrop(o.id)}
               onDragEnd={() => setDragId(null)}
-              className={`flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-surface-muted ${
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-surface-muted ${
                 dragId === o.id ? "opacity-50" : ""
               }`}
             >
               <span className="cursor-grab text-subtle text-sm select-none" aria-hidden>
                 ⠿
               </span>
-              <span className="flex-1 font-medium text-foreground truncate">
+              <span className="flex-1 text-foreground truncate">
                 {o.label}
               </span>
               <Button size="sm" variant="ghost" onClick={() => handleDelete(o)} disabled={isPending}>
@@ -998,12 +971,12 @@ function SpecOptionsList({
           )
         )}
         {creatingLabel !== null && (
-          <div className="flex items-center gap-2 px-2 py-1.5 bg-[var(--color-status-pending-bg)]/40 border-l-2 border-accent">
+          <div className="flex items-center gap-2 px-3 py-2 bg-[var(--color-status-pending-bg)]/40 border-l-2 border-accent">
             <input
               autoFocus
               value={creatingLabel}
               onChange={(e) => setCreatingLabel(e.target.value)}
-              placeholder="バリエーション名 (例: 赤)"
+              placeholder="選択肢名 (例: 2M)"
               className="flex-1 h-8 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
             />
             <Button size="sm" variant="ghost" onClick={cancel} disabled={isPending}>
