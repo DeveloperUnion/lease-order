@@ -52,6 +52,8 @@ export default function MaterialDetailView({
   return (
     <>
       <PageHeader
+        backHref="/admin/materials"
+        backLabel="資材マスタに戻る"
         title={material.name}
         actions={<ActiveToggle material={material} onToast={showToast} />}
       />

@@ -19,13 +19,13 @@ export default function SectionRule({
   }
 
   return (
-    <div className={`flex items-end gap-3 ${className}`}>
+    <div className={`flex items-center gap-3 ${className}`}>
       {label && (
-        <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-subtle whitespace-nowrap">
+        <h2 className="text-sm sm:text-base font-semibold text-foreground whitespace-nowrap tracking-tight">
           {label}
-        </span>
+        </h2>
       )}
-      <span className={`flex-1 border-t ${ruleColor} mb-1.5`} aria-hidden />
+      <span className={`flex-1 border-t ${ruleColor}`} aria-hidden />
       {right && <span className="whitespace-nowrap">{right}</span>}
     </div>
   );

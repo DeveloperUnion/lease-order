@@ -48,6 +48,21 @@ export function labelForNotification(row: NotificationRow): string {
   }
 }
 
+// 却下・取りやめ系の通知でのみ rejectReason を返す。
+// それ以外の kind (例: return_scheduled, extension_acknowledged) は payload に
+// rejectReason が紛れていても表示しない。判定をベル UI ではなく display 層に閉じる。
+export function reasonForNotification(row: NotificationRow): string | null {
+  switch (row.kind) {
+    case "return_rejected":
+    case "return_cancelled":
+    case "order_rejected":
+    case "extension_rejected":
+      return row.payload.rejectReason?.trim() || null;
+    default:
+      return null;
+  }
+}
+
 // 通知タップ時の遷移先は、種類によらず常に「その発注の詳細画面」に統一する。
 // 顧客 → /rentals/[orderId]（発注詳細を返却・延長アクション込みで表示）
 // 管理 → /admin/orders/[id]（返却・延長の申請状態も含めて全文脈を確認できる）

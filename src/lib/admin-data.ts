@@ -530,6 +530,7 @@ export type CalendarOrderRow = {
   lease_start_date: string | null;
   lease_end_date: string | null;
   status: OrderStatus;
+  delivery_method: DeliveryMethod;
 };
 
 export async function listOrdersInRange(
@@ -542,10 +543,10 @@ export async function listOrdersInRange(
   const { data, error } = await supabase
     .from("orders")
     .select(
-      "id, order_number, company_name, site_name, lease_start_date, lease_end_date, status",
+      "id, order_number, company_name, site_name, lease_start_date, lease_end_date, status, delivery_method",
     )
     .eq("tenant_id", tenantId)
-    .not("status", "in", "(cancelled,rejected)")
+    .in("status", ["approved", "renting"])
     .or(
       `and(lease_start_date.gte.${fromISO},lease_start_date.lte.${toISO}),and(lease_end_date.gte.${fromISO},lease_end_date.lte.${toISO})`,
     )

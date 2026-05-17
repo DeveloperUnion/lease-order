@@ -22,9 +22,13 @@ export function buildDayBuckets(
   }
 
   for (const o of orders) {
-    if (o.lease_start_date && inRange(o.lease_start_date, range)) {
-      const overdue =
-        o.status === "approved" && o.lease_start_date < todayISO;
+    // 出荷イベントは approved のみ（renting は既に出荷済なので不要）
+    if (
+      o.status === "approved" &&
+      o.lease_start_date &&
+      inRange(o.lease_start_date, range)
+    ) {
+      const overdue = o.lease_start_date < todayISO;
       pushEvent(map, o.lease_start_date, {
         kind: "shipment",
         order_id: o.id,
@@ -34,9 +38,17 @@ export function buildDayBuckets(
         status: o.status,
         date: o.lease_start_date,
         overdue,
+        delivery_method: o.delivery_method,
       });
     }
-    if (o.lease_end_date && inRange(o.lease_end_date, range)) {
+    // lease_end_date 由来の event は「遅延（返却未済）」のみ表示する。
+    // 確定したスケジュールは return_requests 由来の return-scheduled で別途出る。
+    if (
+      o.status === "renting" &&
+      o.lease_end_date &&
+      o.lease_end_date < todayISO &&
+      inRange(o.lease_end_date, range)
+    ) {
       pushEvent(map, o.lease_end_date, {
         kind: "return",
         order_id: o.id,
@@ -45,7 +57,7 @@ export function buildDayBuckets(
         site_name: o.site_name,
         status: o.status,
         date: o.lease_end_date,
-        overdue: false,
+        overdue: true,
       });
     }
   }

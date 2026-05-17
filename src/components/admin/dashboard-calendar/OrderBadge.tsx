@@ -1,12 +1,6 @@
 import Link from "next/link";
 import type { CalendarEvent } from "./types";
 
-const KIND_LABEL: Record<CalendarEvent["kind"], string> = {
-  shipment: "出荷",
-  return: "期限",
-  "return-scheduled": "返却",
-};
-
 function badgeClass(ev: CalendarEvent): string {
   if (ev.overdue) {
     return "bg-danger-soft text-danger border-l-2 border-danger";
@@ -14,11 +8,19 @@ function badgeClass(ev: CalendarEvent): string {
   if (ev.kind === "shipment") {
     return "bg-info-soft text-info border-l-2 border-info";
   }
-  if (ev.kind === "return-scheduled") {
-    return "bg-[var(--color-accent-soft,#ecfeff)] text-accent border-r-2 border-accent";
+  // kind === "return-scheduled"
+  return "bg-success-soft text-success border-r-2 border-success";
+}
+
+function badgeLabel(ev: CalendarEvent): string {
+  if (ev.overdue) {
+    return ev.kind === "shipment" ? "遅延(出荷未済)" : "遅延(返却未済)";
   }
-  // return (lease_end_date 由来の期限)
-  return "bg-warning-soft text-warning border-r-2 border-warning";
+  if (ev.kind === "shipment") {
+    return ev.delivery_method === "delivery" ? "出荷(配送)" : "出荷(来店)";
+  }
+  // kind === "return-scheduled"
+  return ev.transport_method === "pickup" ? "返却(引取)" : "返却(持込)";
 }
 
 export default function OrderBadge({
@@ -28,22 +30,32 @@ export default function OrderBadge({
   ev: CalendarEvent;
   variant?: "compact" | "row";
 }) {
-  const muted = ev.status === "completed";
-  const base =
-    variant === "compact"
-      ? "flex items-center gap-1 px-1.5 h-[18px] text-[10px] rounded-sm truncate"
-      : "flex items-center gap-2 px-2 h-7 text-xs rounded-md w-full";
   const label = ev.site_name
     ? `${ev.company_name} / ${ev.site_name}`
     : ev.company_name;
+  const kindLabel = badgeLabel(ev);
+  if (variant === "compact") {
+    return (
+      <Link
+        href={`/admin/orders/${ev.order_id}`}
+        className={`flex flex-col gap-0.5 px-1.5 py-1 rounded-sm leading-tight ${badgeClass(ev)} font-medium transition-colors hover:brightness-95`}
+        title={`${kindLabel} ${ev.order_number} / ${label}`}
+      >
+        <span className="font-[family-name:var(--font-mono)] text-[10px] tracking-wider truncate">
+          {kindLabel}
+        </span>
+        <span className="text-[11px] truncate">{label}</span>
+      </Link>
+    );
+  }
   return (
     <Link
       href={`/admin/orders/${ev.order_id}`}
-      className={`${base} ${badgeClass(ev)} ${muted ? "opacity-60" : ""} font-medium transition-colors hover:opacity-100 hover:brightness-95`}
-      title={`${KIND_LABEL[ev.kind]} ${ev.order_number} / ${label}`}
+      className={`flex items-center gap-2 px-2 h-7 text-xs rounded-md w-full ${badgeClass(ev)} font-medium transition-colors hover:brightness-95`}
+      title={`${kindLabel} ${ev.order_number} / ${label}`}
     >
-      <span className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-wider shrink-0">
-        {ev.overdue ? "遅延" : KIND_LABEL[ev.kind]}
+      <span className="font-[family-name:var(--font-mono)] text-[9px] tracking-wider shrink-0">
+        {kindLabel}
       </span>
       <span className="truncate">{label}</span>
     </Link>

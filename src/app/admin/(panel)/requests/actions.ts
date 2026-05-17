@@ -433,6 +433,58 @@ type PendingExtensionForBulk = {
   } | null;
 };
 
+export async function rejectReturnsForOrder(
+  orderId: string,
+  reason: string
+): Promise<number> {
+  const tenantId = await getTenantId();
+  const order = await loadOrderForBulk(orderId, tenantId);
+  if (!order) throw new Error("対象の発注が見つかりません");
+  const trimmed = reason.trim();
+  if (!trimmed) throw new Error("却下理由を入力してください");
+  const adminId = await currentAdminUserId(tenantId);
+  const supabase = await getSupabaseTenant();
+  const now = new Date().toISOString();
+
+  const { data: rawList, error: listErr } = await supabase
+    .from("return_requests")
+    .select(
+      "id, order_item_id, requested_quantity_delta, order_items!inner(id, material_name, order_id)"
+    )
+    .eq("status", "pending")
+    .eq("order_items.order_id", orderId);
+  if (listErr) throw listErr;
+  const list = (rawList ?? []) as unknown as PendingReturnForBulk[];
+  if (list.length === 0) return 0;
+
+  const requestIds = list.map((r) => r.id);
+  // 取得→update 間に他管理者が確定/却下した行を弾くため、update 側でも
+  // status="pending" を再フィルタする。
+  const { error: updReqErr } = await supabase
+    .from("return_requests")
+    .update({
+      status: "rejected",
+      rejected_at: now,
+      acknowledged_by_admin_id: adminId,
+      reject_reason: trimmed,
+    })
+    .in("id", requestIds)
+    .eq("status", "pending");
+  if (updReqErr) throw updReqErr;
+
+  invalidate(orderId);
+  const summary = buildItemSummary(
+    list
+      .filter((r) => r.order_items)
+      .map((r) => `${r.order_items!.material_name} ×${r.requested_quantity_delta}`)
+  );
+  await notifyCustomer(orderId, "return_rejected", {
+    rejectReason: trimmed,
+    itemSummary: summary,
+  });
+  return list.length;
+}
+
 export async function scheduleReturnsForOrder(
   orderId: string,
   input: {

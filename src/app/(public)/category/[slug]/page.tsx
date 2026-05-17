@@ -2,8 +2,6 @@ import { getCategoryBySlug, getMaterialsByCategory } from "@/lib/data";
 import { requireCustomer } from "@/lib/customer-auth";
 import CategoryView from "./category-view";
 
-export const dynamic = "force-dynamic";
-
 export default async function CategoryPage({
   params,
 }: {

@@ -7,6 +7,7 @@ import {
   MetaList,
   StatusBadge,
   DataTable,
+  LeasePeriodBar,
   type Column,
   type MetaItem,
 } from "@/components/admin/ui";
@@ -31,27 +32,8 @@ export default async function OrderDetailPage({
     0
   );
 
-  const fmtDate = (s: string | null) =>
+  const fmtDateTime = (s: string | null) =>
     s ? new Date(s).toLocaleString("ja-JP") : "—";
-
-  const timelineItems: MetaItem[] = [
-    { label: "受付", value: fmtDate(order.created_at), mono: true },
-    {
-      label: "承認",
-      value: order.approved_by ? (
-        <span>
-          {fmtDate(order.approved_at)}
-          <span className="text-subtle ml-2 text-xs">by {order.approved_by}</span>
-        </span>
-      ) : (
-        fmtDate(order.approved_at)
-      ),
-      mono: true,
-    },
-    { label: "出荷", value: fmtDate(order.shipped_at), mono: true },
-    { label: "完了", value: fmtDate(order.completed_at), mono: true },
-    { label: "却下", value: fmtDate(order.rejected_at), mono: true },
-  ];
 
   const customerItems: MetaItem[] = [
     { label: "会社名", value: order.company_name },
@@ -99,11 +81,25 @@ export default async function OrderDetailPage({
       ),
     });
   }
-  deliveryItems.push({
-    label: "リース期間",
-    value: formatLeasePeriod(order.lease_start_date, order.lease_end_date),
-    mono: true,
-  });
+
+  const timelineItems: MetaItem[] = [
+    { label: "受付", value: fmtDateTime(order.created_at), mono: true },
+    {
+      label: "承認",
+      value: order.approved_by ? (
+        <span>
+          {fmtDateTime(order.approved_at)}
+          <span className="text-subtle ml-2 text-xs">by {order.approved_by}</span>
+        </span>
+      ) : (
+        fmtDateTime(order.approved_at)
+      ),
+      mono: true,
+    },
+    { label: "出荷", value: fmtDateTime(order.shipped_at), mono: true },
+    { label: "完了", value: fmtDateTime(order.completed_at), mono: true },
+    { label: "却下", value: fmtDateTime(order.rejected_at), mono: true },
+  ];
 
   const itemColumns: Column<OrderDetailItem>[] = [
     {
@@ -153,19 +149,10 @@ export default async function OrderDetailPage({
 
   return (
     <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
-      <Link
-        href="/admin/orders"
-        className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-[11px] uppercase tracking-wider text-subtle hover:text-foreground transition-colors mb-5"
-      >
-        <span aria-hidden>←</span> 発注管理に戻る
-      </Link>
-
       <PageHeader
-        eyebrow={
-          <span className="font-[family-name:var(--font-mono)] tabular-nums">
-            {order.order_number}
-          </span>
-        }
+        backHref="/admin/orders"
+        backLabel="発注管理に戻る"
+        eyebrow={order.order_number}
         title="発注詳細"
         description={new Date(order.created_at).toLocaleString("ja-JP")}
         actions={<StatusBadge status={order.status} />}
@@ -173,7 +160,7 @@ export default async function OrderDetailPage({
 
       <Link
         href={`/admin/messages?orderId=${order.id}`}
-        className="-mt-2 mb-8 inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline"
+        className="-mt-2 mb-6 inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline"
       >
         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
@@ -181,27 +168,20 @@ export default async function OrderDetailPage({
         この発注について顧客に連絡する
       </Link>
 
-      <section className="mb-10">
-        <SectionRule label="ステータス履歴" className="mb-3" />
-        <MetaList items={timelineItems} columns={2} />
-        {order.reject_reason && (
-          <div className="mt-4 px-4 py-3 bg-[var(--color-status-rejected-bg)] border-l-2 border-[var(--color-status-rejected-fg)]">
-            <p className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider text-[var(--color-status-rejected-fg)] mb-1">
-              却下理由
-            </p>
-            <p className="text-sm text-[var(--color-status-rejected-fg)] whitespace-pre-wrap">
-              {order.reject_reason}
-            </p>
-          </div>
-        )}
+      <section className="mb-8">
+        <LeasePeriodBar
+          startDate={order.lease_start_date}
+          endDate={order.lease_end_date}
+          status={order.status}
+        />
       </section>
 
       <section className="mb-10">
-        <SectionRule label="発注者情報" className="mb-3" />
-        <MetaList items={customerItems} columns={2} />
+        <SectionRule label="発注者情報" className="mb-4" />
+        <MetaList items={customerItems} />
         {order.note && (
           <div className="mt-4 px-4 py-3 bg-surface-muted border-l-2 border-[var(--color-rule-strong)]">
-            <p className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider text-subtle mb-1">
+            <p className="text-xs font-semibold tracking-wider text-muted mb-1">
               備考
             </p>
             <p className="text-sm text-foreground whitespace-pre-wrap">{order.note}</p>
@@ -210,8 +190,8 @@ export default async function OrderDetailPage({
       </section>
 
       <section className="mb-10">
-        <SectionRule label="配送・リース" className="mb-3" />
-        <MetaList items={deliveryItems} columns={2} />
+        <SectionRule label="配送" className="mb-4" />
+        <MetaList items={deliveryItems} />
         {order.delivery_method === "delivery" &&
           order.delivery_lat !== null &&
           order.delivery_lng !== null && (
@@ -242,14 +222,14 @@ export default async function OrderDetailPage({
         <SectionRule
           label="注文明細"
           right={
-            <span className="font-[family-name:var(--font-mono)] tabular-nums text-[11px] text-subtle">
+            <span className="font-[family-name:var(--font-mono)] tabular-nums text-xs text-muted">
               {order.items.length} 品目 / {totalQty} 点
               {order.status !== "pending" && approvedTotalQty !== totalQty && (
                 <span className="ml-2 text-foreground">→ 承認 {approvedTotalQty}</span>
               )}
             </span>
           }
-          className="mb-3"
+          className="mb-4"
         />
         <DataTable
           columns={itemColumns}
@@ -262,18 +242,25 @@ export default async function OrderDetailPage({
 
       <CompletedReturnsSection orderId={order.id} />
 
-      <section>
+      <section className="mb-10">
         <SectionRule label="操作" className="mb-4" />
         <OrderActions order={order} />
       </section>
+
+      <section>
+        <SectionRule label="ステータス履歴" className="mb-4" />
+        <MetaList items={timelineItems} />
+        {order.reject_reason && (
+          <div className="mt-4 px-4 py-3 bg-[var(--color-status-rejected-bg)] border-l-2 border-[var(--color-status-rejected-fg)]">
+            <p className="text-xs font-semibold tracking-wider text-[var(--color-status-rejected-fg)] mb-1">
+              却下理由
+            </p>
+            <p className="text-sm text-[var(--color-status-rejected-fg)] whitespace-pre-wrap">
+              {order.reject_reason}
+            </p>
+          </div>
+        )}
+      </section>
     </main>
   );
-}
-
-function formatLeasePeriod(start: string | null, end: string | null): string {
-  const fmt = (d: string) => new Date(d).toLocaleDateString("ja-JP");
-  if (start && end) return `${fmt(start)} ～ ${fmt(end)}`;
-  if (start) return `${fmt(start)} ～`;
-  if (end) return `～ ${fmt(end)}`;
-  return "—";
 }

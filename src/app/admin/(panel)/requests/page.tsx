@@ -129,13 +129,11 @@ export default async function AdminRequestsPage() {
   const officeOptions = offices.map((o) => ({ id: o.id, name: o.name }));
 
   return (
-    <main className="flex-1 overflow-y-auto px-6 sm:px-10 py-8">
-      <div className="max-w-5xl mx-auto space-y-8">
-        <PageHeader
-          eyebrow="REQUESTS"
-          title="返却・延長申請"
-          description="顧客からの未対応の申請と、受領待ちの返却予定を確認します。"
-        />
+    <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8 space-y-8">
+      <PageHeader
+        title="返却・延長申請"
+        description="顧客からの未対応の申請と、受領待ちの返却予定を確認します。"
+      />
 
         <section>
           <h2 className="text-sm font-semibold text-foreground mb-3">
@@ -326,7 +324,6 @@ export default async function AdminRequestsPage() {
             </div>
           )}
         </section>
-      </div>
     </main>
   );
 }
