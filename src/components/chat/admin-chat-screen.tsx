@@ -85,24 +85,35 @@ export default function AdminChatScreen({
     if (el) el.scrollTop = el.scrollHeight;
   }, [displayMessages.length, selectedId]);
 
-  // 開いた会話の既読化
+  // 既読化: customer 発の未読が存在するときだけ POST。
+  // 念のため refresh は呼ばない (サイドバーの未読バッジは next navigation で更新される)。
+  const hasUnreadFromCustomer = displayMessages.some(
+    (m) => m.sender_type === "customer" && !m.read_at
+  );
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId || !hasUnreadFromCustomer) return;
     fetch(`/api/chat/conversations/${selectedId}/read`, {
       method: "POST",
       cache: "no-store",
-    })
-      .then(() => router.refresh())
-      .catch(() => {});
-  }, [selectedId, router, displayMessages.length]);
+    }).catch(() => {});
+  }, [selectedId, hasUnreadFromCustomer]);
 
-  // Realtime: 選択中の会話 + テナント全体（一覧の last_message_at 更新）を反映
+  // Realtime: テナント全体の INSERT を 1 本のチャンネルで受け、
+  //   - 選択中の会話なら extras に積む
+  //   - それ以外は debounce 付きで一覧 (server) を refresh
+  // 連投時の二重 refresh を避ける目的。
   useEffect(() => {
     let cancelled = false;
     let supabase: SupabaseClient | null = null;
-    let convChannel: ReturnType<SupabaseClient["channel"]> | null = null;
-    let tenantChannel: ReturnType<SupabaseClient["channel"]> | null = null;
+    let channel: ReturnType<SupabaseClient["channel"]> | null = null;
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let listRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function scheduleListRefresh() {
+      if (listRefreshTimer) clearTimeout(listRefreshTimer);
+      // 3 秒以内の連投は 1 回にまとめる
+      listRefreshTimer = setTimeout(() => router.refresh(), 3000);
+    }
 
     async function fetchToken(): Promise<TokenResponse | null> {
       try {
@@ -137,8 +148,7 @@ export default function AdminChatScreen({
       );
       supabase.realtime.setAuth(token.jwt);
 
-      // 一覧側: tenant 全体の新着で list を refresh
-      tenantChannel = supabase
+      channel = supabase
         .channel(`chat-tenant:${tenantId}`)
         .on(
           "postgres_changes",
@@ -148,35 +158,20 @@ export default function AdminChatScreen({
             table: "messages",
             filter: `tenant_id=eq.${tenantId}`,
           },
-          () => {
-            router.refresh();
-          }
-        )
-        .subscribe();
+          (payload) => {
+            const row = payload.new as {
+              id: string;
+              conversation_id: string;
+              body: string | null;
+              attachments: MessageAttachment[];
+              order_id: string | null;
+              created_at: string;
+              read_at: string | null;
+              sender_type: "customer" | "admin";
+            };
 
-      // 選択中の会話: 即時表示用に extras に積む
-      if (selectedId) {
-        convChannel = supabase
-          .channel(`chat:${selectedId}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "INSERT",
-              schema: "public",
-              table: "messages",
-              filter: `conversation_id=eq.${selectedId}`,
-            },
-            (payload) => {
-              const row = payload.new as {
-                id: string;
-                body: string | null;
-                attachments: MessageAttachment[];
-                order_id: string | null;
-                created_at: string;
-                read_at: string | null;
-                sender_type: "customer" | "admin";
-              };
-              if (knownIdsRef.current.has(row.id)) return;
+            const isCurrent = selectedId && row.conversation_id === selectedId;
+            if (isCurrent && !knownIdsRef.current.has(row.id)) {
               knownIdsRef.current.add(row.id);
               const stub: BubbleMessage = {
                 id: row.id,
@@ -191,10 +186,17 @@ export default function AdminChatScreen({
                 read_at: row.read_at,
               };
               setExtras((prev) => [...prev, stub]);
+              // 添付や注文引用がある場合のみ refresh で signed URL / order_ref を取りに行く
+              if ((row.attachments?.length ?? 0) > 0 || row.order_id) {
+                scheduleListRefresh();
+              }
+            } else {
+              // 別の会話 → 一覧の last_message_at / 未読バッジを更新
+              scheduleListRefresh();
             }
-          )
-          .subscribe();
-      }
+          }
+        )
+        .subscribe();
 
       scheduleNext(token.expiresAt);
     }
@@ -203,8 +205,8 @@ export default function AdminChatScreen({
     return () => {
       cancelled = true;
       if (refreshTimer) clearTimeout(refreshTimer);
-      if (convChannel && supabase) supabase.removeChannel(convChannel);
-      if (tenantChannel && supabase) supabase.removeChannel(tenantChannel);
+      if (listRefreshTimer) clearTimeout(listRefreshTimer);
+      if (channel && supabase) supabase.removeChannel(channel);
     };
   }, [tenantId, selectedId, router]);
 
@@ -215,6 +217,18 @@ export default function AdminChatScreen({
   }): Promise<void> {
     if (!selected) return;
     const clientRequestId = genId();
+    const tempId = `temp_${clientRequestId}`;
+    const optimistic: BubbleMessage = {
+      id: tempId,
+      sender_type: "admin",
+      body: input.body,
+      attachments: input.attachments.map<SignedAttachment>((a) => ({ ...a, url: null })),
+      order_ref: null,
+      created_at: new Date().toISOString(),
+      read_at: null,
+    };
+    setExtras((prev) => [...prev, optimistic]);
+
     const result = await sendChatMessage({
       conversationId: selected.conversationId,
       body: input.body,
@@ -224,8 +238,16 @@ export default function AdminChatScreen({
       tenantId,
       ownerCustomerId: null,
     });
-    if (!result.ok) throw new Error(result.error);
-    router.refresh();
+    if (!result.ok) {
+      setExtras((prev) => prev.filter((e) => e.id !== tempId));
+      throw new Error(result.error);
+    }
+    setExtras((prev) =>
+      prev.map((e) => (e.id === tempId ? { ...e, id: result.messageId } : e))
+    );
+    if (input.attachments.length > 0 || input.orderId) {
+      router.refresh();
+    }
   }
 
   return (

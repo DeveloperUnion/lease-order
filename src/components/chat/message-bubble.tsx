@@ -38,10 +38,11 @@ export default function MessageBubble({
   orderLinkPrefix: "/orders" | "/admin/orders";
 }) {
   return (
-    <div className={`flex flex-col gap-1 ${mine ? "items-end" : "items-start"}`}>
+    <div className={`flex flex-col gap-0.5 ${mine ? "items-end" : "items-start"}`}>
+      {/* 自分の発言は名前を省き時刻だけ。相手の発言は名前+時刻を表示 (LINE 風)。 */}
       <div className="text-[11px] text-subtle px-1">
-        {senderLabel}
-        <span className="ml-2">{formatTime(msg.created_at)}</span>
+        {!mine && <span className="mr-2">{senderLabel}</span>}
+        <span>{formatTime(msg.created_at)}</span>
         {mine && msg.read_at ? <span className="ml-2 text-accent">既読</span> : null}
       </div>
       <div
