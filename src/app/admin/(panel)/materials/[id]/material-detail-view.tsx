@@ -481,6 +481,7 @@ function VariantsSection({
     null
   );
   const [creating, setCreating] = useState<DraftVariant | null>(null);
+  const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -559,21 +560,38 @@ function VariantsSection({
 
   return (
     <section>
-      <SectionRule
-        label="バリエーション"
-        right={
-          !creating &&
-          !editing && (
-            <Button size="sm" onClick={startCreate}>
-              + 追加
-            </Button>
-          )
-        }
-        className="mb-4"
-      />
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full text-left"
+      >
+        <SectionRule
+          label="在庫詳細（上級者向け）"
+          right={
+            <span className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider text-subtle">
+              {open ? "▲ 閉じる" : "▼ 開く"}
+            </span>
+          }
+          className="mb-2"
+        />
+      </button>
+      <p className="text-xs text-subtle mb-3">
+        {open
+          ? `仕様の追加時に自動生成された組み合わせ ${material.variants.length} 件。SKU や個別単位の調整、無効化が必要なときだけ編集してください。`
+          : `仕様の組み合わせ ${material.variants.length} 件。SKU や個別単位の調整、無効化はここで。通常は触らなくて OK。`}
+      </p>
+      {!open ? null : (
+        <>
+      <div className="flex justify-end mb-2">
+        {!creating && !editing && (
+          <Button size="sm" onClick={startCreate}>
+            + 手動追加
+          </Button>
+        )}
+      </div>
       {material.variants.length === 0 && !creating ? (
         <p className="text-sm text-subtle py-6 text-center border-y border-rule">
-          バリエーションは未登録です
+          バリエーションは未登録です。「仕様」セクションで仕様とバリエーションを追加してください。
         </p>
       ) : (
         <div className="border-y border-rule divide-y divide-rule">
@@ -667,6 +685,8 @@ function VariantsSection({
           {error}
         </p>
       )}
+        </>
+      )}
     </section>
   );
 }
@@ -746,7 +766,7 @@ function VariantEditRow({
       {groups.length > 0 && (
         <div className="border-t border-rule pt-2 mt-2">
           <p className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider text-subtle mb-2">
-            仕様選択（このバリエーションに該当する組み合わせ）
+            仕様（この組み合わせの内訳）
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {groups.map((g) => (
@@ -778,7 +798,8 @@ function VariantEditRow({
             ))}
           </div>
           <p className="text-[10px] text-subtle mt-2">
-            新規追加時は「保存」後に再度編集して仕様選択を割り当ててください。
+            通常は「仕様」セクションで仕様とバリエーションを追加すれば自動生成されます。
+            ここは手動で組み合わせを追加するときだけ使用します（新規時は「保存」後に再編集で割り当て）。
           </p>
         </div>
       )}
@@ -872,7 +893,7 @@ function SpecGroupsSection({
 
   const handleGroupSave = (draft: DraftSpecGroup, groupId?: string) => {
     if (!draft.name.trim()) {
-      setError("グループ名は必須です");
+      setError("仕様名は必須です");
       return;
     }
     setError(null);
@@ -900,7 +921,7 @@ function SpecGroupsSection({
   };
 
   const handleGroupDelete = (g: SpecGroup) => {
-    if (!confirm(`仕様グループ「${g.name}」を削除します。よろしいですか？`)) return;
+    if (!confirm(`仕様「${g.name}」を削除します。よろしいですか？`)) return;
     startTransition(async () => {
       try {
         await deleteSpecGroup(material.id, g.id);
@@ -914,7 +935,7 @@ function SpecGroupsSection({
   return (
     <section>
       <SectionRule
-        label="仕様グループ"
+        label="仕様"
         right={
           !creatingGroup &&
           !editingGroupId && (
@@ -926,7 +947,7 @@ function SpecGroupsSection({
                 setCreatingGroup(emptyGroupDraft(nextGroupSort));
               }}
             >
-              + グループ追加
+              + 仕様追加
             </Button>
           )
         }
@@ -934,7 +955,7 @@ function SpecGroupsSection({
       />
       {material.spec_groups.length === 0 && !creatingGroup ? (
         <p className="text-sm text-subtle py-6 text-center border-y border-rule">
-          仕様グループは未登録です。「+ グループ追加」から作成してください。
+          仕様は未登録です。「+ 仕様追加」から色やサイズなどを作成してください。
         </p>
       ) : (
         <div className="space-y-3">
@@ -1001,7 +1022,7 @@ function SpecGroupEditForm({
           autoFocus
           value={draft.name}
           onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          placeholder="グループ名 (例: 格納タイプ)"
+          placeholder="仕様名 (例: 色)"
           className="h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
         />
         <select
@@ -1170,7 +1191,7 @@ function SpecOptionsList({
 
   const handleSave = (d: DraftSpecOption, optionId?: string) => {
     if (!d.label.trim()) {
-      setError("ラベルは必須です");
+      setError("バリエーション名は必須です");
       return;
     }
     setError(null);
@@ -1196,7 +1217,7 @@ function SpecOptionsList({
   };
 
   const handleDelete = (o: SpecOption) => {
-    if (!confirm(`選択肢「${o.label}」を削除します。よろしいですか？`)) return;
+    if (!confirm(`バリエーション「${o.label}」を削除します。よろしいですか？`)) return;
     startTransition(async () => {
       try {
         await deleteSpecOption(materialId, group.id, o.id);
@@ -1211,11 +1232,11 @@ function SpecOptionsList({
     <div className="border-t border-rule pt-2">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider text-subtle">
-          選択肢 ({group.options.length})
+          バリエーション ({group.options.length})
         </span>
         {!creating && !editingId && (
           <Button size="sm" variant="ghost" onClick={startCreate}>
-            + 選択肢追加
+            + バリエーション追加
           </Button>
         )}
       </div>
@@ -1304,7 +1325,7 @@ function SpecOptionEditRow({
         autoFocus
         value={draft.label}
         onChange={(e) => setDraft({ ...draft, label: e.target.value })}
-        placeholder="ラベル"
+        placeholder="バリエーション名 (例: 赤)"
         className="flex-1 h-8 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
       <input
