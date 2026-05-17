@@ -1,7 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { CartItem, DeliveryMethod } from "../types";
 import type { SubmitOrderInput } from "../order-submission";
-import type { MessageAttachment } from "../chat/types";
+import type { ChatAudience, MessageAttachment } from "../chat/types";
 
 const DB_NAME = "lease-order-offline";
 const DB_VERSION = 3;
@@ -34,6 +34,7 @@ export type ChatOutboxPayload = {
 export type ChatOutboxItem = {
   id: string;
   clientRequestId: string;
+  audience: ChatAudience;
   tenantId: string | null;
   customerId: string | null;
   payload: ChatOutboxPayload;
@@ -117,6 +118,9 @@ export function getDb(): Promise<IDBPDatabase<OfflineSchema>> {
           store.createIndex("by-updated", "updatedAt");
         }
         if (oldVersion < 3) {
+          // audience フィールドは v3 以降の書き込みで含まれる。古い既存レコードは
+          // 読み出し時に audience が undefined になるが、flush 側で customer に
+          // フォールバックするので IndexedDB スキーマ上はバージョン据え置きで良い。
           const store = db.createObjectStore("chatOutbox", { keyPath: "id" });
           store.createIndex("by-customer", ["tenantId", "customerId"]);
           store.createIndex("by-status", "status");

@@ -1,6 +1,14 @@
 import { getDb, type ChatOutboxItem, type ChatOutboxPayload } from "./db";
+import type { ChatAudience } from "../chat/types";
 
 export type { ChatOutboxItem } from "./db";
+
+function urlFor(audience: ChatAudience | undefined): string {
+  // 古い (v3 以前) のレコードは audience を持たないので customer 既定。
+  return audience === "admin"
+    ? "/api/chat/admin/messages"
+    : "/api/chat/customer/messages";
+}
 
 export type ChatFlushResult =
   | { status: "sent"; messageId: string; duplicate: boolean }
@@ -15,6 +23,7 @@ function newId(): string {
 }
 
 export async function enqueueChatMessage(input: {
+  audience: ChatAudience;
   tenantId: string | null;
   customerId: string | null;
   payload: ChatOutboxPayload;
@@ -23,6 +32,7 @@ export async function enqueueChatMessage(input: {
   const item: ChatOutboxItem = {
     id: newId(),
     clientRequestId: input.payload.clientRequestId,
+    audience: input.audience,
     tenantId: input.tenantId,
     customerId: input.customerId,
     payload: input.payload,
@@ -109,7 +119,7 @@ export async function flushChatOne(
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
-      response = await fetch("/api/chat/messages", {
+      response = await fetch(urlFor(item.audience), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(item.payload),
