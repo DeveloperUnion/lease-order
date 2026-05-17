@@ -23,14 +23,17 @@
 
 -- ------------------------------------------------------------
 -- 0. 旧 v1 構造のクリーンアップ（残っていれば drop / 無ければ no-op）
+--
+-- order_items.variant_id は material_variants への FK を持つので、テーブル
+-- drop の前にカラム drop で FK 制約を外す必要がある。
 -- ------------------------------------------------------------
+alter table order_items drop column if exists variant_id;
+alter table order_items drop column if exists variant_name;
 drop table if exists material_variant_options;
 drop table if exists material_variants;
 drop table if exists order_item_spec_options;
 drop table if exists spec_options;
 drop table if exists spec_groups;
-alter table order_items drop column if exists variant_id;
-alter table order_items drop column if exists variant_name;
 
 -- ------------------------------------------------------------
 -- 仕様
