@@ -118,9 +118,13 @@ export default function CartForm({ offices, customer }: Props) {
         leaseEndDate,
         items: items.map((i) => ({
           materialId: i.material.id,
-          variantId: i.variantId,
-          variantName: i.variantName,
           quantity: i.quantity,
+          selections: i.selections.map((s) => ({
+            spec_group_id: s.spec_group_id,
+            spec_option_id: s.spec_option_id,
+            group_name: s.group_name,
+            option_label: s.option_label,
+          })),
         })),
       });
 
@@ -220,7 +224,7 @@ export default function CartForm({ offices, customer }: Props) {
 
           <div className="border border-border bg-surface rounded-xl overflow-hidden mb-6">
             {items.map((item) => {
-              const selectionText = item.selections && item.selections.length > 0
+              const selectionText = item.selections.length > 0
                 ? item.selections.map((s) => `${s.group_name}: ${s.option_label}`).join("  /  ")
                 : item.material.spec && Object.keys(item.material.spec).length > 0
                 ? Object.entries(item.material.spec)
@@ -236,11 +240,6 @@ export default function CartForm({ offices, customer }: Props) {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-foreground truncate">
                       {item.material.name}
-                      {item.variantName && (
-                        <span className="ml-2 text-xs font-normal text-muted">
-                          ({item.variantName})
-                        </span>
-                      )}
                     </p>
                     {selectionText && (
                       <p className="text-xs text-subtle mt-0.5 truncate">{selectionText}</p>
@@ -464,8 +463,10 @@ export default function CartForm({ offices, customer }: Props) {
               >
                 <span className="text-sm text-foreground truncate">
                   {item.material.name}
-                  {item.variantName && (
-                    <span className="ml-2 text-xs text-muted">({item.variantName})</span>
+                  {item.selections.length > 0 && (
+                    <span className="ml-2 text-xs text-muted">
+                      ({item.selections.map((s) => s.option_label).join(" / ")})
+                    </span>
                   )}
                 </span>
                 <span className="text-sm font-semibold text-foreground flex-shrink-0 tabular-nums">

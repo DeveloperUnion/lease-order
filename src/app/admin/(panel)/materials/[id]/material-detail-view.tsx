@@ -7,29 +7,22 @@ import type {
   MaterialDetail,
   MaterialImageRow,
 } from "@/lib/admin-data";
-import type {
-  MaterialVariantWithOptions,
-  SpecGroup,
-  SpecOption,
-  SpecSelectionType,
-} from "@/lib/types";
+import type { SpecGroup, SpecOption } from "@/lib/types";
 import {
   addMaterialImage,
-  addVariant,
-  createSpecGroup,
+  createSpecGroupWithOptions,
   createSpecOption,
   deleteSpecGroup,
   deleteSpecOption,
-  deleteVariant,
   removeMaterialImage,
   reorderMaterialImages,
+  reorderSpecGroups,
+  reorderSpecOptions,
   setMaterialActive,
   setPrimaryMaterialImage,
-  setVariantSpecOptions,
   updateMaterial,
   updateSpecGroup,
   updateSpecOption,
-  updateVariant,
 } from "@/app/admin/actions";
 import {
   PageHeader,
@@ -71,7 +64,6 @@ export default function MaterialDetailView({
         />
         <ImagesSection material={material} onToast={showToast} />
         <SpecGroupsSection material={material} onToast={showToast} />
-        <VariantsSection material={material} onToast={showToast} />
       </div>
 
       {toast && (
@@ -426,440 +418,17 @@ function ImagesSection({
 }
 
 // ============================================================
-// Variants section
+// Spec groups section (v3: 仕様 + バリエーションの 2 層、DnD 並び替え)
 // ============================================================
 
-type DraftVariant = {
+type GroupDraft = {
   name: string;
-  unit: string;
-  sku: string;
-  sort_order: number;
-  is_active: boolean;
-  // spec_group_id -> spec_option_id ("" は未割当)
-  optionByGroup: Record<string, string>;
-};
-
-function emptyDraft(nextSort: number, groups: SpecGroup[]): DraftVariant {
-  return {
-    name: "",
-    unit: "",
-    sku: "",
-    sort_order: nextSort,
-    is_active: true,
-    optionByGroup: Object.fromEntries(groups.map((g) => [g.id, ""])),
-  };
-}
-
-function variantToDraft(
-  v: MaterialVariantWithOptions,
-  groups: SpecGroup[]
-): DraftVariant {
-  const optionByGroup: Record<string, string> = Object.fromEntries(
-    groups.map((g) => [g.id, ""])
-  );
-  for (const o of v.options) {
-    optionByGroup[o.spec_group_id] = o.spec_option_id;
-  }
-  return {
-    name: v.name,
-    unit: v.unit ?? "",
-    sku: v.sku ?? "",
-    sort_order: v.sort_order,
-    is_active: v.is_active,
-    optionByGroup,
-  };
-}
-
-function VariantsSection({
-  material,
-  onToast,
-}: {
-  material: MaterialDetail;
-  onToast: (msg: string) => void;
-}) {
-  const [editing, setEditing] = useState<{ id: string; draft: DraftVariant } | null>(
-    null
-  );
-  const [creating, setCreating] = useState<DraftVariant | null>(null);
-  const [open, setOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  const nextSort = (material.variants.at(-1)?.sort_order ?? 0) + 1;
-  const activeGroups = material.spec_groups.filter((g) => g.is_active);
-
-  const startEdit = (v: MaterialVariantWithOptions) => {
-    setError(null);
-    setCreating(null);
-    setEditing({ id: v.id, draft: variantToDraft(v, activeGroups) });
-  };
-
-  const startCreate = () => {
-    setError(null);
-    setEditing(null);
-    setCreating(emptyDraft(nextSort, activeGroups));
-  };
-
-  const cancel = () => {
-    setEditing(null);
-    setCreating(null);
-    setError(null);
-  };
-
-  const handleSave = (draft: DraftVariant, variantId?: string) => {
-    if (!draft.name.trim()) {
-      setError("バリエーション名は必須です");
-      return;
-    }
-    setError(null);
-    startTransition(async () => {
-      const fd = new FormData();
-      fd.set("name", draft.name);
-      fd.set("unit", draft.unit);
-      fd.set("sku", draft.sku);
-      fd.set("sort_order", String(draft.sort_order));
-      fd.set("is_active", draft.is_active ? "true" : "false");
-      try {
-        let targetId = variantId;
-        if (variantId) {
-          await updateVariant(material.id, variantId, fd);
-        } else {
-          await addVariant(material.id, fd);
-          // 新規追加時の variant_id を取得するには再フェッチが必要。
-          // ここでは spec 紐付の保存は次回編集に委ねる（追加直後はオプション未設定）。
-          targetId = undefined;
-        }
-        if (targetId) {
-          const selections = Object.entries(draft.optionByGroup)
-            .filter(([, optId]) => optId)
-            .map(([groupId, optId]) => ({
-              spec_group_id: groupId,
-              spec_option_id: optId,
-            }));
-          await setVariantSpecOptions(material.id, targetId, selections);
-        }
-        onToast(variantId ? "更新しました" : "追加しました");
-        cancel();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "保存に失敗しました");
-      }
-    });
-  };
-
-  const handleDelete = (v: MaterialVariantWithOptions) => {
-    if (!confirm(`バリエーション「${v.name}」を削除します。よろしいですか？`)) return;
-    startTransition(async () => {
-      try {
-        await deleteVariant(material.id, v.id);
-        onToast("削除しました");
-      } catch (e) {
-        onToast(e instanceof Error ? e.message : "削除に失敗しました");
-      }
-    });
-  };
-
-  return (
-    <section>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full text-left"
-      >
-        <SectionRule
-          label="在庫詳細（上級者向け）"
-          right={
-            <span className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider text-subtle">
-              {open ? "▲ 閉じる" : "▼ 開く"}
-            </span>
-          }
-          className="mb-2"
-        />
-      </button>
-      <p className="text-xs text-subtle mb-3">
-        {open
-          ? `仕様の追加時に自動生成された組み合わせ ${material.variants.length} 件。SKU や個別単位の調整、無効化が必要なときだけ編集してください。`
-          : `仕様の組み合わせ ${material.variants.length} 件。SKU や個別単位の調整、無効化はここで。通常は触らなくて OK。`}
-      </p>
-      {!open ? null : (
-        <>
-      <div className="flex justify-end mb-2">
-        {!creating && !editing && (
-          <Button size="sm" onClick={startCreate}>
-            + 手動追加
-          </Button>
-        )}
-      </div>
-      {material.variants.length === 0 && !creating ? (
-        <p className="text-sm text-subtle py-6 text-center border-y border-rule">
-          バリエーションは未登録です。「仕様」セクションで仕様とバリエーションを追加してください。
-        </p>
-      ) : (
-        <div className="border-y border-rule divide-y divide-rule">
-          <div className="hidden sm:grid grid-cols-[1fr,80px,140px,60px,auto] gap-2 px-3 py-2 bg-surface-muted/60 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-subtle">
-            <span>名前</span>
-            <span>単位</span>
-            <span>SKU</span>
-            <span className="text-right">並び順</span>
-            <span></span>
-          </div>
-
-          {material.variants.map((v) => {
-            if (editing?.id === v.id) {
-              return (
-                <VariantEditRow
-                  key={v.id}
-                  draft={editing.draft}
-                  groups={activeGroups}
-                  setDraft={(d) => setEditing({ id: v.id, draft: d })}
-                  onSave={() => handleSave(editing.draft, v.id)}
-                  onCancel={cancel}
-                  pending={isPending}
-                />
-              );
-            }
-            const optLabels = activeGroups
-              .map((g) => {
-                const optId = v.options.find((o) => o.spec_group_id === g.id)?.spec_option_id;
-                const opt = g.options.find((o) => o.id === optId);
-                return opt ? `${g.name}: ${opt.label}` : null;
-              })
-              .filter(Boolean) as string[];
-            return (
-              <div
-                key={v.id}
-                className={`grid grid-cols-2 sm:grid-cols-[1fr,80px,140px,60px,auto] gap-2 items-center px-3 py-2.5 text-sm hover:bg-surface-muted ${
-                  !v.is_active ? "opacity-50" : ""
-                }`}
-              >
-                <div className="font-medium text-foreground min-w-0">
-                  <div className="truncate">{v.name}</div>
-                  {optLabels.length > 0 && (
-                    <div className="text-[11px] text-muted truncate mt-0.5">
-                      {optLabels.join("  /  ")}
-                    </div>
-                  )}
-                </div>
-                <div className="text-muted text-xs sm:text-sm">{v.unit ?? "—"}</div>
-                <div className="text-muted font-[family-name:var(--font-mono)] text-xs truncate">
-                  {v.sku ?? "—"}
-                </div>
-                <div className="text-right text-muted font-[family-name:var(--font-mono)] tabular-nums text-xs">
-                  {v.sort_order}
-                </div>
-                <div className="col-span-2 sm:col-span-1 flex justify-end gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDelete(v)}
-                    disabled={isPending}
-                  >
-                    削除
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => startEdit(v)}
-                  >
-                    編集
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-
-          {creating && (
-            <VariantEditRow
-              draft={creating}
-              groups={activeGroups}
-              setDraft={setCreating}
-              onSave={() => handleSave(creating)}
-              onCancel={cancel}
-              pending={isPending}
-            />
-          )}
-        </div>
-      )}
-
-      {error && (
-        <p className="mt-3 text-sm text-[var(--color-status-rejected-fg)]">
-          {error}
-        </p>
-      )}
-        </>
-      )}
-    </section>
-  );
-}
-
-function VariantEditRow({
-  draft,
-  groups,
-  setDraft,
-  onSave,
-  onCancel,
-  pending,
-}: {
-  draft: DraftVariant;
-  groups: SpecGroup[];
-  setDraft: (d: DraftVariant) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  pending: boolean;
-}) {
-  return (
-    <div className="px-3 py-2.5 bg-[var(--color-status-pending-bg)]/40 border-l-2 border-accent space-y-2">
-      <div className="grid grid-cols-2 sm:grid-cols-[1fr,80px,140px,60px,auto] gap-2 items-center">
-        <input
-          autoFocus
-          value={draft.name}
-          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          placeholder="名前 (例: 2m)"
-          className="h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-        />
-        <input
-          value={draft.unit}
-          onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
-          placeholder="本/枚"
-          className="h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-        />
-        <input
-          value={draft.sku}
-          onChange={(e) => setDraft({ ...draft, sku: e.target.value })}
-          placeholder="SKU"
-          className="h-9 px-2 bg-surface border border-rule text-sm font-[family-name:var(--font-mono)] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-        />
-        <input
-          type="number"
-          value={draft.sort_order}
-          onChange={(e) =>
-            setDraft({ ...draft, sort_order: Number(e.target.value) || 0 })
-          }
-          className="h-9 px-2 bg-surface border border-rule text-sm text-right tabular-nums font-[family-name:var(--font-mono)] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-        />
-        <div className="col-span-2 sm:col-span-1 flex items-center justify-end gap-2">
-          <label className="flex items-center gap-1 text-xs text-muted mr-2">
-            <input
-              type="checkbox"
-              checked={draft.is_active}
-              onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })}
-              className="w-3.5 h-3.5 accent-accent"
-            />
-            公開
-          </label>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={onCancel}
-            disabled={pending}
-          >
-            取消
-          </Button>
-          <Button
-            size="sm"
-            onClick={onSave}
-            disabled={pending || !draft.name.trim()}
-          >
-            保存
-          </Button>
-        </div>
-      </div>
-      {groups.length > 0 && (
-        <div className="border-t border-rule pt-2 mt-2">
-          <p className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider text-subtle mb-2">
-            仕様（この組み合わせの内訳）
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {groups.map((g) => (
-              <label key={g.id} className="flex flex-col gap-1">
-                <span className="text-xs text-muted">{g.name}</span>
-                <select
-                  value={draft.optionByGroup[g.id] ?? ""}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      optionByGroup: {
-                        ...draft.optionByGroup,
-                        [g.id]: e.target.value,
-                      },
-                    })
-                  }
-                  className="h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-                >
-                  <option value="">— 未割当 —</option>
-                  {g.options
-                    .filter((o) => o.is_active)
-                    .map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            ))}
-          </div>
-          <p className="text-[10px] text-subtle mt-2">
-            通常は「仕様」セクションで仕様とバリエーションを追加すれば自動生成されます。
-            ここは手動で組み合わせを追加するときだけ使用します（新規時は「保存」後に再編集で割り当て）。
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================
-// Spec groups section
-// ============================================================
-
-type DraftSpecGroup = {
-  name: string;
-  description: string;
-  selection_type: SpecSelectionType;
   is_required: boolean;
-  sort_order: number;
-  is_active: boolean;
+  options: { label: string }[]; // 新規作成時のバリエーション入力欄
 };
 
-type DraftSpecOption = {
-  label: string;
-  short_code: string;
-  sort_order: number;
-  is_active: boolean;
-};
-
-function emptyGroupDraft(nextSort: number): DraftSpecGroup {
-  return {
-    name: "",
-    description: "",
-    selection_type: "single",
-    is_required: false,
-    sort_order: nextSort,
-    is_active: true,
-  };
-}
-
-function groupToDraft(g: SpecGroup): DraftSpecGroup {
-  return {
-    name: g.name,
-    description: g.description ?? "",
-    selection_type: g.selection_type,
-    is_required: g.is_required,
-    sort_order: g.sort_order,
-    is_active: g.is_active,
-  };
-}
-
-function emptyOptionDraft(nextSort: number): DraftSpecOption {
-  return { label: "", short_code: "", sort_order: nextSort, is_active: true };
-}
-
-function optionToDraft(o: SpecOption): DraftSpecOption {
-  return {
-    label: o.label,
-    short_code: o.short_code ?? "",
-    sort_order: o.sort_order,
-    is_active: o.is_active,
-  };
+function emptyGroupDraft(): GroupDraft {
+  return { name: "", is_required: false, options: [{ label: "" }, { label: "" }] };
 }
 
 function SpecGroupsSection({
@@ -869,58 +438,93 @@ function SpecGroupsSection({
   material: MaterialDetail;
   onToast: (msg: string) => void;
 }) {
-  const [creatingGroup, setCreatingGroup] = useState<DraftSpecGroup | null>(null);
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
-  const [groupDraft, setGroupDraft] = useState<DraftSpecGroup | null>(null);
+  const [creating, setCreating] = useState<GroupDraft | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{ name: string; is_required: boolean } | null>(null);
+  const [order, setOrder] = useState<SpecGroup[]>(material.spec_groups);
+  const [dragId, setDragId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const nextGroupSort = (material.spec_groups.at(-1)?.sort_order ?? 0) + 1;
+  // サーバの spec_groups と local order を同期
+  const serverIds = new Set(material.spec_groups.map((g) => g.id));
+  const localIds = new Set(order.map((g) => g.id));
+  const sameSet =
+    serverIds.size === localIds.size &&
+    [...serverIds].every((id) => localIds.has(id));
+  if (!sameSet) {
+    setOrder(material.spec_groups);
+  }
 
-  const startGroupEdit = (g: SpecGroup) => {
+  const startCreate = () => {
     setError(null);
-    setCreatingGroup(null);
-    setEditingGroupId(g.id);
-    setGroupDraft(groupToDraft(g));
+    setEditingId(null);
+    setCreating(emptyGroupDraft());
   };
 
-  const cancelGroupEdit = () => {
-    setEditingGroupId(null);
-    setGroupDraft(null);
-    setCreatingGroup(null);
+  const startEdit = (g: SpecGroup) => {
+    setError(null);
+    setCreating(null);
+    setEditingId(g.id);
+    setEditDraft({ name: g.name, is_required: g.is_required });
+  };
+
+  const cancel = () => {
+    setCreating(null);
+    setEditingId(null);
+    setEditDraft(null);
     setError(null);
   };
 
-  const handleGroupSave = (draft: DraftSpecGroup, groupId?: string) => {
-    if (!draft.name.trim()) {
+  const handleCreate = () => {
+    if (!creating) return;
+    if (!creating.name.trim()) {
       setError("仕様名は必須です");
+      return;
+    }
+    const cleaned = creating.options.filter((o) => o.label.trim().length > 0);
+    if (cleaned.length === 0) {
+      setError("バリエーションを 1 件以上入力してください");
       return;
     }
     setError(null);
     startTransition(async () => {
       try {
-        const input = {
-          name: draft.name,
-          description: draft.description.trim() || null,
-          selectionType: draft.selection_type,
-          isRequired: draft.is_required,
-          sortOrder: draft.sort_order,
-          isActive: draft.is_active,
-        };
-        if (groupId) {
-          await updateSpecGroup(material.id, groupId, input);
-        } else {
-          await createSpecGroup(material.id, input);
-        }
-        onToast(groupId ? "更新しました" : "追加しました");
-        cancelGroupEdit();
+        await createSpecGroupWithOptions(
+          material.id,
+          { name: creating.name, isRequired: creating.is_required },
+          cleaned
+        );
+        onToast("追加しました");
+        cancel();
       } catch (e) {
         setError(e instanceof Error ? e.message : "保存に失敗しました");
       }
     });
   };
 
-  const handleGroupDelete = (g: SpecGroup) => {
+  const handleUpdate = (groupId: string) => {
+    if (!editDraft) return;
+    if (!editDraft.name.trim()) {
+      setError("仕様名は必須です");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updateSpecGroup(material.id, groupId, {
+          name: editDraft.name,
+          isRequired: editDraft.is_required,
+        });
+        onToast("更新しました");
+        cancel();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "保存に失敗しました");
+      }
+    });
+  };
+
+  const handleDelete = (g: SpecGroup) => {
     if (!confirm(`仕様「${g.name}」を削除します。よろしいですか？`)) return;
     startTransition(async () => {
       try {
@@ -932,41 +536,55 @@ function SpecGroupsSection({
     });
   };
 
+  const handleDrop = (targetId: string) => {
+    if (!dragId || dragId === targetId) return;
+    const next = [...order];
+    const fromIdx = next.findIndex((g) => g.id === dragId);
+    const toIdx = next.findIndex((g) => g.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setOrder(next);
+    setDragId(null);
+    startTransition(async () => {
+      try {
+        await reorderSpecGroups(material.id, next.map((g) => g.id));
+      } catch (e) {
+        onToast(e instanceof Error ? e.message : "並び替えに失敗しました");
+        setOrder(material.spec_groups);
+      }
+    });
+  };
+
   return (
     <section>
       <SectionRule
         label="仕様"
         right={
-          !creatingGroup &&
-          !editingGroupId && (
-            <Button
-              size="sm"
-              onClick={() => {
-                setError(null);
-                setEditingGroupId(null);
-                setCreatingGroup(emptyGroupDraft(nextGroupSort));
-              }}
-            >
+          !creating &&
+          !editingId && (
+            <Button size="sm" onClick={startCreate}>
               + 仕様追加
             </Button>
           )
         }
         className="mb-4"
       />
-      {material.spec_groups.length === 0 && !creatingGroup ? (
+
+      {order.length === 0 && !creating ? (
         <p className="text-sm text-subtle py-6 text-center border-y border-rule">
           仕様は未登録です。「+ 仕様追加」から色やサイズなどを作成してください。
         </p>
       ) : (
         <div className="space-y-3">
-          {material.spec_groups.map((g) =>
-            editingGroupId === g.id && groupDraft ? (
+          {order.map((g) =>
+            editingId === g.id && editDraft ? (
               <SpecGroupEditForm
                 key={g.id}
-                draft={groupDraft}
-                setDraft={setGroupDraft}
-                onSave={() => handleGroupSave(groupDraft, g.id)}
-                onCancel={cancelGroupEdit}
+                draft={editDraft}
+                setDraft={setEditDraft}
+                onSave={() => handleUpdate(g.id)}
+                onCancel={cancel}
                 pending={isPending}
               />
             ) : (
@@ -974,31 +592,126 @@ function SpecGroupsSection({
                 key={g.id}
                 group={g}
                 materialId={material.id}
-                onEdit={() => startGroupEdit(g)}
-                onDelete={() => handleGroupDelete(g)}
+                isDragging={dragId === g.id}
+                onDragStart={() => setDragId(g.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => handleDrop(g.id)}
+                onDragEnd={() => setDragId(null)}
+                onEdit={() => startEdit(g)}
+                onDelete={() => handleDelete(g)}
                 onToast={onToast}
                 pending={isPending}
               />
             )
           )}
-
-          {creatingGroup && (
-            <SpecGroupEditForm
-              draft={creatingGroup}
-              setDraft={setCreatingGroup}
-              onSave={() => handleGroupSave(creatingGroup)}
-              onCancel={cancelGroupEdit}
-              pending={isPending}
-            />
-          )}
         </div>
       )}
+
+      {creating && (
+        <div className="mt-3">
+          <SpecGroupCreateForm
+            draft={creating}
+            setDraft={setCreating}
+            onSave={handleCreate}
+            onCancel={cancel}
+            pending={isPending}
+          />
+        </div>
+      )}
+
       {error && (
         <p className="mt-3 text-sm text-[var(--color-status-rejected-fg)]">
           {error}
         </p>
       )}
     </section>
+  );
+}
+
+function SpecGroupCreateForm({
+  draft,
+  setDraft,
+  onSave,
+  onCancel,
+  pending,
+}: {
+  draft: GroupDraft;
+  setDraft: (d: GroupDraft) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  pending: boolean;
+}) {
+  const addOption = () => {
+    setDraft({ ...draft, options: [...draft.options, { label: "" }] });
+  };
+  const removeOption = (idx: number) => {
+    setDraft({ ...draft, options: draft.options.filter((_, i) => i !== idx) });
+  };
+  const updateOption = (idx: number, label: string) => {
+    setDraft({
+      ...draft,
+      options: draft.options.map((o, i) => (i === idx ? { label } : o)),
+    });
+  };
+  return (
+    <div className="border border-accent p-3 bg-[var(--color-status-pending-bg)]/40 space-y-3">
+      <input
+        autoFocus
+        value={draft.name}
+        onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+        placeholder="仕様名 (例: 色)"
+        className="w-full h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+      />
+      <label className="flex items-center gap-1 text-xs text-muted">
+        <input
+          type="checkbox"
+          checked={draft.is_required}
+          onChange={(e) => setDraft({ ...draft, is_required: e.target.checked })}
+          className="w-3.5 h-3.5 accent-accent"
+        />
+        必須（顧客が選ばないと発注できない）
+      </label>
+      <div>
+        <p className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider text-subtle mb-2">
+          バリエーション
+        </p>
+        <div className="space-y-1">
+          {draft.options.map((o, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <input
+                value={o.label}
+                onChange={(e) => updateOption(idx, e.target.value)}
+                placeholder={idx === 0 ? "例: 赤" : idx === 1 ? "例: 青" : "バリエーション名"}
+                className="flex-1 h-8 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => removeOption(idx)}
+                disabled={draft.options.length <= 1}
+              >
+                削除
+              </Button>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={addOption}
+          className="mt-2 text-xs text-accent hover:underline"
+        >
+          + バリエーション追加
+        </button>
+      </div>
+      <div className="flex justify-end gap-2 pt-1 border-t border-rule">
+        <Button size="sm" variant="secondary" onClick={onCancel} disabled={pending}>
+          取消
+        </Button>
+        <Button size="sm" onClick={onSave} disabled={pending || !draft.name.trim()}>
+          保存
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -1009,75 +722,31 @@ function SpecGroupEditForm({
   onCancel,
   pending,
 }: {
-  draft: DraftSpecGroup;
-  setDraft: (d: DraftSpecGroup) => void;
+  draft: { name: string; is_required: boolean };
+  setDraft: (d: { name: string; is_required: boolean }) => void;
   onSave: () => void;
   onCancel: () => void;
   pending: boolean;
 }) {
   return (
     <div className="border border-accent p-3 bg-[var(--color-status-pending-bg)]/40 space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr,140px,60px] gap-2">
-        <input
-          autoFocus
-          value={draft.name}
-          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          placeholder="仕様名 (例: 色)"
-          className="h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-        />
-        <select
-          value={draft.selection_type}
-          onChange={(e) =>
-            setDraft({
-              ...draft,
-              selection_type: e.target.value as SpecSelectionType,
-            })
-          }
-          className="h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-        >
-          <option value="single">単一選択</option>
-          <option value="multi">複数選択可</option>
-        </select>
-        <input
-          type="number"
-          value={draft.sort_order}
-          onChange={(e) =>
-            setDraft({ ...draft, sort_order: Number(e.target.value) || 0 })
-          }
-          className="h-9 px-2 bg-surface border border-rule text-sm text-right tabular-nums font-[family-name:var(--font-mono)] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-        />
-      </div>
       <input
-        value={draft.description}
-        onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-        placeholder="説明（任意）"
+        autoFocus
+        value={draft.name}
+        onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+        placeholder="仕様名"
         className="w-full h-9 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-1 text-xs text-muted">
-            <input
-              type="checkbox"
-              checked={draft.is_required}
-              onChange={(e) =>
-                setDraft({ ...draft, is_required: e.target.checked })
-              }
-              className="w-3.5 h-3.5 accent-accent"
-            />
-            必須
-          </label>
-          <label className="flex items-center gap-1 text-xs text-muted">
-            <input
-              type="checkbox"
-              checked={draft.is_active}
-              onChange={(e) =>
-                setDraft({ ...draft, is_active: e.target.checked })
-              }
-              className="w-3.5 h-3.5 accent-accent"
-            />
-            公開
-          </label>
-        </div>
+        <label className="flex items-center gap-1 text-xs text-muted">
+          <input
+            type="checkbox"
+            checked={draft.is_required}
+            onChange={(e) => setDraft({ ...draft, is_required: e.target.checked })}
+            className="w-3.5 h-3.5 accent-accent"
+          />
+          必須
+        </label>
         <div className="flex gap-2">
           <Button size="sm" variant="secondary" onClick={onCancel} disabled={pending}>
             取消
@@ -1094,6 +763,11 @@ function SpecGroupEditForm({
 function SpecGroupRow({
   group,
   materialId,
+  isDragging,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
   onEdit,
   onDelete,
   onToast,
@@ -1101,6 +775,11 @@ function SpecGroupRow({
 }: {
   group: SpecGroup;
   materialId: string;
+  isDragging: boolean;
+  onDragStart: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: () => void;
+  onDragEnd: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onToast: (msg: string) => void;
@@ -1108,30 +787,25 @@ function SpecGroupRow({
 }) {
   return (
     <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       className={`border border-rule p-3 space-y-3 ${
-        !group.is_active ? "opacity-60" : ""
+        isDragging ? "opacity-50" : ""
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-foreground">{group.name}</span>
-            <span className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider px-1.5 py-0.5 bg-surface-muted text-subtle border border-rule">
-              {group.selection_type === "multi" ? "複数選択可" : "単一選択"}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="cursor-grab text-subtle text-base select-none" aria-hidden>
+            ⠿
+          </span>
+          <span className="font-semibold text-foreground">{group.name}</span>
+          {group.is_required && (
+            <span className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider px-1.5 py-0.5 bg-[var(--color-status-rejected-bg)] text-[var(--color-status-rejected-fg)]">
+              必須
             </span>
-            {group.is_required && (
-              <span className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider px-1.5 py-0.5 bg-[var(--color-status-rejected-bg)] text-[var(--color-status-rejected-fg)]">
-                必須
-              </span>
-            )}
-            {!group.is_active && (
-              <span className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider px-1.5 py-0.5 bg-surface-muted text-subtle">
-                非公開
-              </span>
-            )}
-          </div>
-          {group.description && (
-            <p className="text-xs text-muted mt-1">{group.description}</p>
           )}
         </div>
         <div className="flex gap-2 flex-shrink-0">
@@ -1144,11 +818,7 @@ function SpecGroupRow({
         </div>
       </div>
 
-      <SpecOptionsList
-        materialId={materialId}
-        group={group}
-        onToast={onToast}
-      />
+      <SpecOptionsList materialId={materialId} group={group} onToast={onToast} />
     </div>
   );
 }
@@ -1162,53 +832,68 @@ function SpecOptionsList({
   group: SpecGroup;
   onToast: (msg: string) => void;
 }) {
+  const [order, setOrder] = useState<SpecOption[]>(group.options);
+  const [dragId, setDragId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<DraftSpecOption | null>(null);
-  const [creating, setCreating] = useState<DraftSpecOption | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [creatingLabel, setCreatingLabel] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const nextSort = (group.options.at(-1)?.sort_order ?? 0) + 1;
+  const serverIds = new Set(group.options.map((o) => o.id));
+  const localIds = new Set(order.map((o) => o.id));
+  const sameSet =
+    serverIds.size === localIds.size &&
+    [...serverIds].every((id) => localIds.has(id));
+  if (!sameSet) {
+    setOrder(group.options);
+  }
 
   const startEdit = (o: SpecOption) => {
     setError(null);
-    setCreating(null);
+    setCreatingLabel(null);
     setEditingId(o.id);
-    setDraft(optionToDraft(o));
+    setEditLabel(o.label);
   };
   const startCreate = () => {
     setError(null);
     setEditingId(null);
-    setDraft(null);
-    setCreating(emptyOptionDraft(nextSort));
+    setCreatingLabel("");
   };
   const cancel = () => {
     setEditingId(null);
-    setDraft(null);
-    setCreating(null);
+    setCreatingLabel(null);
     setError(null);
   };
 
-  const handleSave = (d: DraftSpecOption, optionId?: string) => {
-    if (!d.label.trim()) {
+  const handleCreate = () => {
+    if (creatingLabel === null) return;
+    if (!creatingLabel.trim()) {
       setError("バリエーション名は必須です");
       return;
     }
     setError(null);
     startTransition(async () => {
       try {
-        const input = {
-          label: d.label,
-          shortCode: d.short_code.trim() || null,
-          sortOrder: d.sort_order,
-          isActive: d.is_active,
-        };
-        if (optionId) {
-          await updateSpecOption(materialId, group.id, optionId, input);
-        } else {
-          await createSpecOption(materialId, group.id, input);
-        }
-        onToast(optionId ? "更新しました" : "追加しました");
+        await createSpecOption(materialId, group.id, { label: creatingLabel });
+        onToast("追加しました");
+        cancel();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "保存に失敗しました");
+      }
+    });
+  };
+
+  const handleUpdate = (optionId: string) => {
+    if (!editLabel.trim()) {
+      setError("バリエーション名は必須です");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updateSpecOption(materialId, group.id, optionId, { label: editLabel });
+        onToast("更新しました");
         cancel();
       } catch (e) {
         setError(e instanceof Error ? e.message : "保存に失敗しました");
@@ -1228,73 +913,110 @@ function SpecOptionsList({
     });
   };
 
+  const handleDrop = (targetId: string) => {
+    if (!dragId || dragId === targetId) return;
+    const next = [...order];
+    const fromIdx = next.findIndex((o) => o.id === dragId);
+    const toIdx = next.findIndex((o) => o.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setOrder(next);
+    setDragId(null);
+    startTransition(async () => {
+      try {
+        await reorderSpecOptions(materialId, group.id, next.map((o) => o.id));
+      } catch (e) {
+        onToast(e instanceof Error ? e.message : "並び替えに失敗しました");
+        setOrder(group.options);
+      }
+    });
+  };
+
   return (
     <div className="border-t border-rule pt-2">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-[family-name:var(--font-mono)] uppercase tracking-wider text-subtle">
-          バリエーション ({group.options.length})
+          バリエーション ({order.length})
         </span>
-        {!creating && !editingId && (
+        {creatingLabel === null && !editingId && (
           <Button size="sm" variant="ghost" onClick={startCreate}>
             + バリエーション追加
           </Button>
         )}
       </div>
       <div className="space-y-1">
-        {group.options.map((o) =>
-          editingId === o.id && draft ? (
-            <SpecOptionEditRow
-              key={o.id}
-              draft={draft}
-              setDraft={setDraft}
-              onSave={() => handleSave(draft, o.id)}
-              onCancel={cancel}
-              pending={isPending}
-            />
-          ) : (
+        {order.map((o) =>
+          editingId === o.id ? (
             <div
               key={o.id}
-              className={`flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-surface-muted ${
-                !o.is_active ? "opacity-50" : ""
-              }`}
+              className="flex items-center gap-2 px-2 py-1.5 bg-[var(--color-status-pending-bg)]/40 border-l-2 border-accent"
             >
-              <span className="flex-1 font-medium text-foreground truncate">
-                {o.label}
-              </span>
-              {o.short_code && (
-                <span className="text-[10px] font-[family-name:var(--font-mono)] text-subtle">
-                  {o.short_code}
-                </span>
-              )}
-              <span className="text-[10px] font-[family-name:var(--font-mono)] tabular-nums text-subtle w-6 text-right">
-                {o.sort_order}
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => handleDelete(o)}
-                disabled={isPending}
-              >
-                削除
+              <input
+                autoFocus
+                value={editLabel}
+                onChange={(e) => setEditLabel(e.target.value)}
+                placeholder="バリエーション名"
+                className="flex-1 h-8 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+              <Button size="sm" variant="ghost" onClick={cancel} disabled={isPending}>
+                取消
               </Button>
               <Button
                 size="sm"
-                variant="ghost"
-                onClick={() => startEdit(o)}
+                onClick={() => handleUpdate(o.id)}
+                disabled={isPending || !editLabel.trim()}
               >
+                保存
+              </Button>
+            </div>
+          ) : (
+            <div
+              key={o.id}
+              draggable
+              onDragStart={() => setDragId(o.id)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => handleDrop(o.id)}
+              onDragEnd={() => setDragId(null)}
+              className={`flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-surface-muted ${
+                dragId === o.id ? "opacity-50" : ""
+              }`}
+            >
+              <span className="cursor-grab text-subtle text-sm select-none" aria-hidden>
+                ⠿
+              </span>
+              <span className="flex-1 font-medium text-foreground truncate">
+                {o.label}
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => handleDelete(o)} disabled={isPending}>
+                削除
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => startEdit(o)}>
                 編集
               </Button>
             </div>
           )
         )}
-        {creating && (
-          <SpecOptionEditRow
-            draft={creating}
-            setDraft={setCreating}
-            onSave={() => handleSave(creating)}
-            onCancel={cancel}
-            pending={isPending}
-          />
+        {creatingLabel !== null && (
+          <div className="flex items-center gap-2 px-2 py-1.5 bg-[var(--color-status-pending-bg)]/40 border-l-2 border-accent">
+            <input
+              autoFocus
+              value={creatingLabel}
+              onChange={(e) => setCreatingLabel(e.target.value)}
+              placeholder="バリエーション名 (例: 赤)"
+              className="flex-1 h-8 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+            />
+            <Button size="sm" variant="ghost" onClick={cancel} disabled={isPending}>
+              取消
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleCreate}
+              disabled={isPending || !creatingLabel.trim()}
+            >
+              保存
+            </Button>
+          </div>
         )}
       </div>
       {error && (
@@ -1302,65 +1024,6 @@ function SpecOptionsList({
           {error}
         </p>
       )}
-    </div>
-  );
-}
-
-function SpecOptionEditRow({
-  draft,
-  setDraft,
-  onSave,
-  onCancel,
-  pending,
-}: {
-  draft: DraftSpecOption;
-  setDraft: (d: DraftSpecOption) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  pending: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-2 px-2 py-1.5 bg-[var(--color-status-pending-bg)]/40 border-l-2 border-accent">
-      <input
-        autoFocus
-        value={draft.label}
-        onChange={(e) => setDraft({ ...draft, label: e.target.value })}
-        placeholder="バリエーション名 (例: 赤)"
-        className="flex-1 h-8 px-2 bg-surface border border-rule text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-      />
-      <input
-        value={draft.short_code}
-        onChange={(e) => setDraft({ ...draft, short_code: e.target.value })}
-        placeholder="略号"
-        className="w-20 h-8 px-2 bg-surface border border-rule text-xs font-[family-name:var(--font-mono)] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-      />
-      <input
-        type="number"
-        value={draft.sort_order}
-        onChange={(e) =>
-          setDraft({ ...draft, sort_order: Number(e.target.value) || 0 })
-        }
-        className="w-12 h-8 px-1 bg-surface border border-rule text-xs text-right tabular-nums font-[family-name:var(--font-mono)] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-      />
-      <label className="flex items-center gap-1 text-[10px] text-muted">
-        <input
-          type="checkbox"
-          checked={draft.is_active}
-          onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })}
-          className="w-3 h-3 accent-accent"
-        />
-        公開
-      </label>
-      <Button size="sm" variant="ghost" onClick={onCancel} disabled={pending}>
-        取消
-      </Button>
-      <Button
-        size="sm"
-        onClick={onSave}
-        disabled={pending || !draft.label.trim()}
-      >
-        保存
-      </Button>
     </div>
   );
 }

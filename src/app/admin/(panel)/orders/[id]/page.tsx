@@ -113,8 +113,10 @@ export default async function OrderDetailPage({
       cell: (it) => (
         <span className="min-w-0">
           <span className="text-foreground font-medium">{it.material_name}</span>
-          {it.variant_name && (
-            <span className="text-subtle ml-2 text-xs">／ {it.variant_name}</span>
+          {it.spec_selections.length > 0 && (
+            <span className="text-subtle ml-2 text-xs">
+              ／ {it.spec_selections.map((s) => `${s.group_name}: ${s.option_label}`).join(" / ")}
+            </span>
           )}
         </span>
       ),
