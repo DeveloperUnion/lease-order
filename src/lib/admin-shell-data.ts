@@ -1,8 +1,8 @@
 import "server-only";
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "./supabase-server";
 import { supabaseAdmin } from "./supabase-admin";
-import { countPendingOrders, countPendingRequests } from "./admin-data";
 import {
   countUnreadForAdmin,
   listNotificationsForAdmin,
@@ -66,18 +66,63 @@ const getAdminContext = cache(
   }
 );
 
+// サイドバーの badge は次のような特性を持つ:
+//   - pending 系の発注・申請: 数秒以内の変化はリアルタイム性が要らない
+//   - chat 未読: useLiveChatUnread が realtime で追従するので初期値が多少 stale でも OK
+// よって per-tenant key で短時間 unstable_cache をかけ、navigation/router.refresh で
+// 連発した layout 再 fetch を実質的に in-memory で吸収する。tag invalidation は使わず
+// TTL のみ — 10 秒の遅延は MVP 段階で許容できる範囲。
+const getCachedSidebarCounts = unstable_cache(
+  async (tenantId: string) => {
+    const [pendingOrdersRes, returnsRes, extensionsRes, chatUnreadCount] = await Promise.all([
+      supabaseAdmin
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .eq("status", "pending"),
+      supabaseAdmin
+        .from("return_requests")
+        .select("status, order_items!inner(order_id)")
+        .eq("tenant_id", tenantId)
+        .in("status", ["pending", "scheduled"]),
+      supabaseAdmin
+        .from("lease_extensions")
+        .select("order_items!inner(order_id)")
+        .eq("tenant_id", tenantId)
+        .eq("status", "pending"),
+      countChatUnreadForAdmin(tenantId),
+    ]);
+    const orderIds = new Set<string>();
+    for (const row of (returnsRes.data ?? []) as unknown as Array<{
+      order_items: { order_id: string } | null;
+    }>) {
+      if (row.order_items?.order_id) orderIds.add(row.order_items.order_id);
+    }
+    for (const row of (extensionsRes.data ?? []) as unknown as Array<{
+      order_items: { order_id: string } | null;
+    }>) {
+      if (row.order_items?.order_id) orderIds.add(row.order_items.order_id);
+    }
+    return {
+      pendingCount: pendingOrdersRes.count ?? 0,
+      pendingRequestCount: orderIds.size,
+      chatUnreadCount,
+    };
+  },
+  ["admin-sidebar-counts"],
+  { revalidate: 10 }
+);
+
 export async function getSidebarData(): Promise<SidebarData> {
   const tenantId = await getTenantId();
-  const [pendingCount, pendingRequestCount, chatUnreadCount, ctx] = await Promise.all([
-    countPendingOrders(),
-    countPendingRequests(),
-    countChatUnreadForAdmin(tenantId),
+  const [counts, ctx] = await Promise.all([
+    getCachedSidebarCounts(tenantId),
     getAdminContext(),
   ]);
   return {
-    pendingCount,
-    pendingRequestCount,
-    chatUnreadCount,
+    pendingCount: counts.pendingCount,
+    pendingRequestCount: counts.pendingRequestCount,
+    chatUnreadCount: counts.chatUnreadCount,
     email: ctx.email,
   };
 }

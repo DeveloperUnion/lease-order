@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useLiveChatUnread } from "./chat/use-live-chat-unread";
 
 type CustomerSummary = { id: string; company_id: string; name: string };
 
@@ -113,7 +114,10 @@ export default function CustomerNav({
   chatUnreadCount: number;
 }) {
   const pathname = usePathname();
-  const items = getNavItems(overdueCount, chatUnreadCount);
+  // チャット未読は realtime で生かしておく。新着 / 既読化を即時反映するため
+  // チャット画面が router.refresh を呼ばずに済む。
+  const liveChatUnread = useLiveChatUnread(chatUnreadCount, "customer");
+  const items = getNavItems(overdueCount, liveChatUnread);
 
   if (pathname.startsWith("/admin") || pathname === "/login") {
     return null;

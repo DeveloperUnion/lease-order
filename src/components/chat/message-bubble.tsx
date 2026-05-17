@@ -35,7 +35,7 @@ export default function MessageBubble({
   msg: BubbleMessage;
   mine: boolean;
   senderLabel: string;
-  orderLinkPrefix: "/orders" | "/admin/orders";
+  orderLinkPrefix: "/rentals" | "/admin/orders";
 }) {
   return (
     <div className={`flex flex-col gap-0.5 ${mine ? "items-end" : "items-start"}`}>
@@ -74,6 +74,8 @@ export default function MessageBubble({
                   <img
                     src={a.url}
                     alt={a.name}
+                    loading="lazy"
+                    decoding="async"
                     className="max-h-48 rounded border border-border"
                   />
                 </a>

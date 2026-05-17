@@ -103,8 +103,9 @@ export default function AdminChatScreen({
     if (el) el.scrollTop = el.scrollHeight;
   }, [displayMessages.length, selectedId]);
 
-  // 既読化: customer 発の未読が存在するときだけ POST → 完了後 refresh で
-  // サイドバーの「メッセージ」バッジを更新する。
+  // 既読化: customer 発の未読が存在するときだけ POST。
+  // サイドバーの「メッセージ」バッジは useLiveChatUnread が realtime UPDATE を
+  // 拾って自前に追従するので router.refresh は不要。
   const hasUnreadFromCustomer = displayMessages.some(
     (m) => m.sender_type === "customer" && !m.read_at
   );
@@ -113,15 +114,16 @@ export default function AdminChatScreen({
     fetch(`/api/chat/admin/conversations/${selectedId}/read`, {
       method: "POST",
       cache: "no-store",
-    })
-      .then(() => router.refresh())
-      .catch(() => {});
-  }, [selectedId, hasUnreadFromCustomer, router]);
+    }).catch(() => {});
+  }, [selectedId, hasUnreadFromCustomer]);
 
-  // Realtime: テナント全体の INSERT を 1 本のチャンネルで受け、
-  //   - 選択中の会話なら extras に積む
-  //   - それ以外は debounce 付きで一覧 (server) を refresh
-  // 連投時の二重 refresh を避ける目的。
+  // Realtime: selectedId の有無で channel を切り替える。
+  //   - 選択中: chat-conv:<cid> (conversation_id filter) のみ subscribe。
+  //     他会話の INSERT が JS callback を走らせ続けるのを止める。
+  //   - 未選択 (一覧表示): chat-tenant:<tid> (tenant_id filter) のみ subscribe し、
+  //     新着があれば debounce で list を refresh。
+  // 会話中の cross-conv 通知は親 layout の useLiveChatUnread が単独 subscription で拾うため、
+  // サイドバーの「メッセージ」バッジは ここを切ったまま realtime で更新される。
   useEffect(() => {
     let cancelled = false;
     let supabase: SupabaseClient | null = null;
@@ -143,6 +145,24 @@ export default function AdminChatScreen({
         return (await res.json()) as TokenResponse;
       } catch {
         return null;
+      }
+    }
+
+    // 開いている会話の realtime stub を「order_ref + signed attachments 付き」へ
+    // in-place 差し替え。layout 込みの router.refresh を避ける狙い。
+    async function enrichSingle(messageId: string): Promise<void> {
+      try {
+        const res = await fetch(`/api/chat/admin/messages/${messageId}/enrich`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as { ok?: boolean; enriched?: BubbleMessage };
+        if (!json.ok || !json.enriched) return;
+        if (cancelled) return;
+        const enriched = json.enriched;
+        setExtras((prev) => prev.map((e) => (e.id === enriched.id ? enriched : e)));
+      } catch {
+        /* fallback: 何もしない */
       }
     }
 
@@ -169,30 +189,33 @@ export default function AdminChatScreen({
       );
       supabase.realtime.setAuth(token.jwt);
 
-      channel = supabase
-        .channel(`chat-tenant:${tenantId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "messages",
-            filter: `tenant_id=eq.${tenantId}`,
-          },
-          (payload) => {
-            const row = payload.new as {
-              id: string;
-              conversation_id: string;
-              body: string | null;
-              attachments: MessageAttachment[];
-              order_id: string | null;
-              created_at: string;
-              read_at: string | null;
-              sender_type: "customer" | "admin";
-            };
+      type MessageRowPayload = {
+        id: string;
+        conversation_id: string;
+        body: string | null;
+        attachments: MessageAttachment[];
+        order_id: string | null;
+        created_at: string;
+        read_at: string | null;
+        sender_type: "customer" | "admin";
+      };
 
-            const isCurrent = selectedId && row.conversation_id === selectedId;
-            if (isCurrent && !knownIdsRef.current.has(row.id)) {
+      if (selectedId) {
+        // 会話 view: 選択中の会話のみ subscribe。
+        // 他会話の INSERT は親 layout の useLiveChatUnread が拾うのでここでは無視。
+        channel = supabase
+          .channel(`chat-conv:${selectedId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "messages",
+              filter: `conversation_id=eq.${selectedId}`,
+            },
+            (payload) => {
+              const row = payload.new as MessageRowPayload;
+              if (knownIdsRef.current.has(row.id)) return;
               knownIdsRef.current.add(row.id);
               const stub: BubbleMessage = {
                 id: row.id,
@@ -207,18 +230,31 @@ export default function AdminChatScreen({
                 read_at: row.read_at,
               };
               setExtras((prev) => [...prev, stub]);
-              // 開いている会話の bubble に signed URL / order_ref を即時に乗せたい場合は
-              // 3 秒待たず router.refresh する。customer-chat-view 側と歩調を合わせる。
               if ((row.attachments?.length ?? 0) > 0 || row.order_id) {
-                router.refresh();
+                void enrichSingle(row.id);
               }
-            } else {
-              // 別の会話 → 一覧の last_message_at / 未読バッジを更新
+            }
+          )
+          .subscribe();
+      } else {
+        // 会話一覧 view: テナント内全 INSERT を受け、一覧 (last_message_at / preview /
+        // per-conv 未読) を debounce で server から取り直す。
+        channel = supabase
+          .channel(`chat-tenant:${tenantId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "messages",
+              filter: `tenant_id=eq.${tenantId}`,
+            },
+            () => {
               scheduleListRefresh();
             }
-          }
-        )
-        .subscribe();
+          )
+          .subscribe();
+      }
 
       scheduleNext(token.expiresAt);
     }
@@ -268,12 +304,15 @@ export default function AdminChatScreen({
     // realtime が同じ realId の INSERT を配信してきたとき重複しないよう、
     // rename と同時に known 集合へ入れておく（useEffect の同期を待たない）。
     knownIdsRef.current.add(result.messageId);
+    // 実 id に差し替え。サーバが enriched (order_ref + signed attachments) を返した
+    // ものでそのまま stub を置換し、layout 全体 refresh を不要にする。
     setExtras((prev) =>
-      prev.map((e) => (e.id === tempId ? { ...e, id: result.messageId } : e))
+      prev.map((e) =>
+        e.id === tempId
+          ? result.enriched ?? { ...e, id: result.messageId }
+          : e
+      )
     );
-    if (input.attachments.length > 0 || input.orderId) {
-      router.refresh();
-    }
   }
 
   return (

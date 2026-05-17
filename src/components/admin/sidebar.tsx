@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/app/admin/auth-actions";
+import { useLiveChatUnread } from "@/components/chat/use-live-chat-unread";
 
 type NavItem = {
   href: string;
@@ -33,6 +34,8 @@ export default function Sidebar({
   onNavigate,
 }: SidebarProps) {
   const pathname = usePathname();
+  // チャット未読を realtime で生かしておく。既読化や着信を router.refresh なしで反映するため
+  const liveChatUnread = useLiveChatUnread(chatUnreadCount, "admin");
 
   const groups: NavGroup[] = [
     {
@@ -52,7 +55,7 @@ export default function Sidebar({
         {
           href: "/admin/messages",
           label: "メッセージ",
-          badge: chatUnreadCount > 0 ? chatUnreadCount : undefined,
+          badge: liveChatUnread > 0 ? liveChatUnread : undefined,
         },
       ],
     },

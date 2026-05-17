@@ -102,6 +102,22 @@ async function fetchOrderRefs(
   return map;
 }
 
+// 単発のメッセージから order_ref を引きたいとき用。送信 API レスポンスと
+// realtime 後の単発 enrichment エンドポイント両方で使う。
+export async function fetchOrderRef(
+  orderId: string,
+  tenantId: string
+): Promise<OrderRef | null> {
+  const { data, error } = await supabaseAdmin
+    .from("orders")
+    .select("id, order_number, status")
+    .eq("tenant_id", tenantId)
+    .eq("id", orderId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as OrderRef) ?? null;
+}
+
 export type InsertMessageInput = {
   tenantId: string;
   conversationId: string;
@@ -244,17 +260,19 @@ export async function listConversationsForAdmin(
     (customers ?? []).map((c) => [c.id, c as { id: string; name: string; company_id: string }])
   );
 
-  // 未読を一括取得（per-conversation, sender_type='customer', read_at IS NULL）
-  const { data: unreadRows, error: uErr } = await supabaseAdmin
-    .from("messages")
-    .select("conversation_id")
-    .eq("tenant_id", tenantId)
-    .eq("sender_type", "customer")
-    .is("read_at", null);
+  // 未読を per-conversation で aggregate 取得。Postgres 側で group by + count するので、
+  // 未読行を全件転送せずに済む（テナント内未読数 × 1 行ではなく、会話数分の集計行のみ）。
+  const { data: unreadRows, error: uErr } = await supabaseAdmin.rpc(
+    "chat_unread_counts_by_conversation",
+    { p_tenant_id: tenantId }
+  );
   if (uErr) throw uErr;
   const unreadMap = new Map<string, number>();
-  for (const r of unreadRows ?? []) {
-    unreadMap.set(r.conversation_id, (unreadMap.get(r.conversation_id) ?? 0) + 1);
+  for (const r of (unreadRows ?? []) as Array<{
+    conversation_id: string;
+    unread_count: number;
+  }>) {
+    unreadMap.set(r.conversation_id, Number(r.unread_count));
   }
 
   return rows.map((r) => {
