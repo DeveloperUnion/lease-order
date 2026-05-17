@@ -83,8 +83,12 @@ export default function CustomerChatView({
     fetch(`/api/chat/customer/conversations/${conversationId}/read`, {
       method: "POST",
       cache: "no-store",
-    }).catch(() => {});
-  }, [conversationId, hasUnreadFromOther]);
+    })
+      // ナビゲーションの「連絡」バッジは header server data から渡るため、
+      // 既読化後は refresh しないと数字が消えない。
+      .then(() => router.refresh())
+      .catch(() => {});
+  }, [conversationId, hasUnreadFromOther, router]);
 
   useEffect(() => {
     let cancelled = false;
