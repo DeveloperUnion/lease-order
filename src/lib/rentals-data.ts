@@ -19,6 +19,15 @@ export type ScheduledReturn = {
   material_name: string;
 };
 
+export type RejectedReturn = {
+  id: string;
+  material_name: string;
+  requested_quantity_delta: number;
+  reason: string | null;
+  decided_at: string | null;
+  status: "rejected" | "cancelled";
+};
+
 export type RentalItemRow = {
   id: string;
   material_id: string;
@@ -48,6 +57,7 @@ export type RentalOrder = {
   // 承認済み延長履歴のみ。pending は各 item.pending_extension に格納。
   extensions: Record<string, { previous_end_date: string; new_end_date: string; reason: string | null; requested_at: string }[]>;
   scheduled_returns: ScheduledReturn[];
+  rejected_returns: RejectedReturn[];
 };
 
 export type RentalSite = {
@@ -286,6 +296,17 @@ type ScheduledReturnRaw = {
   order_items: { id: string; material_name: string } | null;
 };
 
+type RejectedReturnRaw = {
+  id: string;
+  requested_quantity_delta: number;
+  reject_reason: string | null;
+  cancel_reason: string | null;
+  rejected_at: string | null;
+  cancelled_at: string | null;
+  status: "rejected" | "cancelled";
+  order_items: { material_name: string } | null;
+};
+
 export const getRentalOrder = cache(async (orderId: string, customerId: string, tenantId: string): Promise<RentalOrder | null> => {
   const { data, error } = await supabaseAdmin
     .from("orders")
@@ -310,11 +331,13 @@ export const getRentalOrder = cache(async (orderId: string, customerId: string, 
   const ackExtensions: Record<string, { previous_end_date: string; new_end_date: string; reason: string | null; requested_at: string }[]> = {};
 
   const scheduledReturns: ScheduledReturn[] = [];
+  const rejectedReturns: RejectedReturn[] = [];
   if (itemIds.length > 0) {
     const [
       { data: extData, error: extErr },
       { data: retData, error: retErr },
       { data: scheduledData, error: scheduledErr },
+      { data: rejectedData, error: rejectedErr },
     ] = await Promise.all([
       supabaseAdmin
         .from("lease_extensions")
@@ -336,10 +359,33 @@ export const getRentalOrder = cache(async (orderId: string, customerId: string, 
         .in("order_item_id", itemIds)
         .eq("status", "scheduled")
         .order("scheduled_date", { ascending: true }),
+      supabaseAdmin
+        .from("return_requests")
+        .select(
+          "id, requested_quantity_delta, reject_reason, cancel_reason, rejected_at, cancelled_at, status, order_items!inner(material_name)"
+        )
+        .in("order_item_id", itemIds)
+        .in("status", ["rejected", "cancelled"])
+        .order("rejected_at", { ascending: false, nullsFirst: false })
+        .limit(20),
     ]);
     if (extErr) throw extErr;
     if (retErr) throw retErr;
     if (scheduledErr) throw scheduledErr;
+    if (rejectedErr) throw rejectedErr;
+    for (const r of (rejectedData ?? []) as unknown as RejectedReturnRaw[]) {
+      if (!r.order_items) continue;
+      const status: "rejected" | "cancelled" =
+        r.status === "cancelled" ? "cancelled" : "rejected";
+      rejectedReturns.push({
+        id: r.id,
+        material_name: r.order_items.material_name,
+        requested_quantity_delta: r.requested_quantity_delta,
+        reason: status === "cancelled" ? r.cancel_reason : r.reject_reason,
+        decided_at: status === "cancelled" ? r.cancelled_at : r.rejected_at,
+        status,
+      });
+    }
     for (const s of (scheduledData ?? []) as unknown as ScheduledReturnRaw[]) {
       if (!s.scheduled_date || !s.transport_method || !s.order_items) continue;
       scheduledReturns.push({
@@ -413,6 +459,7 @@ export const getRentalOrder = cache(async (orderId: string, customerId: string, 
     items,
     extensions: ackExtensions,
     scheduled_returns: scheduledReturns,
+    rejected_returns: rejectedReturns,
   };
 });
 

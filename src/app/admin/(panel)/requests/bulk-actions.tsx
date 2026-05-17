@@ -3,8 +3,10 @@
 import { useState, useTransition } from "react";
 import {
   acknowledgeExtensionsForOrder,
+  rejectReturnsForOrder,
   scheduleReturnsForOrder,
 } from "./actions";
+import { ReasonModal } from "./request-actions";
 
 type OfficeOption = { id: string; name: string };
 
@@ -28,6 +30,8 @@ export default function BulkActions({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
 
   const [transportMethod, setTransportMethod] = useState<"pickup" | "dropoff">(
     defaultTransport ?? "pickup"
@@ -74,20 +78,48 @@ export default function BulkActions({
     });
   }
 
+  function handleReject() {
+    setError(null);
+    const trimmed = rejectReason.trim();
+    if (!trimmed) {
+      setError("却下理由を入力してください");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await rejectReturnsForOrder(orderId, trimmed);
+        setShowReject(false);
+        setRejectReason("");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "処理に失敗しました");
+      }
+    });
+  }
+
   if (returnCount === 0 && extensionCount === 0) return null;
 
   return (
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex gap-2 flex-wrap justify-end">
         {returnCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowSchedule(true)}
-            disabled={isPending}
-            className="px-3 h-8 text-xs font-semibold bg-accent text-white rounded hover:bg-accent-hover disabled:opacity-50 transition-colors"
-          >
-            返却 {returnCount}件 を一括で予定確定
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => setShowReject(true)}
+              disabled={isPending}
+              className="px-3 h-8 text-xs font-medium border border-rule rounded text-muted hover:text-danger hover:border-danger/40 disabled:opacity-50 transition-colors"
+            >
+              返却 {returnCount}件 を一括却下
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSchedule(true)}
+              disabled={isPending}
+              className="px-3 h-8 text-xs font-semibold bg-accent text-white rounded hover:bg-accent-hover disabled:opacity-50 transition-colors"
+            >
+              返却 {returnCount}件 を一括で予定確定
+            </button>
+          </>
         )}
         {extensionCount > 0 && (
           <button
@@ -105,6 +137,24 @@ export default function BulkActions({
         <p role="alert" className="text-[11px] text-danger">
           {error}
         </p>
+      )}
+      {showReject && (
+        <ReasonModal
+          title="返却申請を一括で却下"
+          label={`${returnCount} 件`}
+          reason={rejectReason}
+          setReason={setRejectReason}
+          isPending={isPending}
+          onCancel={() => {
+            setShowReject(false);
+            setRejectReason("");
+          }}
+          onConfirm={handleReject}
+          confirmLabel="一括で却下"
+          confirmTone="danger"
+          reasonHint="顧客に通知されます"
+          placeholder="納入数の確認が取れないため等"
+        />
       )}
       {showSchedule && (
         <div

@@ -6,6 +6,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   labelForNotification,
   linkForNotification,
+  reasonForNotification,
   type NotificationRow,
 } from "@/lib/notifications/display";
 
@@ -243,35 +244,46 @@ export default function NotificationBell({
             <div className="px-4 py-10 text-center text-sm text-subtle">通知はありません</div>
           ) : (
             <ul className="divide-y divide-border max-h-[60vh] overflow-y-auto">
-              {displayRecent.map((row) => (
-                <li key={row.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleItemClick(row)}
-                    className={`w-full text-left px-4 py-3 hover:bg-surface-muted transition-colors flex items-start gap-2 ${
-                      row.read_at ? "" : "bg-accent-soft/30"
-                    }`}
-                  >
-                    {!row.read_at && (
-                      <span
-                        aria-hidden
-                        className="mt-1.5 h-1.5 w-1.5 rounded-full bg-accent flex-shrink-0"
-                      />
-                    )}
-                    <div className={`min-w-0 flex-1 ${row.read_at ? "pl-3.5" : ""}`}>
-                      <p className="text-sm text-foreground truncate">
-                        {labelForNotification(row)}
-                      </p>
-                      {row.payload.itemSummary && (
-                        <p className="text-xs text-subtle mt-0.5 truncate">
-                          {row.payload.itemSummary}
-                        </p>
+              {displayRecent.map((row) => {
+                const reason = reasonForNotification(row);
+                return (
+                  <li key={row.id}>
+                    <button
+                      type="button"
+                      onClick={() => handleItemClick(row)}
+                      className={`w-full text-left px-4 py-3 hover:bg-surface-muted transition-colors flex items-start gap-2 ${
+                        row.read_at ? "" : "bg-accent-soft/30"
+                      }`}
+                    >
+                      {!row.read_at && (
+                        <span
+                          aria-hidden
+                          className="mt-1.5 h-1.5 w-1.5 rounded-full bg-accent flex-shrink-0"
+                        />
                       )}
-                      <p className="text-xs text-subtle mt-0.5">{formatRelative(row.created_at)}</p>
-                    </div>
-                  </button>
-                </li>
-              ))}
+                      <div className={`min-w-0 flex-1 ${row.read_at ? "pl-3.5" : ""}`}>
+                        <p className="text-sm text-foreground truncate">
+                          {labelForNotification(row)}
+                        </p>
+                        {row.payload.itemSummary && (
+                          <p className="text-xs text-subtle mt-0.5 truncate">
+                            {row.payload.itemSummary}
+                          </p>
+                        )}
+                        {reason && (
+                          <p
+                            className="text-xs text-foreground/80 mt-0.5 line-clamp-2"
+                            title={reason}
+                          >
+                            理由: {reason}
+                          </p>
+                        )}
+                        <p className="text-xs text-subtle mt-0.5">{formatRelative(row.created_at)}</p>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

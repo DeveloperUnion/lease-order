@@ -15,6 +15,12 @@ function formatDateLong(iso: string | null): string {
   return `${y}年${Number(m)}月${Number(d)}日`;
 }
 
+function formatDecidedAt(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+
 export default async function RentalDetailPage({
   params,
   searchParams,
@@ -164,6 +170,44 @@ export default async function RentalDetailPage({
                       : `業所に持ち込み${s.dropoff_office_name ? `（${s.dropoff_office_name}）` : ""}`}
                   </p>
                 </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {order.rejected_returns.length > 0 && (
+        <section className="mt-8">
+          <SectionLabel label="却下・取りやめ履歴" />
+          <div className="border border-danger/20 bg-danger-soft/40 rounded-2xl overflow-hidden">
+            {order.rejected_returns.map((r) => (
+              <div
+                key={r.id}
+                className="px-5 py-3 border-b border-danger/15 last:border-b-0"
+              >
+                <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                  <p className="text-sm text-foreground min-w-0">
+                    <span
+                      className={`inline-flex items-center px-1.5 h-[18px] mr-2 rounded-full text-[10px] font-semibold ${
+                        r.status === "cancelled"
+                          ? "bg-muted/15 text-muted"
+                          : "bg-danger-soft text-danger"
+                      }`}
+                    >
+                      {r.status === "cancelled" ? "取りやめ" : "却下"}
+                    </span>
+                    {r.material_name}{" "}
+                    <span className="text-subtle tabular-nums">× {r.requested_quantity_delta}</span>
+                  </p>
+                  <p className="text-xs text-subtle tabular-nums">
+                    {formatDecidedAt(r.decided_at)}
+                  </p>
+                </div>
+                {r.reason && (
+                  <p className="text-xs text-foreground/80 mt-1 whitespace-pre-wrap break-words">
+                    理由: {r.reason}
+                  </p>
+                )}
               </div>
             ))}
           </div>

@@ -462,9 +462,9 @@ export function ScheduledReturnActions({
 // 共有 UI パーツ
 // ============================================================
 
-const primaryButtonClass =
+export const primaryButtonClass =
   "px-3 h-8 text-xs font-semibold bg-accent text-white rounded hover:bg-accent-hover disabled:opacity-50 transition-colors";
-const rejectButtonClass =
+export const rejectButtonClass =
   "px-3 h-8 text-xs font-medium border border-rule rounded text-muted hover:text-danger hover:border-danger/40 disabled:opacity-50 transition-colors";
 
 function ActionShell({
@@ -486,7 +486,7 @@ function ActionShell({
   );
 }
 
-function ModalShell({
+export function ModalShell({
   title,
   label,
   onClose,
@@ -519,7 +519,7 @@ function ModalShell({
   );
 }
 
-function ModalActions({
+export function ModalActions({
   onCancel,
   onConfirm,
   isPending,
@@ -558,7 +558,7 @@ function ModalActions({
   );
 }
 
-function ReasonModal({
+export function ReasonModal({
   title,
   label,
   reason,
