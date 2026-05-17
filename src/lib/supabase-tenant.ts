@@ -24,16 +24,10 @@ export type RecipientIdentity =
   | { audience: "anonymous"; tenantId: string; subject: string };
 
 export async function resolveRecipientIdentity(): Promise<RecipientIdentity> {
-  const customer = await getCurrentCustomer();
-  if (customer) {
-    return {
-      audience: "customer",
-      recipientId: customer.id,
-      tenantId: customer.tenant_id,
-      subject: `customer:${customer.id}`,
-    };
-  }
-
+  // 管理者 Supabase Auth を先にチェックする。
+  // 理由: DISABLE_AUTH=1 のとき getCurrentCustomer がゲスト顧客を返してしまうため、
+  // 顧客チェックを先にやると admin ページからの API 呼び出しが「顧客発」と誤判定される。
+  // 実セッション (=明示的に認証されている) は常に正としたい。
   const ssr = await createSupabaseServerClient();
   const {
     data: { user },
@@ -52,6 +46,16 @@ export async function resolveRecipientIdentity(): Promise<RecipientIdentity> {
         subject: `admin:${row.id}`,
       };
     }
+  }
+
+  const customer = await getCurrentCustomer();
+  if (customer) {
+    return {
+      audience: "customer",
+      recipientId: customer.id,
+      tenantId: customer.tenant_id,
+      subject: `customer:${customer.id}`,
+    };
   }
 
   const tenantId = await getTenantId();

@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useTransition, type FormEvent, type ChangeEvent } from "react";
+import {
+  useState,
+  useTransition,
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import type { MessageAttachment } from "@/lib/chat/types";
 
 type QuotedOrder = { id: string; order_number: string } | null;
@@ -28,8 +34,8 @@ export default function ChatComposer({
 
   const canSubmit = !disabled && !uploading && !isPending && (body.trim() !== "" || attachments.length > 0);
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  function handleSubmit(e?: FormEvent) {
+    if (e) e.preventDefault();
     if (!canSubmit) return;
     const payload = {
       body: body.trim(),
@@ -46,6 +52,19 @@ export default function ChatComposer({
         setError(e instanceof Error ? e.message : "送信に失敗しました");
       }
     });
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    // Enter で送信、Shift+Enter または IME 変換中は改行のまま。
+    // e.nativeEvent.isComposing で IME 変換中の Enter は無視する（日本語入力でよくある誤送信の防止）。
+    if (
+      e.key === "Enter" &&
+      !e.shiftKey &&
+      !e.nativeEvent.isComposing
+    ) {
+      e.preventDefault();
+      handleSubmit();
+    }
   }
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -127,7 +146,8 @@ export default function ChatComposer({
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="メッセージを入力"
+          onKeyDown={handleKeyDown}
+          placeholder="メッセージを入力（Enter で送信・Shift+Enter で改行）"
           rows={1}
           className="flex-1 min-h-[40px] max-h-32 px-3 py-2 bg-surface border border-border rounded-lg text-sm resize-y focus:outline-none focus:border-accent"
           disabled={disabled}

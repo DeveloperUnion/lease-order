@@ -73,12 +73,18 @@ export default function CustomerChatView({
     if (el) el.scrollTop = el.scrollHeight;
   }, [displayMessages.length]);
 
+  // 既読化: 相手 (admin) からの未読が存在するときだけ POST。
+  // displayMessages.length に依らず、未読の有無で判定する → 不要な request を抑える。
+  const hasUnreadFromOther = displayMessages.some(
+    (m) => m.sender_type === "admin" && !m.read_at
+  );
   useEffect(() => {
+    if (!hasUnreadFromOther) return;
     fetch(`/api/chat/conversations/${conversationId}/read`, {
       method: "POST",
       cache: "no-store",
     }).catch(() => {});
-  }, [conversationId, displayMessages.length]);
+  }, [conversationId, hasUnreadFromOther]);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,7 +159,11 @@ export default function CustomerChatView({
               read_at: row.read_at,
             };
             setExtras((prev) => [...prev, stub]);
-            router.refresh();
+            // 添付や注文引用がある場合だけ server 再描画 (signed URL / order_ref 取得)。
+            // テキストのみのメッセージは stub のままで表示できる → router.refresh しない。
+            if ((row.attachments?.length ?? 0) > 0 || row.order_id) {
+              router.refresh();
+            }
           }
         )
         .subscribe();
@@ -174,6 +184,20 @@ export default function CustomerChatView({
     orderId: string | null;
   }): Promise<void> {
     const clientRequestId = genId();
+    // 楽観的表示: 即座に送信中の吹き出しを extras に積む。
+    // server から real id が返ってきたら id を差し替えて重複表示を避ける。
+    const tempId = `temp_${clientRequestId}`;
+    const optimistic: BubbleMessage = {
+      id: tempId,
+      sender_type: "customer",
+      body: input.body,
+      attachments: input.attachments.map<SignedAttachment>((a) => ({ ...a, url: null })),
+      order_ref: null,
+      created_at: new Date().toISOString(),
+      read_at: null,
+    };
+    setExtras((prev) => [...prev, optimistic]);
+
     const result = await sendChatMessage({
       conversationId,
       body: input.body,
@@ -183,8 +207,18 @@ export default function CustomerChatView({
       tenantId,
       ownerCustomerId: customerId,
     });
-    if (!result.ok) throw new Error(result.error);
-    router.refresh();
+    if (!result.ok) {
+      setExtras((prev) => prev.filter((e) => e.id !== tempId));
+      throw new Error(result.error);
+    }
+    // 実 id に差し替え。realtime と server refresh の重複検知が効くようにする。
+    setExtras((prev) =>
+      prev.map((e) => (e.id === tempId ? { ...e, id: result.messageId } : e))
+    );
+    // 添付や注文引用がある場合だけ signed URL / order_ref を取りに refresh する
+    if (input.attachments.length > 0 || input.orderId) {
+      router.refresh();
+    }
   }
 
   return (
