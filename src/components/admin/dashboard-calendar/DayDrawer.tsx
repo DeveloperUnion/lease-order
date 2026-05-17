@@ -81,7 +81,7 @@ export default function DayDrawer({ date, events, onClose }: Props) {
             )}
           </Section>
 
-          <Section title="返却取り (予定確定済み)" count={scheduledReturns.length}>
+          <Section title="返却" count={scheduledReturns.length}>
             {scheduledReturns.length === 0 ? (
               <Empty>この日に確定済みの返却予定はありません。</Empty>
             ) : (
@@ -98,9 +98,9 @@ export default function DayDrawer({ date, events, onClose }: Props) {
             )}
           </Section>
 
-          <Section title="返却期限" count={returns.length}>
+          <Section title="遅延（返却未済）" count={returns.length}>
             {returns.length === 0 ? (
-              <Empty>この日の返却期限はありません。</Empty>
+              <Empty>未返却で期限超過しているレンタルはありません。</Empty>
             ) : (
               <ul className="space-y-2">
                 {returns.map((e) => (

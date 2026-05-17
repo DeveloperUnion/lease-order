@@ -6,31 +6,28 @@ export type MetaItem = {
 
 export default function MetaList({
   items,
-  columns = 1,
   className = "",
 }: {
   items: MetaItem[];
-  columns?: 1 | 2;
   className?: string;
 }) {
-  const grid =
-    columns === 2
-      ? "grid grid-cols-1 md:grid-cols-2 md:gap-x-10"
-      : "block";
-
   return (
-    <dl className={`${grid} ${className}`}>
+    <dl
+      className={`border border-rule rounded-[var(--radius-lg)] overflow-hidden bg-surface ${className}`}
+    >
       {items.map((item, i) => (
         <div
           key={`${item.label}-${i}`}
-          className="grid grid-cols-[8rem_1fr] gap-4 py-2.5 border-b border-rule last:border-b-0 md:[&:nth-last-child(2)]:border-b-0"
+          className="grid grid-cols-[7rem_1fr] sm:grid-cols-[10rem_1fr] border-b border-rule last:border-b-0"
         >
-          <dt className="font-[family-name:var(--font-mono)] text-[11px] uppercase tracking-wider text-subtle pt-0.5">
+          <dt className="bg-surface-muted text-sm text-muted font-medium px-3 py-3 sm:px-4 sm:py-3.5 border-r border-rule">
             {item.label}
           </dt>
           <dd
-            className={`text-sm text-foreground min-w-0 ${
-              item.mono ? "font-[family-name:var(--font-mono)] tabular-nums" : ""
+            className={`text-sm sm:text-base text-foreground px-3 py-3 sm:px-4 sm:py-3.5 min-w-0 break-words ${
+              item.mono
+                ? "font-[family-name:var(--font-mono)] tabular-nums"
+                : ""
             }`}
           >
             {item.value}

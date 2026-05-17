@@ -1,12 +1,17 @@
+import Link from "next/link";
 import SectionRule from "./section-rule";
 
 export default function PageHeader({
+  backHref,
+  backLabel,
   eyebrow,
   title,
   description,
   actions,
   className = "",
 }: {
+  backHref?: string;
+  backLabel?: string;
   eyebrow?: React.ReactNode;
   title: React.ReactNode;
   description?: React.ReactNode;
@@ -15,14 +20,23 @@ export default function PageHeader({
 }) {
   return (
     <header className={`mb-6 ${className}`}>
+      {backHref && (
+        <Link
+          href={backHref}
+          className="inline-flex items-center gap-1 text-sm text-muted hover:text-foreground transition-colors mb-4"
+        >
+          <span aria-hidden>←</span>
+          {backLabel ?? "戻る"}
+        </Link>
+      )}
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           {eyebrow && (
-            <p className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.22em] text-subtle mb-2">
+            <p className="font-[family-name:var(--font-mono)] text-sm sm:text-base text-muted font-medium tabular-nums mb-2">
               {eyebrow}
             </p>
           )}
-          <h1 className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-semibold tracking-tight text-foreground leading-tight">
+          <h1 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl font-semibold tracking-tight text-foreground leading-tight">
             {title}
           </h1>
           {description && (

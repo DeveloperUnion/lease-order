@@ -14,6 +14,7 @@ import {
 import type { OrderListRow } from "@/lib/admin-data";
 import { statusLabels, type OrderStatus } from "@/lib/order-status";
 import {
+  PageHeader,
   StatusBadge,
   DataTable,
   Button,
@@ -85,52 +86,42 @@ export default function OrdersBoardOrList({
 
   return (
     <main className="flex-1 flex flex-col min-h-0 w-full">
-      <div className="sticky top-0 z-10 bg-background px-4 sm:px-6 pt-6 sm:pt-8 flex-shrink-0">
-        <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-          <div className="min-w-0">
-            <h1 className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-semibold tracking-tight text-foreground leading-tight">
-              発注管理
-            </h1>
-            <p className="text-sm text-muted mt-2 max-w-2xl leading-relaxed">
-              承認・出荷・完了をオペレーターが順次処理します。
-            </p>
-          </div>
+      <div className="sticky top-0 z-10 bg-background flex-shrink-0">
+        <div className="px-4 sm:px-6 pt-6 sm:pt-8">
+          <PageHeader
+            title="発注管理"
+            description="承認・出荷・完了をオペレーターが順次処理します。"
+            actions={
+              <div
+                role="tablist"
+                aria-label="表示モード切り替え"
+                className="inline-flex border border-rule"
+              >
+                <ToggleButton
+                  active={view === "board"}
+                  onClick={() => setView("board")}
+                >
+                  ボード
+                </ToggleButton>
+                <ToggleButton
+                  active={view === "list"}
+                  onClick={() => setView("list")}
+                >
+                  リスト
+                </ToggleButton>
+              </div>
+            }
+          />
 
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.2em] text-subtle whitespace-nowrap">
-              表示モード
-            </span>
+          {errorMsg && (
             <div
-              role="tablist"
-              aria-label="表示モード切り替え"
-              className="inline-flex border border-rule"
+              role="alert"
+              className="mb-4 px-4 py-2.5 bg-[var(--color-status-rejected-bg)] border border-[var(--color-status-rejected-fg)]/20 text-[var(--color-status-rejected-fg)] text-sm"
             >
-              <ToggleButton
-                active={view === "board"}
-                onClick={() => setView("board")}
-              >
-                ボード
-              </ToggleButton>
-              <ToggleButton
-                active={view === "list"}
-                onClick={() => setView("list")}
-              >
-                リスト
-              </ToggleButton>
+              {errorMsg}
             </div>
-          </div>
+          )}
         </div>
-
-        <hr className="border-t border-[var(--color-rule-strong)] mb-5" />
-
-        {errorMsg && (
-          <div
-            role="alert"
-            className="mb-4 px-4 py-2.5 bg-[var(--color-status-rejected-bg)] border border-[var(--color-status-rejected-fg)]/20 text-[var(--color-status-rejected-fg)] text-sm"
-          >
-            {errorMsg}
-          </div>
-        )}
       </div>
 
       {view === "board" ? (

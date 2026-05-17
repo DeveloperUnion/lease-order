@@ -128,7 +128,7 @@ function MonthCell({
 
   return (
     <div
-      className={`relative min-h-[110px] p-1.5 border-r border-b border-rule flex flex-col gap-1 ${
+      className={`relative min-h-[140px] p-1.5 border-r border-b border-rule flex flex-col gap-1 ${
         inMonth ? "bg-surface" : "bg-surface-muted/50"
       } ${isToday ? "ring-1 ring-inset ring-accent" : ""}`}
     >

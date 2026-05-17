@@ -22,7 +22,8 @@ function buildHrefs(view: CalendarView, range: CalendarRange) {
       next: `/admin?view=month&ym=${shiftMonth(range.anchor, 1)}`,
       today: `/admin?view=month`,
       monthView: `/admin?view=month&ym=${ym}`,
-      weekView: `/admin?view=week&wk=${range.anchor}`,
+      // 月→週切替時は今週をデフォルトに（wk を渡さない）
+      weekView: `/admin?view=week`,
     };
   }
   // week
@@ -71,21 +72,18 @@ export default function DashboardCalendar({ view, range, orders, scheduledReturn
 }
 
 function Legend() {
-  const item = "inline-flex items-center gap-1.5 text-[11px] text-muted";
+  const item = "inline-flex items-center gap-1.5 text-xs text-muted";
   const dot = "inline-block w-2.5 h-2.5 rounded-sm";
   return (
-    <div className="flex items-center gap-4 flex-wrap pt-1">
+    <div className="flex items-center gap-x-5 gap-y-2 flex-wrap pt-2">
       <span className={item}>
-        <span className={`${dot} bg-info`} /> 出荷
+        <span className={`${dot} bg-info`} /> 出荷（配送 / 来店）
       </span>
       <span className={item}>
-        <span className={`${dot} bg-warning`} /> 期限
+        <span className={`${dot} bg-success`} /> 返却（引取 / 持込）
       </span>
       <span className={item}>
-        <span className={`${dot} bg-accent`} /> 返却取り
-      </span>
-      <span className={item}>
-        <span className={`${dot} bg-danger`} /> 遅延 (出荷未済)
+        <span className={`${dot} bg-danger`} /> 遅延（出荷未済 / 返却未済）
       </span>
     </div>
   );
