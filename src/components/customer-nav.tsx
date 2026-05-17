@@ -129,7 +129,7 @@ export default function CustomerNav({
       <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-56 flex-col bg-surface border-r border-border z-40">
         <Link href="/" className="flex items-center gap-2 px-5 py-5 border-b border-border">
           <Image
-            src="/images/logo-union.png"
+            src="/images/logo-union.webp"
             alt="union"
             width={486}
             height={823}

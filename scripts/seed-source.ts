@@ -38,9 +38,9 @@ type Office = {
 export const categories: Category[] = [
   { id: "cat-1", name: "仮囲い", slug: "karigakoi", image_url: "/images/materials/0449.jpg", sort_order: 1 },
   { id: "cat-2", name: "保安機材", slug: "hoan-kizai", image_url: "/images/materials/0484.jpg", sort_order: 2 },
-  { id: "cat-3", name: "Iqシステム", slug: "iq-system", image_url: "/images/materials/kn9_img.png", sort_order: 3 },
+  { id: "cat-3", name: "Iqシステム", slug: "iq-system", image_url: "/images/materials/kn9_img.webp", sort_order: 3 },
   { id: "cat-4", name: "枠組足場", slug: "wakugumi-ashiba", image_url: "/images/materials/0502.jpg", sort_order: 4 },
-  { id: "cat-5", name: "昇降式足場", slug: "shoukou-ashiba", image_url: "/images/materials/kn6_img.png", sort_order: 5 },
+  { id: "cat-5", name: "昇降式足場", slug: "shoukou-ashiba", image_url: "/images/materials/kn6_img.webp", sort_order: 5 },
   { id: "cat-6", name: "単管足場", slug: "tankan-ashiba", image_url: "/images/materials/0501.jpg", sort_order: 6 },
   { id: "cat-7", name: "吊足場", slug: "tsuri-ashiba", image_url: "/images/materials/ch_2.jpg", sort_order: 7 },
   { id: "cat-8", name: "鉄骨足場", slug: "tekkotsu-ashiba", image_url: "/images/materials/0484.jpg", sort_order: 8 },
@@ -72,7 +72,7 @@ export const materials: Material[] = [
   { id: "m-6b", category_id: "cat-2", name: "進入防止ドア", slug: "shinnyuu-boushi-door", image_url: catalogPage(10), description: "足場階段用の進入防止ドア", spec: {}, sort_order: 5, is_active: true, catalog_pages: [catalogPage(10)] },
 
   // ===== Iqシステム =====
-  { id: "m-7", category_id: "cat-3", name: "アイキューシステム", slug: "iq-system-parts", image_url: "/images/materials/kn9_img.png", description: "くさび緊結式足場（抜け止め機能付き）。階高1900mm、先行手すり標準装備", spec: { "階高": "1900mm", "タイプ": "くさび緊結式" }, sort_order: 1, is_active: true, catalog_pages: [catalogPage(12), catalogPage(13), catalogPage(14), catalogPage(15), catalogPage(16)] },
+  { id: "m-7", category_id: "cat-3", name: "アイキューシステム", slug: "iq-system-parts", image_url: "/images/materials/kn9_img.webp", description: "くさび緊結式足場（抜け止め機能付き）。階高1900mm、先行手すり標準装備", spec: { "階高": "1900mm", "タイプ": "くさび緊結式" }, sort_order: 1, is_active: true, catalog_pages: [catalogPage(12), catalogPage(13), catalogPage(14), catalogPage(15), catalogPage(16)] },
 
   // ===== 枠組足場 =====
   { id: "m-8a", category_id: "cat-4", name: "建枠", slug: "tatewaku", image_url: catalogPage(22), description: "枠組足場の基本フレーム", spec: {}, sort_order: 1, is_active: true, catalog_pages: [catalogPage(22), catalogPage(23)] },
@@ -95,7 +95,7 @@ export const materials: Material[] = [
   { id: "m-16", category_id: "cat-4", name: "防音パネル", slug: "bouon-panel", image_url: catalogPage(49), description: "防音対策パネル", spec: {}, sort_order: 18, is_active: true, catalog_pages: [catalogPage(49), catalogPage(50)] },
 
   // ===== 昇降式足場 =====
-  { id: "m-17", category_id: "cat-5", name: "リフトクライマー", slug: "lift-climber", image_url: "/images/materials/kn6_img.png", description: "自走式昇降足場", spec: {}, sort_order: 1, is_active: true, catalog_pages: [catalogPage(56), catalogPage(57), catalogPage(58), catalogPage(59)] },
+  { id: "m-17", category_id: "cat-5", name: "リフトクライマー", slug: "lift-climber", image_url: "/images/materials/kn6_img.webp", description: "自走式昇降足場", spec: {}, sort_order: 1, is_active: true, catalog_pages: [catalogPage(56), catalogPage(57), catalogPage(58), catalogPage(59)] },
   { id: "m-18", category_id: "cat-5", name: "工事用エレベーター", slug: "kouji-elevator", image_url: catalogPage(60), description: "建設工事用エレベーター", spec: {}, sort_order: 2, is_active: true, catalog_pages: [catalogPage(60), catalogPage(61), catalogPage(62), catalogPage(63)] },
 
   // ===== 単管足場 =====
@@ -106,7 +106,7 @@ export const materials: Material[] = [
 
   // ===== 吊足場 =====
   { id: "m-21", category_id: "cat-7", name: "クイックデッキ", slug: "quick-deck", image_url: "/images/materials/ch_2.jpg", description: "吊り下げ式作業足場システム", spec: {}, sort_order: 1, is_active: true, catalog_pages: [catalogPage(86), catalogPage(87), catalogPage(88), catalogPage(89), catalogPage(90), catalogPage(91)] },
-  { id: "m-22", category_id: "cat-7", name: "セーフティSKパネル", slug: "safety-sk-panel", image_url: "/images/materials/kn5_img.png", description: "安全パネル式吊足場", spec: {}, sort_order: 2, is_active: true, catalog_pages: [catalogPage(92), catalogPage(93), catalogPage(94), catalogPage(95), catalogPage(96)] },
+  { id: "m-22", category_id: "cat-7", name: "セーフティSKパネル", slug: "safety-sk-panel", image_url: "/images/materials/kn5_img.webp", description: "安全パネル式吊足場", spec: {}, sort_order: 2, is_active: true, catalog_pages: [catalogPage(92), catalogPage(93), catalogPage(94), catalogPage(95), catalogPage(96)] },
 
   // ===== 鉄骨足場 =====
   { id: "m-23a", category_id: "cat-8", name: "親綱支柱", slug: "oyazuna-shichuu", image_url: catalogPage(98), description: "親綱固定用支柱", spec: {}, sort_order: 1, is_active: true, catalog_pages: [catalogPage(98)] },

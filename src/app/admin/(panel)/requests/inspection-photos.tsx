@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { resizeImage } from "@/lib/image/resize-client";
 import {
   deleteReturnPhoto,
   listReturnPhotos,
@@ -9,8 +10,6 @@ import {
 } from "./photo-actions";
 
 const MAX_PHOTOS = 6;
-const RESIZE_LONG_EDGE = 1600;
-const JPEG_QUALITY = 0.85;
 
 export type AiPrefill = {
   receivedQuantity: number;
@@ -83,7 +82,7 @@ export default function InspectionPhotos({
           setUploadError(`写真は ${MAX_PHOTOS} 枚までです`);
           break;
         }
-        const resized = await resizeImage(file);
+        const resized = await resizeImage(file, { maxEdge: 1600, quality: 0.85 });
         const fd = new FormData();
         fd.append("photo", resized, resized.name);
         const created = await uploadReturnPhoto(requestId, fd);
@@ -268,31 +267,3 @@ function Badge({ variant }: { variant: "match" | "under" | "over" | "unknown" })
   );
 }
 
-// 長辺 1600px に縮小して JPEG で再エンコード。元ファイルが既に小さければそのまま返す。
-async function resizeImage(file: File): Promise<File> {
-  if (typeof window === "undefined") return file;
-  if (!file.type.startsWith("image/")) return file;
-  const bitmap = await createImageBitmap(file).catch(() => null);
-  if (!bitmap) return file;
-  try {
-    const { width, height } = bitmap;
-    const long = Math.max(width, height);
-    if (long <= RESIZE_LONG_EDGE && file.size < 1.5 * 1024 * 1024) return file;
-    const scale = long > RESIZE_LONG_EDGE ? RESIZE_LONG_EDGE / long : 1;
-    const w = Math.round(width * scale);
-    const h = Math.round(height * scale);
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return file;
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    const blob: Blob | null = await new Promise((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY)
-    );
-    if (!blob) return file;
-    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
-  } finally {
-    bitmap.close();
-  }
-}

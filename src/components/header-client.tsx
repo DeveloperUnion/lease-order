@@ -171,7 +171,7 @@ export default function HeaderClient({
           <div className="h-16 sm:h-20 flex items-center justify-between gap-4">
             <Link href="/admin" className="flex items-center gap-2.5 flex-shrink-0">
               <Image
-                src="/images/logo-union.png"
+                src="/images/logo-union.webp"
                 alt="union"
                 width={486}
                 height={823}
@@ -196,7 +196,7 @@ export default function HeaderClient({
           {/* モバイルのみロゴを表示 */}
           <Link href="/" className="flex items-center gap-2 flex-shrink-0 md:hidden">
             <Image
-              src="/images/logo-union.png"
+              src="/images/logo-union.webp"
               alt="union"
               width={486}
               height={823}
