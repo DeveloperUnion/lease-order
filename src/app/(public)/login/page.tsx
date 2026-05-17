@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2 mb-10">
           <Image
-            src="/images/logo-union.png"
+            src="/images/logo-union.webp"
             alt="union"
             width={486}
             height={823}

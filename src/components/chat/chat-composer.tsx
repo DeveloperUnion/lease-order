@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { MessageAttachment } from "@/lib/chat/types";
+import { resizeImage } from "@/lib/image/resize-client";
 
 type QuotedOrder = { id: string; order_number: string } | null;
 
@@ -76,8 +77,10 @@ export default function ChatComposer({
     setUploading(true);
     setError(null);
     try {
+      // 画像のみリサイズ。PDF 等は素通し（resizeImage 内で MIME ガード）
+      const resized = await resizeImage(file, { maxEdge: 1600, quality: 0.8 });
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", resized, resized.name);
       const res = await fetch(uploadUrl, { method: "POST", body: fd });
       const json = await res.json();
       if (!res.ok || !json.ok) {

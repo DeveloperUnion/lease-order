@@ -16,6 +16,7 @@ import {
   TextInput,
   EmptyState,
 } from "@/components/admin/ui";
+import { resizeImage } from "@/lib/image/resize-client";
 
 type EditingState =
   | { mode: "create" }
@@ -309,11 +310,12 @@ function EditModal({
     initial.image_url
   );
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+      const resized = await resizeImage(file, { maxEdge: 1200, quality: 0.85 });
+      setImageFile(resized);
+      setImagePreview(URL.createObjectURL(resized));
     }
   };
 

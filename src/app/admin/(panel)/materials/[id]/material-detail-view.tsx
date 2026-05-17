@@ -33,6 +33,7 @@ import {
   TextArea,
   Select,
 } from "@/components/admin/ui";
+import { resizeImage } from "@/lib/image/resize-client";
 
 const MAX_IMAGES = 5;
 
@@ -264,8 +265,9 @@ function ImagesSection({
       return;
     }
     startTransition(async () => {
+      const resized = await resizeImage(file, { maxEdge: 1200, quality: 0.85 });
       const fd = new FormData();
-      fd.set("image", file);
+      fd.set("image", resized);
       try {
         await addMaterialImage(material.id, fd);
         onToast("画像を追加しました");
