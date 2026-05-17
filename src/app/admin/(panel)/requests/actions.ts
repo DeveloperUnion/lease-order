@@ -4,37 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 import { notifyCustomer } from "@/lib/notifications";
-import { currentAdminUserId } from "./_helpers";
-
-// admin_user.id 解決は bootstrap（auth.users.email → admin_users.id mapping）
-// なので service_role を継続使用。
-async function currentAdminUserId(tenantId: string): Promise<string | null> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user?.email) {
-    const { data } = await supabaseAdmin
-      .from("admin_users")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("email", user.email.toLowerCase())
-      .maybeSingle();
-    if (data?.id) return data.id;
-  }
-  // フィードバック収集モード: 未ログイン or 未登録メールでもテナントの最初の admin を返す
-  if (process.env.DISABLE_AUTH === "1") {
-    const { data } = await supabaseAdmin
-      .from("admin_users")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    return data?.id ?? null;
-  }
-  return null;
-}
+import { currentAdminUserId } from "@/lib/current-admin";
 
 async function loadReturnRequest(
   requestId: string,
