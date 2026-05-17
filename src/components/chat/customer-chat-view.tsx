@@ -216,6 +216,9 @@ export default function CustomerChatView({
       setExtras((prev) => prev.filter((e) => e.id !== tempId));
       throw new Error(result.error);
     }
+    // realtime が同じ realId の INSERT を配信してきたとき重複しないよう、
+    // rename と同時に known 集合へ入れておく（useEffect の同期を待たない）。
+    knownIdsRef.current.add(result.messageId);
     // 実 id に差し替え。realtime と server refresh の重複検知が効くようにする。
     setExtras((prev) =>
       prev.map((e) => (e.id === tempId ? { ...e, id: result.messageId } : e))

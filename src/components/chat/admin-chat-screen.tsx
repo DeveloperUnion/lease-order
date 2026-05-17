@@ -64,6 +64,16 @@ export default function AdminChatScreen({
   const [serverMessages, setServerMessages] = useState<BubbleMessage[]>(initialFromProp);
   const scrollRef = useRef<HTMLDivElement>(null);
   const knownIdsRef = useRef<Set<string>>(new Set(initialFromProp.map((m) => m.id)));
+  const prevSelectedIdRef = useRef<string | null>(selectedId);
+
+  // 会話切替時は extras を捨てる。BubbleMessage は conversation_id を持たないため、
+  // 「server に id がないもの」フィルタだと前の会話の optimistic stub が次の会話に
+  // 混じってしまう（送信直後に別の顧客を選ぶと吹き出しが付いてくる現象）。
+  if (prevSelectedIdRef.current !== selectedId) {
+    prevSelectedIdRef.current = selectedId;
+    setExtras([]);
+    knownIdsRef.current = new Set(initialFromProp.map((m) => m.id));
+  }
 
   if (serverMessages !== initialFromProp) {
     setServerMessages(initialFromProp);
@@ -245,6 +255,9 @@ export default function AdminChatScreen({
       setExtras((prev) => prev.filter((e) => e.id !== tempId));
       throw new Error(result.error);
     }
+    // realtime が同じ realId の INSERT を配信してきたとき重複しないよう、
+    // rename と同時に known 集合へ入れておく（useEffect の同期を待たない）。
+    knownIdsRef.current.add(result.messageId);
     setExtras((prev) =>
       prev.map((e) => (e.id === tempId ? { ...e, id: result.messageId } : e))
     );
