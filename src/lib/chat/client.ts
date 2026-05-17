@@ -1,6 +1,7 @@
 "use client";
 
 import { enqueueChatMessage, flushChatOutbox } from "@/lib/offline/chat-outbox";
+import type { BubbleMessage } from "@/components/chat/message-bubble";
 import type { ChatAudience, MessageAttachment } from "./types";
 
 export type SendInput = {
@@ -17,7 +18,7 @@ export type SendInput = {
 };
 
 export type SendResult =
-  | { ok: true; messageId: string; queued?: boolean }
+  | { ok: true; messageId: string; enriched: BubbleMessage | null; queued?: boolean }
   | { ok: false; error: string };
 
 function sendUrl(audience: ChatAudience): string {
@@ -48,10 +49,19 @@ export async function sendChatMessage(input: SendInput): Promise<SendResult> {
         credentials: "same-origin",
       });
       const json = (await res.json().catch(() => null)) as
-        | { ok?: boolean; message?: { id: string }; error?: string }
+        | {
+            ok?: boolean;
+            message?: { id: string };
+            enriched?: BubbleMessage;
+            error?: string;
+          }
         | null;
       if (res.ok && json?.ok && json.message) {
-        return { ok: true, messageId: json.message.id };
+        return {
+          ok: true,
+          messageId: json.message.id,
+          enriched: json.enriched ?? null,
+        };
       }
       if (res.status >= 500 || !json) {
         await enqueueChatMessage({
@@ -61,7 +71,7 @@ export async function sendChatMessage(input: SendInput): Promise<SendResult> {
           payload,
         });
         void flushChatOutbox();
-        return { ok: true, messageId: input.clientRequestId, queued: true };
+        return { ok: true, messageId: input.clientRequestId, enriched: null, queued: true };
       }
       return { ok: false, error: json.error ?? `HTTP ${res.status}` };
     } catch {
@@ -71,7 +81,7 @@ export async function sendChatMessage(input: SendInput): Promise<SendResult> {
         customerId: input.ownerCustomerId,
         payload,
       });
-      return { ok: true, messageId: input.clientRequestId, queued: true };
+      return { ok: true, messageId: input.clientRequestId, enriched: null, queued: true };
     }
   }
 
@@ -81,5 +91,5 @@ export async function sendChatMessage(input: SendInput): Promise<SendResult> {
     customerId: input.ownerCustomerId,
     payload,
   });
-  return { ok: true, messageId: input.clientRequestId, queued: true };
+  return { ok: true, messageId: input.clientRequestId, enriched: null, queued: true };
 }

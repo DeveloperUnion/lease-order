@@ -102,6 +102,22 @@ async function fetchOrderRefs(
   return map;
 }
 
+// 単発のメッセージから order_ref を引きたいとき用。送信 API レスポンスと
+// realtime 後の単発 enrichment エンドポイント両方で使う。
+export async function fetchOrderRef(
+  orderId: string,
+  tenantId: string
+): Promise<OrderRef | null> {
+  const { data, error } = await supabaseAdmin
+    .from("orders")
+    .select("id, order_number, status")
+    .eq("tenant_id", tenantId)
+    .eq("id", orderId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as OrderRef) ?? null;
+}
+
 export type InsertMessageInput = {
   tenantId: string;
   conversationId: string;

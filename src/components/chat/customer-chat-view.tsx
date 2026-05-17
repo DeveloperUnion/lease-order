@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import MessageBubble, { type BubbleMessage } from "./message-bubble";
 import ChatComposer from "./chat-composer";
@@ -43,7 +42,6 @@ export default function CustomerChatView({
   initialMessages,
   initialOrderQuote,
 }: Props) {
-  const router = useRouter();
   const [extras, setExtras] = useState<BubbleMessage[]>([]);
   const [serverMessages, setServerMessages] = useState(initialMessages);
   const [quoted, setQuoted] = useState<OrderRef | null>(initialOrderQuote);
@@ -75,6 +73,8 @@ export default function CustomerChatView({
 
   // 既読化: 相手 (admin) からの未読が存在するときだけ POST。
   // displayMessages.length に依らず、未読の有無で判定する → 不要な request を抑える。
+  // ナビゲーションの「連絡」バッジは useLiveChatUnread の realtime UPDATE 監視で
+  // 自前に追従するため、router.refresh() で layout を再 fetch する必要は無い。
   const hasUnreadFromOther = displayMessages.some(
     (m) => m.sender_type === "admin" && !m.read_at
   );
@@ -83,12 +83,8 @@ export default function CustomerChatView({
     fetch(`/api/chat/customer/conversations/${conversationId}/read`, {
       method: "POST",
       cache: "no-store",
-    })
-      // ナビゲーションの「連絡」バッジは header server data から渡るため、
-      // 既読化後は refresh しないと数字が消えない。
-      .then(() => router.refresh())
-      .catch(() => {});
-  }, [conversationId, hasUnreadFromOther, router]);
+    }).catch(() => {});
+  }, [conversationId, hasUnreadFromOther]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +99,26 @@ export default function CustomerChatView({
         return (await res.json()) as TokenResponse;
       } catch {
         return null;
+      }
+    }
+
+    // 単発 enrichment：realtime INSERT を受けてから add 済みの stub を
+    // 「order_ref + signed attachments 付き」に in-place で差し替える。
+    async function enrichSingle(messageId: string): Promise<void> {
+      try {
+        const res = await fetch(`/api/chat/customer/messages/${messageId}/enrich`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as { ok?: boolean; enriched?: BubbleMessage };
+        if (!json.ok || !json.enriched) return;
+        if (cancelled) return;
+        const enriched = json.enriched;
+        setExtras((prev) =>
+          prev.map((e) => (e.id === enriched.id ? enriched : e))
+        );
+      } catch {
+        /* fallback: 何もしない。次の navigation で server から取り直される */
       }
     }
 
@@ -157,16 +173,18 @@ export default function CustomerChatView({
               attachments: (row.attachments ?? []).map<SignedAttachment>((a) => ({
                 ...a,
                 url: null,
+                thumbnail_url: null,
               })),
               order_ref: null,
               created_at: row.created_at,
               read_at: row.read_at,
             };
             setExtras((prev) => [...prev, stub]);
-            // 添付や注文引用がある場合だけ server 再描画 (signed URL / order_ref 取得)。
-            // テキストのみのメッセージは stub のままで表示できる → router.refresh しない。
+            // 添付や発注引用がある場合は単発 enrichment エンドポイントで該当 1 件だけを
+            // 取りに行く。layout も含めて RSC ツリー全体を再 fetch していた router.refresh
+            // を置き換える狙い。
             if ((row.attachments?.length ?? 0) > 0 || row.order_id) {
-              router.refresh();
+              void enrichSingle(row.id);
             }
           }
         )
@@ -180,7 +198,7 @@ export default function CustomerChatView({
       if (refreshTimer) clearTimeout(refreshTimer);
       if (channel && supabase) supabase.removeChannel(channel);
     };
-  }, [conversationId, router]);
+  }, [conversationId]);
 
   async function handleSend(input: {
     body: string;
@@ -195,7 +213,7 @@ export default function CustomerChatView({
       id: tempId,
       sender_type: "customer",
       body: input.body,
-      attachments: input.attachments.map<SignedAttachment>((a) => ({ ...a, url: null })),
+      attachments: input.attachments.map<SignedAttachment>((a) => ({ ...a, url: null, thumbnail_url: null })),
       order_ref: null,
       created_at: new Date().toISOString(),
       read_at: null,
@@ -219,14 +237,15 @@ export default function CustomerChatView({
     // realtime が同じ realId の INSERT を配信してきたとき重複しないよう、
     // rename と同時に known 集合へ入れておく（useEffect の同期を待たない）。
     knownIdsRef.current.add(result.messageId);
-    // 実 id に差し替え。realtime と server refresh の重複検知が効くようにする。
+    // 実 id に差し替え。サーバが enriched (order_ref + signed attachments) を
+    // 返したらそれで stub を内容ごと置換し、router.refresh() を不要にする。
     setExtras((prev) =>
-      prev.map((e) => (e.id === tempId ? { ...e, id: result.messageId } : e))
+      prev.map((e) =>
+        e.id === tempId
+          ? result.enriched ?? { ...e, id: result.messageId }
+          : e
+      )
     );
-    // 添付や注文引用がある場合だけ signed URL / order_ref を取りに refresh する
-    if (input.attachments.length > 0 || input.orderId) {
-      router.refresh();
-    }
   }
 
   return (

@@ -103,8 +103,9 @@ export default function AdminChatScreen({
     if (el) el.scrollTop = el.scrollHeight;
   }, [displayMessages.length, selectedId]);
 
-  // 既読化: customer 発の未読が存在するときだけ POST → 完了後 refresh で
-  // サイドバーの「メッセージ」バッジを更新する。
+  // 既読化: customer 発の未読が存在するときだけ POST。
+  // サイドバーの「メッセージ」バッジは useLiveChatUnread が realtime UPDATE を
+  // 拾って自前に追従するので router.refresh は不要。
   const hasUnreadFromCustomer = displayMessages.some(
     (m) => m.sender_type === "customer" && !m.read_at
   );
@@ -113,10 +114,8 @@ export default function AdminChatScreen({
     fetch(`/api/chat/admin/conversations/${selectedId}/read`, {
       method: "POST",
       cache: "no-store",
-    })
-      .then(() => router.refresh())
-      .catch(() => {});
-  }, [selectedId, hasUnreadFromCustomer, router]);
+    }).catch(() => {});
+  }, [selectedId, hasUnreadFromCustomer]);
 
   // Realtime: テナント全体の INSERT を 1 本のチャンネルで受け、
   //   - 選択中の会話なら extras に積む
@@ -143,6 +142,24 @@ export default function AdminChatScreen({
         return (await res.json()) as TokenResponse;
       } catch {
         return null;
+      }
+    }
+
+    // 開いている会話の realtime stub を「order_ref + signed attachments 付き」へ
+    // in-place 差し替え。layout 込みの router.refresh を避ける狙い。
+    async function enrichSingle(messageId: string): Promise<void> {
+      try {
+        const res = await fetch(`/api/chat/admin/messages/${messageId}/enrich`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as { ok?: boolean; enriched?: BubbleMessage };
+        if (!json.ok || !json.enriched) return;
+        if (cancelled) return;
+        const enriched = json.enriched;
+        setExtras((prev) => prev.map((e) => (e.id === enriched.id ? enriched : e)));
+      } catch {
+        /* fallback: 何もしない */
       }
     }
 
@@ -201,16 +218,17 @@ export default function AdminChatScreen({
                 attachments: (row.attachments ?? []).map<SignedAttachment>((a) => ({
                   ...a,
                   url: null,
+                  thumbnail_url: null,
                 })),
                 order_ref: null,
                 created_at: row.created_at,
                 read_at: row.read_at,
               };
               setExtras((prev) => [...prev, stub]);
-              // 開いている会話の bubble に signed URL / order_ref を即時に乗せたい場合は
-              // 3 秒待たず router.refresh する。customer-chat-view 側と歩調を合わせる。
+              // 添付・発注引用付きの場合は 1 件だけ単発 enrichment を取りに行く。
+              // 一覧側の last_message_at 更新は別途 scheduleListRefresh が拾う。
               if ((row.attachments?.length ?? 0) > 0 || row.order_id) {
-                router.refresh();
+                void enrichSingle(row.id);
               }
             } else {
               // 別の会話 → 一覧の last_message_at / 未読バッジを更新
@@ -244,7 +262,7 @@ export default function AdminChatScreen({
       id: tempId,
       sender_type: "admin",
       body: input.body,
-      attachments: input.attachments.map<SignedAttachment>((a) => ({ ...a, url: null })),
+      attachments: input.attachments.map<SignedAttachment>((a) => ({ ...a, url: null, thumbnail_url: null })),
       order_ref: null,
       created_at: new Date().toISOString(),
       read_at: null,
@@ -268,12 +286,15 @@ export default function AdminChatScreen({
     // realtime が同じ realId の INSERT を配信してきたとき重複しないよう、
     // rename と同時に known 集合へ入れておく（useEffect の同期を待たない）。
     knownIdsRef.current.add(result.messageId);
+    // 実 id に差し替え。サーバが enriched (order_ref + signed attachments) を返した
+    // ものでそのまま stub を置換し、layout 全体 refresh を不要にする。
     setExtras((prev) =>
-      prev.map((e) => (e.id === tempId ? { ...e, id: result.messageId } : e))
+      prev.map((e) =>
+        e.id === tempId
+          ? result.enriched ?? { ...e, id: result.messageId }
+          : e
+      )
     );
-    if (input.attachments.length > 0 || input.orderId) {
-      router.refresh();
-    }
   }
 
   return (

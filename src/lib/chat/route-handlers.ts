@@ -4,12 +4,14 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { RecipientIdentity } from "@/lib/supabase-tenant";
 import {
+  fetchOrderRef,
   getConversationById,
   getOrCreateConversation,
   insertMessage,
   markConversationRead,
 } from "./data";
-import type { MessageAttachment } from "./types";
+import { signAttachments } from "./sign-attachments";
+import type { MessageAttachment, MessageRow, OrderRef } from "./types";
 
 // 送信 / 既読 / アップロードのコアロジックを per-audience の route から共有する。
 // 各 route は identity 解決だけ自分で行い、ここに委譲する。
@@ -118,12 +120,78 @@ export async function handleSendMessage(
     clientRequestId,
   });
 
+  // optimistic stub をクライアントが「内容ごと」差し替えられるよう、
+  // order_ref 解決済み + signed attachments まで埋めて返す。これにより client は
+  // 送信完了後に router.refresh() を呼ばずに済む（layout 4 並列クエリの再実行を避ける）。
+  const enriched = await enrichMessage(message, identity.tenantId);
+
   return NextResponse.json({
     ok: true,
     message,
+    enriched,
     conversationId,
     duplicate,
   });
+}
+
+// MessageRow に order_ref と signed attachments を載せた payload。
+// 送信 API の即時レスポンスと、realtime 受信後の単発 enrichment エンドポイントから返す共通形。
+export async function enrichMessage(
+  message: MessageRow,
+  tenantId: string
+): Promise<{
+  id: string;
+  sender_type: MessageRow["sender_type"];
+  body: string | null;
+  attachments: Awaited<ReturnType<typeof signAttachments>>;
+  order_ref: OrderRef | null;
+  created_at: string;
+  read_at: string | null;
+}> {
+  const [attachments, order_ref] = await Promise.all([
+    signAttachments(message.attachments),
+    message.order_id ? fetchOrderRef(message.order_id, tenantId) : Promise.resolve(null),
+  ]);
+  return {
+    id: message.id,
+    sender_type: message.sender_type,
+    body: message.body,
+    attachments,
+    order_ref,
+    created_at: message.created_at,
+    read_at: message.read_at,
+  };
+}
+
+// realtime で INSERT を受け取った client が、order_id / attachments が含まれていたときに
+// router.refresh() の代わりに「その 1 メッセージだけ」を enrichment するために叩く GET。
+// 認可：tenant 一致は必須。customer は自分の conversation 限定。
+export async function handleEnrichMessage(
+  messageId: string,
+  identity: RecipientIdentity
+): Promise<Response> {
+  if (identity.audience === "anonymous") {
+    return NextResponse.json({ ok: false }, { status: 401 });
+  }
+  const { data, error } = await supabaseAdmin
+    .from("messages")
+    .select("*")
+    .eq("id", messageId)
+    .eq("tenant_id", identity.tenantId)
+    .maybeSingle();
+  if (error) return NextResponse.json({ ok: false }, { status: 500 });
+  if (!data) return NextResponse.json({ ok: false }, { status: 404 });
+  const message = data as MessageRow;
+
+  if (identity.audience === "customer") {
+    const conv = await getConversationById(message.conversation_id, identity.tenantId);
+    if (!conv || conv.customer_id !== identity.recipientId) {
+      return NextResponse.json({ ok: false }, { status: 403 });
+    }
+  }
+
+  const enriched = await enrichMessage(message, identity.tenantId);
+  return NextResponse.json({ ok: true, enriched });
 }
 
 export async function handleMarkRead(
