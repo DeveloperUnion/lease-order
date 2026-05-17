@@ -6,6 +6,8 @@ import { getTenantId } from "@/lib/tenant";
 import { notifyCustomer } from "@/lib/notifications";
 import { currentAdminUserId } from "@/lib/current-admin";
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 async function loadReturnRequest(
   requestId: string,
   tenantId: string,
