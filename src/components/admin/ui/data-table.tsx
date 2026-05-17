@@ -64,7 +64,7 @@ export default function DataTable<T>({
           <div
             key={c.key}
             role="columnheader"
-            className={`px-3 sm:px-4 py-2.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-subtle ${
+            className={`px-3 sm:px-4 py-3 text-xs sm:text-sm text-muted font-medium ${
               ALIGN_CLASS[c.align ?? "left"]
             } flex items-end`}
           >

@@ -13,10 +13,12 @@ export type CalendarEvent = {
   status: OrderStatus;
   /** ISO yyyy-mm-dd, the date the event lands on */
   date: string;
-  /** True when this is an overdue shipment (past date, still approved). */
+  /** True when this is an overdue shipment (status=approved, lease_start past) or overdue return (status=renting, lease_end past). */
   overdue: boolean;
   /** return-scheduled イベントのみ：輸送手段 */
   transport_method?: "pickup" | "dropoff";
+  /** shipment イベントのみ：渡し方 */
+  delivery_method?: "delivery" | "pickup";
 };
 
 export type DayBucket = {
