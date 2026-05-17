@@ -22,15 +22,12 @@ import {
 type AddItemInput = {
   material: Material;
   quantity: number;
-  variantId?: string;
-  variantName?: string;
-  selections?: SpecSelectionLabel[];
+  selections: SpecSelectionLabel[];
 };
 
 type CartContextType = {
   items: CartItem[];
   addItem: (input: AddItemInput) => void;
-  addItems: (inputs: AddItemInput[]) => void;
   updateQuantity: (cartLineId: string, quantity: number) => void;
   removeItem: (cartLineId: string) => void;
   clearCart: () => void;
@@ -44,11 +41,9 @@ const CartContext = createContext<CartContextType | null>(null);
 
 function toCartItem(input: AddItemInput): CartItem {
   return {
-    cartLineId: buildCartLineId(input.material.id, input.variantId),
+    cartLineId: buildCartLineId(input.material.id, input.selections),
     material: input.material,
     quantity: input.quantity,
-    variantId: input.variantId,
-    variantName: input.variantName,
     selections: input.selections,
   };
 }
@@ -109,10 +104,6 @@ export function CartProvider({ children, tenantId, customerId }: CartProviderPro
     setItems((prev) => mergeItem(prev, toCartItem(input)));
   }, []);
 
-  const addItems = useCallback((inputs: AddItemInput[]) => {
-    setItems((prev) => inputs.reduce((acc, i) => mergeItem(acc, toCartItem(i)), prev));
-  }, []);
-
   const updateQuantity = useCallback((cartLineId: string, quantity: number) => {
     setItems((prev) =>
       prev.map((item) =>
@@ -157,7 +148,6 @@ export function CartProvider({ children, tenantId, customerId }: CartProviderPro
       value={{
         items,
         addItem,
-        addItems,
         updateQuantity,
         removeItem,
         clearCart,

@@ -38,7 +38,7 @@ async function assertOrderOwnedByTenant(
 export type ApprovalItem = {
   id: string;
   material_name: string;
-  variant_name: string | null;
+  spec_summary: string | null;
   quantity: number;
 };
 
@@ -50,15 +50,30 @@ export async function fetchOrderItemsForApproval(
   const supabase = await getSupabaseTenant();
   const { data, error } = await supabase
     .from("order_items")
-    .select("id, material_name, variant_name, quantity, created_at")
+    .select(
+      `id, material_name, quantity, created_at,
+       order_item_spec_options(group_name_snapshot, option_label_snapshot)`
+    )
     .eq("order_id", orderId)
     .order("created_at");
   if (error) throw error;
-  return (data ?? []).map((it) => ({
+  type Row = {
+    id: string;
+    material_name: string;
+    quantity: number;
+    order_item_spec_options:
+      | { group_name_snapshot: string; option_label_snapshot: string }[]
+      | null;
+  };
+  return ((data ?? []) as unknown as Row[]).map((it) => ({
     id: it.id,
     material_name: it.material_name,
-    variant_name: it.variant_name,
     quantity: it.quantity,
+    spec_summary: (it.order_item_spec_options ?? []).length
+      ? (it.order_item_spec_options ?? [])
+          .map((s) => `${s.group_name_snapshot}: ${s.option_label_snapshot}`)
+          .join(" / ")
+      : null,
   }));
 }
 
@@ -596,33 +611,8 @@ export async function deleteOffice(officeId: string) {
 }
 
 // ============================================================
-// Material variants
+// Material ownership helper（spec_groups / spec_options が共有して使う）
 // ============================================================
-
-type VariantInput = {
-  name: string;
-  unit: string | null;
-  sku: string | null;
-  sortOrder: number;
-  isActive: boolean;
-};
-
-function parseVariantInput(formData: FormData): VariantInput {
-  const name = String(formData.get("name") ?? "").trim();
-  if (!name) throw new Error("バリエーション名は必須です");
-  const get = (k: string) => {
-    const v = String(formData.get(k) ?? "").trim();
-    return v.length > 0 ? v : null;
-  };
-  return {
-    name,
-    unit: get("unit"),
-    sku: get("sku"),
-    sortOrder: Number(formData.get("sort_order") ?? 0) || 0,
-    isActive:
-      formData.get("is_active") === "on" || formData.get("is_active") === "true",
-  };
-}
 
 async function assertMaterialOwnedByTenant(
   materialId: string,
@@ -637,79 +627,6 @@ async function assertMaterialOwnedByTenant(
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error("対象の資材が見つかりません");
-}
-
-export async function addVariant(materialId: string, formData: FormData) {
-  const tenantId = await getTenantId();
-  await assertMaterialOwnedByTenant(materialId, tenantId);
-  const supabase = await getSupabaseTenant();
-  const input = parseVariantInput(formData);
-
-  const { error } = await supabase.from("material_variants").insert({
-    tenant_id: tenantId,
-    material_id: materialId,
-    name: input.name,
-    unit: input.unit,
-    sku: input.sku,
-    spec: {},
-    sort_order: input.sortOrder,
-    is_active: input.isActive,
-  });
-  if (error) throw new Error(`バリエーションの追加に失敗しました: ${error.message}`);
-
-  revalidatePath(`/admin/materials/${materialId}`);
-}
-
-export async function updateVariant(
-  materialId: string,
-  variantId: string,
-  formData: FormData
-) {
-  const tenantId = await getTenantId();
-  await assertMaterialOwnedByTenant(materialId, tenantId);
-  const supabase = await getSupabaseTenant();
-  const input = parseVariantInput(formData);
-
-  const { error } = await supabase
-    .from("material_variants")
-    .update({
-      name: input.name,
-      unit: input.unit,
-      sku: input.sku,
-      sort_order: input.sortOrder,
-      is_active: input.isActive,
-    })
-    .eq("id", variantId)
-    .eq("material_id", materialId);
-  if (error) throw new Error(`バリエーションの更新に失敗しました: ${error.message}`);
-
-  revalidatePath(`/admin/materials/${materialId}`);
-}
-
-export async function deleteVariant(materialId: string, variantId: string) {
-  const tenantId = await getTenantId();
-  await assertMaterialOwnedByTenant(materialId, tenantId);
-  const supabase = await getSupabaseTenant();
-
-  const { count, error: countErr } = await supabase
-    .from("order_items")
-    .select("id", { count: "exact", head: true })
-    .eq("variant_id", variantId);
-  if (countErr) throw countErr;
-  if ((count ?? 0) > 0) {
-    throw new Error(
-      "このバリエーションは過去の発注で使われているため削除できません。非公開にしてください。"
-    );
-  }
-
-  const { error } = await supabase
-    .from("material_variants")
-    .delete()
-    .eq("id", variantId)
-    .eq("material_id", materialId);
-  if (error) throw new Error(`バリエーションの削除に失敗しました: ${error.message}`);
-
-  revalidatePath(`/admin/materials/${materialId}`);
 }
 
 // ============================================================
@@ -918,231 +835,21 @@ export async function removeAdminUser(id: string) {
 }
 
 // ============================================================
-// Spec groups / options / variant ↔ option binding
+// Spec groups / spec options（v3: variants 廃止、仕様＝バリエーションの 2 層のみ）
+//
+// - admin は「+ 仕様追加」フォームで仕様名 + バリエーション複数行を一括登録
+// - 並び替えは DnD（reorderSpecGroups / reorderSpecOptions）
+// - 「削除」は論理削除（is_active=false）。物理削除は admin UI から提供しない
 // ============================================================
-
-// 全 active spec_groups × spec_options のクロスプロダクトから不足する variant
-// を自動生成。既存 variants は触らず、組み合わせが一致する variant が無いもの
-// だけを追加する。SKU や単位は admin が後で個別調整できるよう空のままにする。
-async function syncVariantsForMaterial(
-  materialId: string,
-  tenantId: string
-): Promise<void> {
-  const supabase = await getSupabaseTenant();
-
-  // 全 active spec_groups + active spec_options をロード
-  const { data: groupsData, error: gErr } = await supabase
-    .from("spec_groups")
-    .select(
-      "id, name, sort_order, spec_options(id, label, sort_order, is_active)"
-    )
-    .eq("material_id", materialId)
-    .eq("is_active", true)
-    .order("sort_order");
-  if (gErr) throw new Error(`仕様読み込みに失敗: ${gErr.message}`);
-
-  type GroupRow = {
-    id: string;
-    name: string;
-    sort_order: number;
-    spec_options:
-      | { id: string; label: string; sort_order: number; is_active: boolean }[]
-      | null;
-  };
-  const groups = (groupsData ?? []) as unknown as GroupRow[];
-  const activeGroups = groups
-    .map((g) => ({
-      ...g,
-      options: (g.spec_options ?? [])
-        .filter((o) => o.is_active)
-        .sort((a, b) => a.sort_order - b.sort_order),
-    }))
-    .filter((g) => g.options.length > 0);
-
-  // 仕様グループも選択肢もなければ variant の追加は不要
-  if (activeGroups.length === 0) return;
-
-  // 既存 variants と紐付をロード
-  const { data: variantsData, error: vErr } = await supabase
-    .from("material_variants")
-    .select(
-      "id, sort_order, material_variant_options(spec_group_id, spec_option_id)"
-    )
-    .eq("material_id", materialId);
-  if (vErr) throw new Error(`バリエーション読み込みに失敗: ${vErr.message}`);
-
-  type VariantRow = {
-    id: string;
-    sort_order: number;
-    material_variant_options:
-      | { spec_group_id: string; spec_option_id: string }[]
-      | null;
-  };
-  const variants = (variantsData ?? []) as unknown as VariantRow[];
-
-  // 既存 variant の組み合わせシグネチャ
-  const signatureOf = (
-    selections: { spec_group_id: string; spec_option_id: string }[]
-  ) =>
-    [...selections]
-      .map((s) => `${s.spec_group_id}=${s.spec_option_id}`)
-      .sort()
-      .join("|");
-  const existing = new Set<string>();
-  for (const v of variants) {
-    const sels = v.material_variant_options ?? [];
-    if (sels.length !== activeGroups.length) continue;
-    existing.add(signatureOf(sels));
-  }
-
-  // 全組み合わせを生成
-  type Combo = {
-    selections: { spec_group_id: string; spec_option_id: string }[];
-    name: string;
-  };
-  const combos: Combo[] = [];
-  function expand(idx: number, sel: Combo["selections"], labels: string[]) {
-    if (idx === activeGroups.length) {
-      combos.push({ selections: [...sel], name: labels.join(" / ") });
-      return;
-    }
-    const g = activeGroups[idx];
-    for (const o of g.options) {
-      sel.push({ spec_group_id: g.id, spec_option_id: o.id });
-      labels.push(o.label);
-      expand(idx + 1, sel, labels);
-      sel.pop();
-      labels.pop();
-    }
-  }
-  expand(0, [], []);
-
-  // 不足分のみ insert
-  let nextSort = (variants.reduce((m, v) => Math.max(m, v.sort_order), 0) || 0) + 1;
-  for (const c of combos) {
-    if (existing.has(signatureOf(c.selections))) continue;
-
-    const { data: variantRow, error: insErr } = await supabase
-      .from("material_variants")
-      .insert({
-        tenant_id: tenantId,
-        material_id: materialId,
-        name: c.name,
-        spec: {},
-        sort_order: nextSort++,
-        is_active: true,
-      })
-      .select("id")
-      .single();
-    if (insErr || !variantRow) {
-      throw new Error(`バリエーション自動追加に失敗: ${insErr?.message ?? "unknown"}`);
-    }
-    const { error: linkErr } = await supabase
-      .from("material_variant_options")
-      .insert(
-        c.selections.map((s) => ({
-          variant_id: variantRow.id,
-          spec_group_id: s.spec_group_id,
-          spec_option_id: s.spec_option_id,
-          tenant_id: tenantId,
-        }))
-      );
-    if (linkErr) {
-      throw new Error(`バリエーション紐付に失敗: ${linkErr.message}`);
-    }
-  }
-}
 
 export type SpecGroupInput = {
   name: string;
-  description: string | null;
-  selectionType: "single" | "multi";
   isRequired: boolean;
-  sortOrder: number;
-  isActive: boolean;
 };
 
 export type SpecOptionInput = {
   label: string;
-  shortCode: string | null;
-  sortOrder: number;
-  isActive: boolean;
 };
-
-export async function createSpecGroup(
-  materialId: string,
-  input: SpecGroupInput
-) {
-  const tenantId = await getTenantId();
-  await assertMaterialOwnedByTenant(materialId, tenantId);
-  if (!input.name.trim()) throw new Error("仕様名は必須です");
-  const supabase = await getSupabaseTenant();
-  const { error } = await supabase.from("spec_groups").insert({
-    tenant_id: tenantId,
-    material_id: materialId,
-    name: input.name.trim(),
-    description: input.description,
-    selection_type: input.selectionType,
-    is_required: input.isRequired,
-    sort_order: input.sortOrder,
-    is_active: input.isActive,
-  });
-  if (error) throw new Error(`仕様の追加に失敗しました: ${error.message}`);
-  await syncVariantsForMaterial(materialId, tenantId);
-  revalidatePath(`/admin/materials/${materialId}`);
-}
-
-export async function updateSpecGroup(
-  materialId: string,
-  groupId: string,
-  input: SpecGroupInput
-) {
-  const tenantId = await getTenantId();
-  await assertMaterialOwnedByTenant(materialId, tenantId);
-  if (!input.name.trim()) throw new Error("仕様名は必須です");
-  const supabase = await getSupabaseTenant();
-  const { error } = await supabase
-    .from("spec_groups")
-    .update({
-      name: input.name.trim(),
-      description: input.description,
-      selection_type: input.selectionType,
-      is_required: input.isRequired,
-      sort_order: input.sortOrder,
-      is_active: input.isActive,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", groupId)
-    .eq("material_id", materialId);
-  if (error) throw new Error(`仕様の更新に失敗しました: ${error.message}`);
-  await syncVariantsForMaterial(materialId, tenantId);
-  revalidatePath(`/admin/materials/${materialId}`);
-}
-
-export async function deleteSpecGroup(materialId: string, groupId: string) {
-  const tenantId = await getTenantId();
-  await assertMaterialOwnedByTenant(materialId, tenantId);
-  const supabase = await getSupabaseTenant();
-
-  const { count, error: countErr } = await supabase
-    .from("material_variant_options")
-    .select("variant_id", { count: "exact", head: true })
-    .eq("spec_group_id", groupId);
-  if (countErr) throw countErr;
-  if ((count ?? 0) > 0) {
-    throw new Error(
-      "この仕様はバリエーションに紐付いているため削除できません。非公開にしてください。"
-    );
-  }
-
-  const { error } = await supabase
-    .from("spec_groups")
-    .delete()
-    .eq("id", groupId)
-    .eq("material_id", materialId);
-  if (error) throw new Error(`仕様の削除に失敗しました: ${error.message}`);
-  revalidatePath(`/admin/materials/${materialId}`);
-}
 
 async function assertSpecGroupOwnedByMaterial(
   groupId: string,
@@ -1161,6 +868,143 @@ async function assertSpecGroupOwnedByMaterial(
   if (!data) throw new Error("対象の仕様が見つかりません");
 }
 
+async function nextSpecGroupSortOrder(
+  materialId: string
+): Promise<number> {
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
+    .from("spec_groups")
+    .select("sort_order")
+    .eq("material_id", materialId)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return (data?.[0]?.sort_order ?? 0) + 1;
+}
+
+async function nextSpecOptionSortOrder(groupId: string): Promise<number> {
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
+    .from("spec_options")
+    .select("sort_order")
+    .eq("spec_group_id", groupId)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return (data?.[0]?.sort_order ?? 0) + 1;
+}
+
+// 仕様 + バリエーションを 1 操作で作成（フォーム送信のメインルート）
+export async function createSpecGroupWithOptions(
+  materialId: string,
+  input: SpecGroupInput,
+  options: SpecOptionInput[]
+) {
+  const tenantId = await getTenantId();
+  await assertMaterialOwnedByTenant(materialId, tenantId);
+  if (!input.name.trim()) throw new Error("仕様名は必須です");
+  const cleanedOptions = options
+    .map((o) => ({ label: o.label.trim() }))
+    .filter((o) => o.label.length > 0);
+  if (cleanedOptions.length === 0) {
+    throw new Error("バリエーションを 1 件以上入力してください");
+  }
+  const supabase = await getSupabaseTenant();
+  const sortOrder = await nextSpecGroupSortOrder(materialId);
+
+  const { data: group, error: gErr } = await supabase
+    .from("spec_groups")
+    .insert({
+      tenant_id: tenantId,
+      material_id: materialId,
+      name: input.name.trim(),
+      is_required: input.isRequired,
+      sort_order: sortOrder,
+      is_active: true,
+    })
+    .select("id")
+    .single();
+  if (gErr || !group) {
+    throw new Error(`仕様の追加に失敗しました: ${gErr?.message ?? "unknown"}`);
+  }
+
+  const optionRows = cleanedOptions.map((o, idx) => ({
+    tenant_id: tenantId,
+    spec_group_id: group.id,
+    label: o.label,
+    sort_order: idx + 1,
+    is_active: true,
+  }));
+  const { error: oErr } = await supabase.from("spec_options").insert(optionRows);
+  if (oErr) {
+    // 仕様グループも巻き戻し（cascade で options も消える）
+    await supabase.from("spec_groups").delete().eq("id", group.id);
+    throw new Error(`バリエーションの追加に失敗しました: ${oErr.message}`);
+  }
+
+  revalidatePath(`/admin/materials/${materialId}`);
+}
+
+export async function updateSpecGroup(
+  materialId: string,
+  groupId: string,
+  input: SpecGroupInput
+) {
+  const tenantId = await getTenantId();
+  await assertMaterialOwnedByTenant(materialId, tenantId);
+  if (!input.name.trim()) throw new Error("仕様名は必須です");
+  const supabase = await getSupabaseTenant();
+  const { error } = await supabase
+    .from("spec_groups")
+    .update({
+      name: input.name.trim(),
+      is_required: input.isRequired,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", groupId)
+    .eq("material_id", materialId);
+  if (error) throw new Error(`仕様の更新に失敗しました: ${error.message}`);
+  revalidatePath(`/admin/materials/${materialId}`);
+}
+
+// 論理削除（is_active=false）。物理削除は不要なので提供しない。
+// order_item_spec_options から FK restrict されるが、is_active を倒すだけなら制約に
+// 抵触しないので過去発注履歴を壊さずに非表示にできる。
+export async function deleteSpecGroup(materialId: string, groupId: string) {
+  const tenantId = await getTenantId();
+  await assertMaterialOwnedByTenant(materialId, tenantId);
+  const supabase = await getSupabaseTenant();
+  const { error } = await supabase
+    .from("spec_groups")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("id", groupId)
+    .eq("material_id", materialId);
+  if (error) throw new Error(`仕様の削除に失敗しました: ${error.message}`);
+  revalidatePath(`/admin/materials/${materialId}`);
+}
+
+export async function reorderSpecGroups(
+  materialId: string,
+  orderedGroupIds: string[]
+) {
+  const tenantId = await getTenantId();
+  await assertMaterialOwnedByTenant(materialId, tenantId);
+  const supabase = await getSupabaseTenant();
+
+  for (let i = 0; i < orderedGroupIds.length; i++) {
+    const { error } = await supabase
+      .from("spec_groups")
+      .update({ sort_order: i + 1 })
+      .eq("id", orderedGroupIds[i])
+      .eq("material_id", materialId)
+      .eq("tenant_id", tenantId);
+    if (error) {
+      throw new Error(`仕様の並び替えに失敗しました: ${error.message}`);
+    }
+  }
+  revalidatePath(`/admin/materials/${materialId}`);
+}
+
 export async function createSpecOption(
   materialId: string,
   groupId: string,
@@ -1171,16 +1015,15 @@ export async function createSpecOption(
   await assertSpecGroupOwnedByMaterial(groupId, materialId, tenantId);
   if (!input.label.trim()) throw new Error("バリエーション名は必須です");
   const supabase = await getSupabaseTenant();
+  const sortOrder = await nextSpecOptionSortOrder(groupId);
   const { error } = await supabase.from("spec_options").insert({
     tenant_id: tenantId,
     spec_group_id: groupId,
     label: input.label.trim(),
-    short_code: input.shortCode,
-    sort_order: input.sortOrder,
-    is_active: input.isActive,
+    sort_order: sortOrder,
+    is_active: true,
   });
   if (error) throw new Error(`バリエーションの追加に失敗しました: ${error.message}`);
-  await syncVariantsForMaterial(materialId, tenantId);
   revalidatePath(`/admin/materials/${materialId}`);
 }
 
@@ -1199,15 +1042,11 @@ export async function updateSpecOption(
     .from("spec_options")
     .update({
       label: input.label.trim(),
-      short_code: input.shortCode,
-      sort_order: input.sortOrder,
-      is_active: input.isActive,
       updated_at: new Date().toISOString(),
     })
     .eq("id", optionId)
     .eq("spec_group_id", groupId);
   if (error) throw new Error(`バリエーションの更新に失敗しました: ${error.message}`);
-  await syncVariantsForMaterial(materialId, tenantId);
   revalidatePath(`/admin/materials/${materialId}`);
 }
 
@@ -1220,67 +1059,35 @@ export async function deleteSpecOption(
   await assertMaterialOwnedByTenant(materialId, tenantId);
   await assertSpecGroupOwnedByMaterial(groupId, materialId, tenantId);
   const supabase = await getSupabaseTenant();
-
-  const { count, error: countErr } = await supabase
-    .from("material_variant_options")
-    .select("variant_id", { count: "exact", head: true })
-    .eq("spec_option_id", optionId);
-  if (countErr) throw countErr;
-  if ((count ?? 0) > 0) {
-    throw new Error(
-      "このバリエーションは既存の組み合わせで使われているため削除できません。非公開にしてください。"
-    );
-  }
-
   const { error } = await supabase
     .from("spec_options")
-    .delete()
+    .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq("id", optionId)
     .eq("spec_group_id", groupId);
   if (error) throw new Error(`バリエーションの削除に失敗しました: ${error.message}`);
   revalidatePath(`/admin/materials/${materialId}`);
 }
 
-// variant の仕様選択（spec_group ごとに 1 option）を一括 replace
-export async function setVariantSpecOptions(
+export async function reorderSpecOptions(
   materialId: string,
-  variantId: string,
-  selections: { spec_group_id: string; spec_option_id: string }[]
+  groupId: string,
+  orderedOptionIds: string[]
 ) {
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
+  await assertSpecGroupOwnedByMaterial(groupId, materialId, tenantId);
   const supabase = await getSupabaseTenant();
 
-  // variant が material に属するか確認
-  const { data: variant, error: vErr } = await supabase
-    .from("material_variants")
-    .select("id")
-    .eq("id", variantId)
-    .eq("material_id", materialId)
-    .maybeSingle();
-  if (vErr) throw vErr;
-  if (!variant) throw new Error("対象のバリエーションが見つかりません");
-
-  // 既存を全削除して入れ直す（数は高々数件）
-  const { error: delErr } = await supabase
-    .from("material_variant_options")
-    .delete()
-    .eq("variant_id", variantId);
-  if (delErr) throw new Error(`既存の紐付削除に失敗しました: ${delErr.message}`);
-
-  if (selections.length === 0) {
-    revalidatePath(`/admin/materials/${materialId}`);
-    return;
+  for (let i = 0; i < orderedOptionIds.length; i++) {
+    const { error } = await supabase
+      .from("spec_options")
+      .update({ sort_order: i + 1 })
+      .eq("id", orderedOptionIds[i])
+      .eq("spec_group_id", groupId)
+      .eq("tenant_id", tenantId);
+    if (error) {
+      throw new Error(`バリエーションの並び替えに失敗しました: ${error.message}`);
+    }
   }
-
-  const rows = selections.map((s) => ({
-    variant_id: variantId,
-    spec_group_id: s.spec_group_id,
-    spec_option_id: s.spec_option_id,
-    tenant_id: tenantId,
-  }));
-  const { error } = await supabase.from("material_variant_options").insert(rows);
-  if (error) throw new Error(`仕様紐付の保存に失敗しました: ${error.message}`);
-
   revalidatePath(`/admin/materials/${materialId}`);
 }

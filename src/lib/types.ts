@@ -17,50 +17,22 @@ export type Material = {
   is_active: boolean;
   catalog_pages?: string[];
   spec_groups?: SpecGroup[];
-  variants?: MaterialVariantWithOptions[];
 };
-
-export type MaterialVariant = {
-  id: string;
-  material_id: string;
-  name: string;
-  unit: string | null;
-  sku: string | null;
-  spec: Record<string, string> | null;
-  sort_order: number;
-  is_active: boolean;
-};
-
-export type SpecSelectionType = "single" | "multi";
 
 export type SpecOption = {
   id: string;
   spec_group_id: string;
   label: string;
-  short_code: string | null;
   sort_order: number;
-  is_active: boolean;
 };
 
 export type SpecGroup = {
   id: string;
   material_id: string;
   name: string;
-  description: string | null;
-  selection_type: SpecSelectionType;
   is_required: boolean;
   sort_order: number;
-  is_active: boolean;
   options: SpecOption[];
-};
-
-export type VariantOptionRef = {
-  spec_group_id: string;
-  spec_option_id: string;
-};
-
-export type MaterialVariantWithOptions = MaterialVariant & {
-  options: VariantOptionRef[];
 };
 
 export type SpecSelectionLabel = {
@@ -111,8 +83,7 @@ export type OrderItem = {
   order_id: string;
   material_id: string;
   material_name: string;
-  variant_id: string | null;
-  variant_name: string | null;
+  spec_selections: SpecSelectionLabel[];
   quantity: number;
   returned_quantity: number;
   lease_end_date: string | null;
@@ -122,9 +93,7 @@ export type CartItem = {
   cartLineId: string;
   material: Material;
   quantity: number;
-  variantId?: string;
-  variantName?: string;
-  selections?: SpecSelectionLabel[];
+  selections: SpecSelectionLabel[];
 };
 
 export type Customer = {
