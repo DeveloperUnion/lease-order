@@ -85,8 +85,8 @@ export default function AdminChatScreen({
     if (el) el.scrollTop = el.scrollHeight;
   }, [displayMessages.length, selectedId]);
 
-  // 既読化: customer 発の未読が存在するときだけ POST。
-  // 念のため refresh は呼ばない (サイドバーの未読バッジは next navigation で更新される)。
+  // 既読化: customer 発の未読が存在するときだけ POST → 完了後 refresh で
+  // サイドバーの「メッセージ」バッジを更新する。
   const hasUnreadFromCustomer = displayMessages.some(
     (m) => m.sender_type === "customer" && !m.read_at
   );
@@ -95,8 +95,10 @@ export default function AdminChatScreen({
     fetch(`/api/chat/admin/conversations/${selectedId}/read`, {
       method: "POST",
       cache: "no-store",
-    }).catch(() => {});
-  }, [selectedId, hasUnreadFromCustomer]);
+    })
+      .then(() => router.refresh())
+      .catch(() => {});
+  }, [selectedId, hasUnreadFromCustomer, router]);
 
   // Realtime: テナント全体の INSERT を 1 本のチャンネルで受け、
   //   - 選択中の会話なら extras に積む
