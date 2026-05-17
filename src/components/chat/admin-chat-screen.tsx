@@ -117,10 +117,13 @@ export default function AdminChatScreen({
     }).catch(() => {});
   }, [selectedId, hasUnreadFromCustomer]);
 
-  // Realtime: テナント全体の INSERT を 1 本のチャンネルで受け、
-  //   - 選択中の会話なら extras に積む
-  //   - それ以外は debounce 付きで一覧 (server) を refresh
-  // 連投時の二重 refresh を避ける目的。
+  // Realtime: selectedId の有無で channel を切り替える。
+  //   - 選択中: chat-conv:<cid> (conversation_id filter) のみ subscribe。
+  //     他会話の INSERT が JS callback を走らせ続けるのを止める。
+  //   - 未選択 (一覧表示): chat-tenant:<tid> (tenant_id filter) のみ subscribe し、
+  //     新着があれば debounce で list を refresh。
+  // 会話中の cross-conv 通知は親 layout の useLiveChatUnread が単独 subscription で拾うため、
+  // サイドバーの「メッセージ」バッジは ここを切ったまま realtime で更新される。
   useEffect(() => {
     let cancelled = false;
     let supabase: SupabaseClient | null = null;
@@ -186,30 +189,33 @@ export default function AdminChatScreen({
       );
       supabase.realtime.setAuth(token.jwt);
 
-      channel = supabase
-        .channel(`chat-tenant:${tenantId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "messages",
-            filter: `tenant_id=eq.${tenantId}`,
-          },
-          (payload) => {
-            const row = payload.new as {
-              id: string;
-              conversation_id: string;
-              body: string | null;
-              attachments: MessageAttachment[];
-              order_id: string | null;
-              created_at: string;
-              read_at: string | null;
-              sender_type: "customer" | "admin";
-            };
+      type MessageRowPayload = {
+        id: string;
+        conversation_id: string;
+        body: string | null;
+        attachments: MessageAttachment[];
+        order_id: string | null;
+        created_at: string;
+        read_at: string | null;
+        sender_type: "customer" | "admin";
+      };
 
-            const isCurrent = selectedId && row.conversation_id === selectedId;
-            if (isCurrent && !knownIdsRef.current.has(row.id)) {
+      if (selectedId) {
+        // 会話 view: 選択中の会話のみ subscribe。
+        // 他会話の INSERT は親 layout の useLiveChatUnread が拾うのでここでは無視。
+        channel = supabase
+          .channel(`chat-conv:${selectedId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "messages",
+              filter: `conversation_id=eq.${selectedId}`,
+            },
+            (payload) => {
+              const row = payload.new as MessageRowPayload;
+              if (knownIdsRef.current.has(row.id)) return;
               knownIdsRef.current.add(row.id);
               const stub: BubbleMessage = {
                 id: row.id,
@@ -224,18 +230,31 @@ export default function AdminChatScreen({
                 read_at: row.read_at,
               };
               setExtras((prev) => [...prev, stub]);
-              // 添付・発注引用付きの場合は 1 件だけ単発 enrichment を取りに行く。
-              // 一覧側の last_message_at 更新は別途 scheduleListRefresh が拾う。
               if ((row.attachments?.length ?? 0) > 0 || row.order_id) {
                 void enrichSingle(row.id);
               }
-            } else {
-              // 別の会話 → 一覧の last_message_at / 未読バッジを更新
+            }
+          )
+          .subscribe();
+      } else {
+        // 会話一覧 view: テナント内全 INSERT を受け、一覧 (last_message_at / preview /
+        // per-conv 未読) を debounce で server から取り直す。
+        channel = supabase
+          .channel(`chat-tenant:${tenantId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "messages",
+              filter: `tenant_id=eq.${tenantId}`,
+            },
+            () => {
               scheduleListRefresh();
             }
-          }
-        )
-        .subscribe();
+          )
+          .subscribe();
+      }
 
       scheduleNext(token.expiresAt);
     }
