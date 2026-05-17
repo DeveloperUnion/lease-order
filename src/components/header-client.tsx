@@ -3,32 +3,64 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useCart } from "@/lib/cart-context";
-import { useCatalog } from "@/lib/catalog-context";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 
 type CustomerSummary = { id: string; company_id: string; name: string };
 
+type SearchResult = {
+  id: string;
+  name: string;
+  category_id: string;
+  category_name: string;
+  category_slug: string;
+};
+
 function SearchBar({ className }: { className?: string }) {
-  const { materials, categories } = useCatalog();
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  const results = useMemo(() => {
-    if (!query.trim()) return [];
-    const q = query.toLowerCase();
-    return materials
-      .filter((m) => m.is_active && m.name.toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [query, materials]);
-
-  const getCategoryName = (categoryId: string) =>
-    categories.find((c) => c.id === categoryId)?.name || "";
-
-  const getCategorySlug = (categoryId: string) =>
-    categories.find((c) => c.id === categoryId)?.slug || "";
+  // q が変わったら 200ms debounce で /api/catalog/search を叩く。
+  // 直前のリクエストは AbortController で打ち切り、応答順の逆転で古い結果が
+  // 表示されるのを防ぐ。
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const ctrl = new AbortController();
+    const handle = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/catalog/search?q=${encodeURIComponent(q)}`,
+          { signal: ctrl.signal }
+        );
+        if (!res.ok) {
+          setResults([]);
+          return;
+        }
+        const data = (await res.json()) as { results?: SearchResult[] };
+        setResults(data.results ?? []);
+      } catch (e) {
+        if ((e as { name?: string }).name !== "AbortError") {
+          setResults([]);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }, 200);
+    return () => {
+      clearTimeout(handle);
+      ctrl.abort();
+    };
+  }, [query]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -42,13 +74,10 @@ function SearchBar({ className }: { className?: string }) {
 
   const showDropdown = focused && query.trim().length > 0;
 
-  const handleSelect = (materialCategoryId: string) => {
-    const slug = getCategorySlug(materialCategoryId);
-    if (slug) {
-      router.push(`/category/${slug}?q=${encodeURIComponent(query.trim())}`);
-      setQuery("");
-      setFocused(false);
-    }
+  const handleSelect = (result: SearchResult) => {
+    router.push(`/category/${result.category_slug}?q=${encodeURIComponent(query.trim())}`);
+    setQuery("");
+    setFocused(false);
   };
 
   return (
@@ -87,7 +116,9 @@ function SearchBar({ className }: { className?: string }) {
 
       {showDropdown && (
         <div className="absolute top-full left-0 right-0 mt-1.5 bg-surface rounded-md shadow-lg border border-border overflow-hidden z-50 max-h-[70vh] overflow-y-auto">
-          {results.length === 0 ? (
+          {loading && results.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-subtle">検索中…</div>
+          ) : results.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-subtle">
               該当する資材がありません
             </div>
@@ -96,13 +127,13 @@ function SearchBar({ className }: { className?: string }) {
               {results.map((material) => (
                 <li key={material.id}>
                   <button
-                    onClick={() => handleSelect(material.category_id)}
+                    onClick={() => handleSelect(material)}
                     className="w-full px-4 py-3 text-left hover:bg-surface-muted flex items-center gap-3 transition-colors"
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{material.name}</p>
                       <p className="text-xs text-subtle mt-0.5">
-                        {getCategoryName(material.category_id)}
+                        {material.category_name}
                       </p>
                     </div>
                     <span aria-hidden className="text-subtle">→</span>

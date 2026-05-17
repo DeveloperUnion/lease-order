@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { notifyCustomer } from "@/lib/notifications";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -272,6 +272,7 @@ export async function createMaterial(formData: FormData) {
 
   revalidatePath("/admin/materials");
   revalidatePath("/admin");
+  updateTag("catalog");
   return data.id as string;
 }
 
@@ -300,6 +301,7 @@ export async function updateMaterial(materialId: string, formData: FormData) {
 
   revalidatePath("/admin/materials");
   revalidatePath("/admin");
+  updateTag("catalog");
 }
 
 export async function reorderMaterials(
@@ -321,6 +323,7 @@ export async function reorderMaterials(
   revalidatePath("/admin/materials");
   revalidatePath("/admin");
   revalidatePath("/");
+  updateTag("catalog");
 }
 
 export async function setMaterialActive(materialId: string, active: boolean) {
@@ -335,6 +338,7 @@ export async function setMaterialActive(materialId: string, active: boolean) {
 
   revalidatePath("/admin/materials");
   revalidatePath("/admin");
+  updateTag("catalog");
 }
 
 // ============================================================
@@ -396,6 +400,7 @@ export async function createCategory(formData: FormData) {
   revalidatePath("/admin/categories");
   revalidatePath("/admin");
   revalidatePath("/");
+  updateTag("catalog");
 }
 
 export async function updateCategory(categoryId: string, formData: FormData) {
@@ -432,6 +437,7 @@ export async function updateCategory(categoryId: string, formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/");
   revalidatePath(`/category/${input.slug}`);
+  updateTag("catalog");
 }
 
 export async function reorderCategories(orderedCategoryIds: string[]) {
@@ -449,6 +455,7 @@ export async function reorderCategories(orderedCategoryIds: string[]) {
   revalidatePath("/admin/categories");
   revalidatePath("/admin");
   revalidatePath("/");
+  updateTag("catalog");
 }
 
 export async function deleteCategory(categoryId: string) {
@@ -475,6 +482,7 @@ export async function deleteCategory(categoryId: string) {
   revalidatePath("/admin/categories");
   revalidatePath("/admin");
   revalidatePath("/");
+  updateTag("catalog");
 }
 
 // ============================================================
@@ -541,6 +549,7 @@ export async function createOffice(formData: FormData) {
 
   revalidatePath("/admin/offices");
   revalidatePath("/cart");
+  updateTag("catalog");
 }
 
 export async function updateOffice(officeId: string, formData: FormData) {
@@ -565,6 +574,7 @@ export async function updateOffice(officeId: string, formData: FormData) {
 
   revalidatePath("/admin/offices");
   revalidatePath("/cart");
+  updateTag("catalog");
 }
 
 export async function reorderOffices(orderedOfficeIds: string[]) {
@@ -581,6 +591,7 @@ export async function reorderOffices(orderedOfficeIds: string[]) {
 
   revalidatePath("/admin/offices");
   revalidatePath("/cart");
+  updateTag("catalog");
 }
 
 export async function deleteOffice(officeId: string) {
@@ -608,6 +619,7 @@ export async function deleteOffice(officeId: string) {
 
   revalidatePath("/admin/offices");
   revalidatePath("/cart");
+  updateTag("catalog");
 }
 
 // ============================================================
@@ -683,6 +695,7 @@ export async function addMaterialImage(materialId: string, formData: FormData) {
   revalidatePath(`/admin/materials/${materialId}`);
   revalidatePath("/admin/materials");
   revalidatePath("/");
+  updateTag("catalog");
 }
 
 export async function removeMaterialImage(
@@ -727,6 +740,7 @@ export async function removeMaterialImage(
   revalidatePath(`/admin/materials/${materialId}`);
   revalidatePath("/admin/materials");
   revalidatePath("/");
+  updateTag("catalog");
 }
 
 export async function setPrimaryMaterialImage(
@@ -753,6 +767,7 @@ export async function setPrimaryMaterialImage(
   revalidatePath(`/admin/materials/${materialId}`);
   revalidatePath("/admin/materials");
   revalidatePath("/");
+  updateTag("catalog");
 }
 
 export async function reorderMaterialImages(
@@ -775,6 +790,7 @@ export async function reorderMaterialImages(
   revalidatePath(`/admin/materials/${materialId}`);
   revalidatePath("/admin/materials");
   revalidatePath("/");
+  updateTag("catalog");
 }
 
 
@@ -942,6 +958,7 @@ export async function createSpecGroupWithOptions(
   }
 
   revalidatePath(`/admin/materials/${materialId}`);
+  updateTag("catalog");
 }
 
 export async function updateSpecGroup(
@@ -963,6 +980,7 @@ export async function updateSpecGroup(
     .eq("material_id", materialId);
   if (error) throw new Error(`仕様の更新に失敗しました: ${error.message}`);
   revalidatePath(`/admin/materials/${materialId}`);
+  updateTag("catalog");
 }
 
 // 論理削除（is_active=false）。物理削除は不要なので提供しない。
@@ -979,6 +997,7 @@ export async function deleteSpecGroup(materialId: string, groupId: string) {
     .eq("material_id", materialId);
   if (error) throw new Error(`仕様の削除に失敗しました: ${error.message}`);
   revalidatePath(`/admin/materials/${materialId}`);
+  updateTag("catalog");
 }
 
 export async function reorderSpecGroups(
@@ -1001,6 +1020,7 @@ export async function reorderSpecGroups(
     }
   }
   revalidatePath(`/admin/materials/${materialId}`);
+  updateTag("catalog");
 }
 
 export async function createSpecOption(
@@ -1023,6 +1043,7 @@ export async function createSpecOption(
   });
   if (error) throw new Error(`バリエーションの追加に失敗しました: ${error.message}`);
   revalidatePath(`/admin/materials/${materialId}`);
+  updateTag("catalog");
 }
 
 export async function updateSpecOption(
@@ -1046,6 +1067,7 @@ export async function updateSpecOption(
     .eq("spec_group_id", groupId);
   if (error) throw new Error(`バリエーションの更新に失敗しました: ${error.message}`);
   revalidatePath(`/admin/materials/${materialId}`);
+  updateTag("catalog");
 }
 
 export async function deleteSpecOption(
@@ -1064,6 +1086,7 @@ export async function deleteSpecOption(
     .eq("spec_group_id", groupId);
   if (error) throw new Error(`バリエーションの削除に失敗しました: ${error.message}`);
   revalidatePath(`/admin/materials/${materialId}`);
+  updateTag("catalog");
 }
 
 export async function reorderSpecOptions(
@@ -1088,4 +1111,5 @@ export async function reorderSpecOptions(
     }
   }
   revalidatePath(`/admin/materials/${materialId}`);
+  updateTag("catalog");
 }
