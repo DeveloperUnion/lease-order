@@ -7,15 +7,12 @@ import { buildCartLineId } from "./spec-resolver";
 type AddItemInput = {
   material: Material;
   quantity: number;
-  variantId?: string;
-  variantName?: string;
-  selections?: SpecSelectionLabel[];
+  selections: SpecSelectionLabel[];
 };
 
 type CartContextType = {
   items: CartItem[];
   addItem: (input: AddItemInput) => void;
-  addItems: (inputs: AddItemInput[]) => void;
   updateQuantity: (cartLineId: string, quantity: number) => void;
   removeItem: (cartLineId: string) => void;
   clearCart: () => void;
@@ -26,36 +23,29 @@ const CartContext = createContext<CartContextType | null>(null);
 
 function toCartItem(input: AddItemInput): CartItem {
   return {
-    cartLineId: buildCartLineId(input.material.id, input.variantId),
+    cartLineId: buildCartLineId(input.material.id, input.selections),
     material: input.material,
     quantity: input.quantity,
-    variantId: input.variantId,
-    variantName: input.variantName,
     selections: input.selections,
   };
-}
-
-function mergeItem(prev: CartItem[], item: CartItem): CartItem[] {
-  const existing = prev.find((i) => i.cartLineId === item.cartLineId);
-  if (existing) {
-    return prev.map((i) =>
-      i.cartLineId === item.cartLineId
-        ? { ...i, quantity: i.quantity + item.quantity }
-        : i
-    );
-  }
-  return [...prev, item];
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
 
   const addItem = useCallback((input: AddItemInput) => {
-    setItems((prev) => mergeItem(prev, toCartItem(input)));
-  }, []);
-
-  const addItems = useCallback((inputs: AddItemInput[]) => {
-    setItems((prev) => inputs.reduce((acc, i) => mergeItem(acc, toCartItem(i)), prev));
+    setItems((prev) => {
+      const item = toCartItem(input);
+      const existing = prev.find((i) => i.cartLineId === item.cartLineId);
+      if (existing) {
+        return prev.map((i) =>
+          i.cartLineId === item.cartLineId
+            ? { ...i, quantity: i.quantity + item.quantity }
+            : i
+        );
+      }
+      return [...prev, item];
+    });
   }, []);
 
   const updateQuantity = useCallback((cartLineId: string, quantity: number) => {
@@ -76,7 +66,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, addItems, updateQuantity, removeItem, clearCart, totalItems }}
+      value={{ items, addItem, updateQuantity, removeItem, clearCart, totalItems }}
     >
       {children}
     </CartContext.Provider>

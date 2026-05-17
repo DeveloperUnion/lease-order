@@ -5,11 +5,10 @@ import type {
   Category,
   DeliveryMethod,
   Material,
-  MaterialVariantWithOptions,
   Office,
   SpecGroup,
   SpecOption,
-  SpecSelectionType,
+  SpecSelectionLabel,
 } from "./types";
 
 export type AdminCategoryRow = Category & { material_count: number };
@@ -94,7 +93,6 @@ export type MaterialImageRow = {
 };
 
 export type MaterialDetail = Material & {
-  variants: MaterialVariantWithOptions[];
   spec_groups: SpecGroup[];
   images: MaterialImageRow[];
 };
@@ -103,7 +101,6 @@ type SpecOptionRaw = {
   id: string;
   spec_group_id: string;
   label: string;
-  short_code: string | null;
   sort_order: number;
   is_active: boolean;
 };
@@ -112,29 +109,10 @@ type SpecGroupRaw = {
   id: string;
   material_id: string;
   name: string;
-  description: string | null;
-  selection_type: SpecSelectionType;
   is_required: boolean;
   sort_order: number;
   is_active: boolean;
   spec_options: SpecOptionRaw[] | null;
-};
-
-type VariantOptionJoin = {
-  spec_group_id: string;
-  spec_option_id: string;
-};
-
-type VariantRaw = {
-  id: string;
-  material_id: string;
-  name: string;
-  unit: string | null;
-  sku: string | null;
-  spec: Record<string, string> | null;
-  sort_order: number;
-  is_active: boolean;
-  material_variant_options: VariantOptionJoin[] | null;
 };
 
 type MaterialDetailRaw = {
@@ -145,7 +123,6 @@ type MaterialDetailRaw = {
   spec: Record<string, string> | null;
   sort_order: number;
   is_active: boolean;
-  material_variants: VariantRaw[] | null;
   spec_groups: SpecGroupRaw[] | null;
   material_images:
     | {
@@ -162,43 +139,23 @@ function mapSpecOption(row: SpecOptionRaw): SpecOption {
     id: row.id,
     spec_group_id: row.spec_group_id,
     label: row.label,
-    short_code: row.short_code,
     sort_order: row.sort_order,
-    is_active: row.is_active,
   };
 }
 
+// admin 画面では削除済み（is_active=false）の項目も含めない
 function mapSpecGroup(row: SpecGroupRaw): SpecGroup {
   return {
     id: row.id,
     material_id: row.material_id,
     name: row.name,
-    description: row.description,
-    selection_type: row.selection_type,
     is_required: row.is_required,
     sort_order: row.sort_order,
-    is_active: row.is_active,
     options: (row.spec_options ?? [])
+      .filter((o) => o.is_active)
       .slice()
       .sort((a, b) => a.sort_order - b.sort_order)
       .map(mapSpecOption),
-  };
-}
-
-function mapVariant(row: VariantRaw): MaterialVariantWithOptions {
-  return {
-    id: row.id,
-    material_id: row.material_id,
-    name: row.name,
-    unit: row.unit,
-    sku: row.sku,
-    spec: row.spec,
-    sort_order: row.sort_order,
-    is_active: row.is_active,
-    options: (row.material_variant_options ?? []).map((o) => ({
-      spec_group_id: o.spec_group_id,
-      spec_option_id: o.spec_option_id,
-    })),
   };
 }
 
@@ -211,10 +168,8 @@ export async function getMaterialDetail(
     .from("materials")
     .select(
       `id, category_id, name, description, spec, sort_order, is_active,
-       material_variants(id, material_id, name, unit, sku, spec, sort_order, is_active,
-         material_variant_options(spec_group_id, spec_option_id)),
-       spec_groups(id, material_id, name, description, selection_type, is_required, sort_order, is_active,
-         spec_options(id, spec_group_id, label, short_code, sort_order, is_active)),
+       spec_groups(id, material_id, name, is_required, sort_order, is_active,
+         spec_options(id, spec_group_id, label, sort_order, is_active)),
        material_images(image_id, sort_order, is_primary, images(url, caption))`
     )
     .eq("tenant_id", tenantId)
@@ -235,11 +190,8 @@ export async function getMaterialDetail(
       is_primary: mi.is_primary,
     }));
   const primary = images.find((i) => i.is_primary) ?? images[0];
-  const variants = (raw.material_variants ?? [])
-    .slice()
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map(mapVariant);
   const spec_groups = (raw.spec_groups ?? [])
+    .filter((g) => g.is_active)
     .slice()
     .sort((a, b) => a.sort_order - b.sort_order)
     .map(mapSpecGroup);
@@ -254,7 +206,6 @@ export async function getMaterialDetail(
     is_active: raw.is_active,
     image_url: primary?.url ?? null,
     catalog_pages: images.map((i) => i.url),
-    variants,
     spec_groups,
     images,
   };
@@ -309,9 +260,8 @@ export type OrderListRow = {
 export type OrderItemRow = {
   id: string;
   material_id: string;
-  variant_id: string | null;
   material_name: string;
-  variant_name: string | null;
+  spec_selections: SpecSelectionLabel[];
   quantity: number;
   approved_quantity: number | null;
 };
@@ -420,7 +370,19 @@ type OrderDetailRaw = {
   shipped_at: string | null;
   completed_at: string | null;
   created_at: string;
-  order_items: (OrderItemRow & { created_at: string })[] | null;
+  order_items:
+    | (Omit<OrderItemRow, "spec_selections"> & {
+        created_at: string;
+        order_item_spec_options:
+          | {
+              spec_group_id: string;
+              spec_option_id: string;
+              group_name_snapshot: string;
+              option_label_snapshot: string;
+            }[]
+          | null;
+      })[]
+    | null;
   offices:
     | {
         id: string;
@@ -440,7 +402,14 @@ export const getOrder = cache(async (id: string): Promise<OrderDetail | null> =>
   const { data, error } = await supabase
     .from("orders")
     .select(
-      "id, order_number, company_name, contact_name, phone, email, note, delivery_method, delivery_address, delivery_lat, delivery_lng, lease_start_date, lease_end_date, pickup_office_id, status, approved_at, approved_by, reject_reason, rejected_at, shipped_at, completed_at, created_at, order_items(id, material_id, variant_id, material_name, variant_name, quantity, approved_quantity, created_at), offices:pickup_office_id(id, name, area, address, phone, lat, lng)"
+      `id, order_number, company_name, contact_name, phone, email, note,
+       delivery_method, delivery_address, delivery_lat, delivery_lng,
+       lease_start_date, lease_end_date, pickup_office_id, status,
+       approved_at, approved_by, reject_reason, rejected_at, shipped_at,
+       completed_at, created_at,
+       order_items(id, material_id, material_name, quantity, approved_quantity, created_at,
+         order_item_spec_options(spec_group_id, spec_option_id, group_name_snapshot, option_label_snapshot)),
+       offices:pickup_office_id(id, name, area, address, phone, lat, lng)`
     )
     .eq("tenant_id", tenantId)
     .eq("id", id)
@@ -450,17 +419,21 @@ export const getOrder = cache(async (id: string): Promise<OrderDetail | null> =>
   if (!data) return null;
 
   const raw = data as unknown as OrderDetailRaw;
-  const items = (raw.order_items ?? [])
+  const items: OrderItemRow[] = (raw.order_items ?? [])
     .slice()
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
     .map((it) => ({
       id: it.id,
       material_id: it.material_id,
-      variant_id: it.variant_id,
       material_name: it.material_name,
-      variant_name: it.variant_name,
       quantity: it.quantity,
       approved_quantity: it.approved_quantity,
+      spec_selections: (it.order_item_spec_options ?? []).map((s) => ({
+        spec_group_id: s.spec_group_id,
+        spec_option_id: s.spec_option_id,
+        group_name: s.group_name_snapshot,
+        option_label: s.option_label_snapshot,
+      })),
     }));
 
   return {

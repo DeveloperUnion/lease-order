@@ -1,29 +1,14 @@
-import type {
-  MaterialVariantWithOptions,
-  VariantOptionRef,
-} from "./types";
+import type { SpecSelectionLabel } from "./types";
 
-export function buildCartLineId(materialId: string, variantId?: string): string {
-  return `${materialId}:${variantId ?? "_"}`;
-}
-
-export function resolveVariant(
-  variants: MaterialVariantWithOptions[],
-  selections: VariantOptionRef[]
-): MaterialVariantWithOptions | null {
-  if (selections.length === 0) return null;
-  const selectionKey = toKey(selections);
-  for (const v of variants) {
-    if (!v.is_active) continue;
-    if (v.options.length !== selections.length) continue;
-    if (toKey(v.options) === selectionKey) return v;
-  }
-  return null;
-}
-
-function toKey(refs: VariantOptionRef[]): string {
-  return [...refs]
-    .map((r) => `${r.spec_group_id}=${r.spec_option_id}`)
+// 同じ資材で同じ仕様の組み合わせはカートで 1 行として数量加算する。
+// その識別用に、materialId + selections の安定ハッシュを cartLineId にする。
+export function buildCartLineId(
+  materialId: string,
+  selections: SpecSelectionLabel[]
+): string {
+  const sig = [...selections]
+    .map((s) => `${s.spec_group_id}=${s.spec_option_id}`)
     .sort()
     .join("|");
+  return `${materialId}:${sig || "_"}`;
 }

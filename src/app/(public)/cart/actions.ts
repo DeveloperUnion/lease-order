@@ -4,7 +4,7 @@ import { notifyAdmins } from "@/lib/notifications";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 import { getCurrentCustomer } from "@/lib/customer-auth";
-import type { DeliveryMethod } from "@/lib/types";
+import type { DeliveryMethod, SpecSelectionLabel } from "@/lib/types";
 
 type SubmitOrderInput = {
   siteName: string;
@@ -20,9 +20,8 @@ type SubmitOrderInput = {
   leaseEndDate: string;
   items: {
     materialId: string;
-    variantId?: string;
-    variantName?: string;
     quantity: number;
+    selections: SpecSelectionLabel[];
   }[];
 };
 
@@ -76,9 +75,8 @@ export async function submitOrder(
   const items = input.items
     .map((i) => ({
       materialId: String(i.materialId),
-      variantId: i.variantId ? String(i.variantId) : null,
-      variantName: i.variantName ?? null,
       quantity: Math.max(1, Math.floor(Number(i.quantity) || 0)),
+      selections: Array.isArray(i.selections) ? i.selections : [],
     }))
     .filter((i) => i.materialId);
 
@@ -126,31 +124,47 @@ export async function submitOrder(
     return { ok: false, error: "存在しない資材が含まれています" };
   }
 
-  // 指定された variant_id がアクティブかつ同 material に属することを再 validate
-  const variantIds = Array.from(
-    new Set(items.map((i) => i.variantId).filter((v): v is string => !!v))
+  // 参照されている spec_option が、その material に属する active な
+  // spec_group/option として存在することを validate
+  const optionIds = Array.from(
+    new Set(items.flatMap((i) => i.selections.map((s) => s.spec_option_id)))
   );
-  if (variantIds.length > 0) {
-    const { data: variants, error: vErr } = await supabase
-      .from("material_variants")
-      .select("id, material_id, name, is_active")
+  if (optionIds.length > 0) {
+    const { data: validOptions, error: optErr } = await supabase
+      .from("spec_options")
+      .select("id, spec_group_id, is_active, spec_groups!inner(id, material_id, is_active)")
       .eq("tenant_id", tenantId)
-      .in("id", variantIds);
-    if (vErr) {
-      console.error("submitOrder: variants lookup failed", vErr);
+      .in("id", optionIds);
+    if (optErr) {
+      console.error("submitOrder: spec_options lookup failed", optErr);
       return { ok: false, error: "発注の登録に失敗しました" };
     }
-    const variantMap = new Map((variants ?? []).map((v) => [v.id, v]));
+    type OptRow = {
+      id: string;
+      spec_group_id: string;
+      is_active: boolean;
+      spec_groups: { id: string; material_id: string; is_active: boolean } | null;
+    };
+    const optMap = new Map<string, OptRow>(
+      ((validOptions ?? []) as unknown as OptRow[]).map((o) => [o.id, o])
+    );
     for (const it of items) {
-      if (!it.variantId) continue;
-      const v = variantMap.get(it.variantId);
-      if (!v || !v.is_active || v.material_id !== it.materialId) {
-        return {
-          ok: false,
-          error: "在庫構成が変更されました。カートを更新してください。",
-        };
+      for (const s of it.selections) {
+        const o = optMap.get(s.spec_option_id);
+        if (
+          !o ||
+          !o.is_active ||
+          !o.spec_groups ||
+          !o.spec_groups.is_active ||
+          o.spec_groups.material_id !== it.materialId ||
+          o.spec_group_id !== s.spec_group_id
+        ) {
+          return {
+            ok: false,
+            error: "仕様の構成が変更されました。カートを更新してください。",
+          };
+        }
       }
-      it.variantName = v.name;
     }
   }
 
@@ -193,23 +207,59 @@ export async function submitOrder(
     return { ok: false, error: "発注の登録に失敗しました" };
   }
 
-  const { error: itemsErr } = await supabase.from("order_items").insert(
-    items.map((i) => ({
-      tenant_id: tenantId,
-      order_id: order.id,
-      material_id: i.materialId,
-      material_name: materialMap.get(i.materialId)!,
-      variant_id: i.variantId,
-      variant_name: i.variantName,
-      quantity: i.quantity,
-      lease_end_date: input.leaseEndDate,
-    }))
-  );
+  // order_items は select("id, ...") で各行の id を取り、選択肢の bulk insert に使う
+  const { data: insertedItems, error: itemsErr } = await supabase
+    .from("order_items")
+    .insert(
+      items.map((i) => ({
+        tenant_id: tenantId,
+        order_id: order.id,
+        material_id: i.materialId,
+        material_name: materialMap.get(i.materialId)!,
+        quantity: i.quantity,
+        lease_end_date: input.leaseEndDate,
+      }))
+    )
+    .select("id");
 
-  if (itemsErr) {
+  if (itemsErr || !insertedItems) {
     console.error("submitOrder: order_items insert failed", itemsErr);
     await supabase.from("orders").delete().eq("id", order.id);
     return { ok: false, error: "発注の登録に失敗しました" };
+  }
+
+  // order_item_spec_options を bulk insert（同じ順序で対応）
+  const specRows: {
+    order_item_id: string;
+    spec_group_id: string;
+    spec_option_id: string;
+    tenant_id: string;
+    group_name_snapshot: string;
+    option_label_snapshot: string;
+  }[] = [];
+  items.forEach((it, idx) => {
+    const orderItemId = insertedItems[idx]?.id;
+    if (!orderItemId) return;
+    for (const s of it.selections) {
+      specRows.push({
+        order_item_id: orderItemId,
+        spec_group_id: s.spec_group_id,
+        spec_option_id: s.spec_option_id,
+        tenant_id: tenantId,
+        group_name_snapshot: s.group_name,
+        option_label_snapshot: s.option_label,
+      });
+    }
+  });
+  if (specRows.length > 0) {
+    const { error: specErr } = await supabase
+      .from("order_item_spec_options")
+      .insert(specRows);
+    if (specErr) {
+      console.error("submitOrder: order_item_spec_options insert failed", specErr);
+      await supabase.from("orders").delete().eq("id", order.id);
+      return { ok: false, error: "発注の登録に失敗しました" };
+    }
   }
 
   const itemSummary = items

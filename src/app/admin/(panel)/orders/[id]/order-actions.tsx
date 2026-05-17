@@ -113,9 +113,11 @@ export default function OrderActions({ order }: Props) {
                   <p className="text-foreground font-medium truncate">
                     {it.material_name}
                   </p>
-                  {it.variant_name && (
+                  {it.spec_selections.length > 0 && (
                     <p className="text-xs text-subtle truncate mt-0.5">
-                      {it.variant_name}
+                      {it.spec_selections
+                        .map((s) => `${s.group_name}: ${s.option_label}`)
+                        .join(" / ")}
                     </p>
                   )}
                   <p className="font-[family-name:var(--font-mono)] tabular-nums text-[11px] text-subtle mt-1">
