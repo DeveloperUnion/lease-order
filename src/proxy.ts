@@ -88,6 +88,13 @@ function customerProxy(request: NextRequest) {
 }
 
 export async function proxy(request: NextRequest) {
+  // フィードバック収集モード: 認証ゲートを丸ごと素通りさせる。
+  // 未ログイン訪問者には getCurrentCustomer / getAdminContext / currentAdminUserId
+  // のフォールバックでテナントの最初の有効 customer / admin が割り当てられる。
+  // 本番では DISABLE_AUTH を未設定にして従来通り認証を強制する。
+  if (process.env.DISABLE_AUTH === "1") {
+    return NextResponse.next({ request });
+  }
   if (request.nextUrl.pathname.startsWith("/admin")) {
     return adminProxy(request);
   }
