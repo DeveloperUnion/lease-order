@@ -13,7 +13,24 @@
 -- 選ばれた仕様は order_item_spec_options に多対多で記録（snapshot 込み）。
 -- 在庫数管理はスコープ外。将来「赤×前方=5個」のような組み合わせ別在庫が
 -- 必要になったら spec_combo_stock のようなテーブルを別途追加する想定。
+--
+-- 注意:
+--   このプロジェクトの一部 DB（staging 等）には旧 0016 の v1 スキーマ
+--   （material_variants / material_variant_options、spec_groups の
+--   selection_type カラム等）が残っている可能性がある。冪等に v3 形へ
+--   持っていくため、冒頭で旧構造を drop してから create する。
 -- ============================================================
+
+-- ------------------------------------------------------------
+-- 0. 旧 v1 構造のクリーンアップ（残っていれば drop / 無ければ no-op）
+-- ------------------------------------------------------------
+drop table if exists material_variant_options;
+drop table if exists material_variants;
+drop table if exists order_item_spec_options;
+drop table if exists spec_options;
+drop table if exists spec_groups;
+alter table order_items drop column if exists variant_id;
+alter table order_items drop column if exists variant_name;
 
 -- ------------------------------------------------------------
 -- 仕様
