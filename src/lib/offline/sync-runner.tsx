@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { flushAll } from "./outbox";
+import { flushChatOutbox } from "./chat-outbox";
 
 /**
  * Outbox の自動 flush をブラウザイベントに連動させる。
@@ -17,6 +18,9 @@ export default function SyncRunner() {
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
       flushAll().catch(() => {
         /* swallow — sync は best-effort */
+      });
+      flushChatOutbox().catch(() => {
+        /* swallow */
       });
     };
 

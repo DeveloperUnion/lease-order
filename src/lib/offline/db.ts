@@ -1,9 +1,10 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { CartItem, DeliveryMethod } from "../types";
 import type { SubmitOrderInput } from "../order-submission";
+import type { MessageAttachment } from "../chat/types";
 
 const DB_NAME = "lease-order-offline";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export type OutboxStatus = "pending" | "sending" | "sent" | "failed";
 
@@ -17,6 +18,29 @@ export type OutboxItem = {
   attempts: number;
   lastError: string | null;
   resultOrderNumber: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ChatOutboxPayload = {
+  conversationId?: string;
+  customerId?: string;
+  body: string;
+  attachments: MessageAttachment[];
+  orderId: string | null;
+  clientRequestId: string;
+};
+
+export type ChatOutboxItem = {
+  id: string;
+  clientRequestId: string;
+  tenantId: string | null;
+  customerId: string | null;
+  payload: ChatOutboxPayload;
+  status: OutboxStatus;
+  attempts: number;
+  lastError: string | null;
+  resultMessageId: string | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -61,6 +85,15 @@ interface OfflineSchema extends DBSchema {
       "by-updated": number;
     };
   };
+  chatOutbox: {
+    key: string;
+    value: ChatOutboxItem;
+    indexes: {
+      "by-customer": [string, string];
+      "by-status": OutboxStatus;
+      "by-updated": number;
+    };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<OfflineSchema>> | null = null;
@@ -79,6 +112,12 @@ export function getDb(): Promise<IDBPDatabase<OfflineSchema>> {
         }
         if (oldVersion < 2) {
           const store = db.createObjectStore("outbox", { keyPath: "id" });
+          store.createIndex("by-customer", ["tenantId", "customerId"]);
+          store.createIndex("by-status", "status");
+          store.createIndex("by-updated", "updatedAt");
+        }
+        if (oldVersion < 3) {
+          const store = db.createObjectStore("chatOutbox", { keyPath: "id" });
           store.createIndex("by-customer", ["tenantId", "customerId"]);
           store.createIndex("by-status", "status");
           store.createIndex("by-updated", "updatedAt");

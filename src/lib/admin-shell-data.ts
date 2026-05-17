@@ -8,11 +8,13 @@ import {
   listNotificationsForAdmin,
   type NotificationRow,
 } from "./notifications-data";
+import { countUnreadForAdmin as countChatUnreadForAdmin } from "./chat/data";
 import { getTenantId } from "./tenant";
 
 export type SidebarData = {
   pendingCount: number;
   pendingRequestCount: number;
+  chatUnreadCount: number;
   email: string | null;
 };
 
@@ -65,12 +67,19 @@ const getAdminContext = cache(
 );
 
 export async function getSidebarData(): Promise<SidebarData> {
-  const [pendingCount, pendingRequestCount, ctx] = await Promise.all([
+  const tenantId = await getTenantId();
+  const [pendingCount, pendingRequestCount, chatUnreadCount, ctx] = await Promise.all([
     countPendingOrders(),
     countPendingRequests(),
+    countChatUnreadForAdmin(tenantId),
     getAdminContext(),
   ]);
-  return { pendingCount, pendingRequestCount, email: ctx.email };
+  return {
+    pendingCount,
+    pendingRequestCount,
+    chatUnreadCount,
+    email: ctx.email,
+  };
 }
 
 export async function getNotificationBellData(): Promise<NotificationBellData> {

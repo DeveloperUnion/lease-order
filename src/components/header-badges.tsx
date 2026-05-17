@@ -17,8 +17,14 @@ export function CustomerNavWithData({
   customer: CustomerSummary;
   promise: Promise<CustomerHeaderData>;
 }) {
-  const { overdueCount } = use(promise);
-  return <CustomerNav customer={customer} overdueCount={overdueCount} />;
+  const { overdueCount, chatUnreadCount } = use(promise);
+  return (
+    <CustomerNav
+      customer={customer}
+      overdueCount={overdueCount}
+      chatUnreadCount={chatUnreadCount}
+    />
+  );
 }
 
 export function CustomerNotificationBellWithData({
