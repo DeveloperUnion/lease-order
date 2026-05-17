@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
-import { resolveRecipientIdentity } from "@/lib/supabase-tenant";
+import { resolveAsAdmin } from "@/lib/supabase-tenant";
 import { mintTenantJwt } from "@/lib/supabase-jwt";
 
 export const dynamic = "force-dynamic";
 
-// チャット Realtime 用の短期 JWT。
-// /api/notifications/{admin,customer}/realtime-token と同様の用途だが、こちらは
-// チャネル名 `chat:<conversationId>` / `chat-tenant:<tenantId>` を想定。
-// tenant_id claim による RLS が Realtime のフィルタとして効くので、別テナントの行は配信されない。
+// 通知 Realtime 用の admin 専用短期 JWT。
+// /api/notifications/realtime-token は resolveRecipientIdentity (customer-first 推論) を
+// 使っていたため、同一ブラウザに顧客 cookie がある / DISABLE_AUTH=1 のとき token.audience が
+// 常に "customer" になり、admin の NotificationBell が subscribe を諦めていた。
+// URL でどっち側か申告させて resolveAsAdmin に固定することで誤判定を防ぐ。
 const REALTIME_TTL_SECONDS = 60 * 30;
 
 export async function GET() {
-  const identity = await resolveRecipientIdentity();
+  const identity = await resolveAsAdmin();
   if (identity.audience === "anonymous") {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
