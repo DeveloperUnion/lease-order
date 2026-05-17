@@ -11,12 +11,18 @@ function formatDate(iso: string | null): string {
 
 export default function ConfirmModal({
   returns,
+  returnTransport,
   extensions,
   isPending,
   onConfirm,
   onCancel,
 }: {
   returns: RentalItemRow[];
+  returnTransport: {
+    transportMethod: "pickup" | "dropoff";
+    desiredDate: string;
+    dropoffOfficeName: string | null;
+  } | null;
   extensions: { item: RentalItemRow; newEndDate: string }[];
   isPending: boolean;
   onConfirm: () => void;
@@ -52,6 +58,28 @@ export default function ConfirmModal({
               <h3 className="text-sm font-semibold text-foreground mb-2 pb-1.5 border-b border-border">
                 返却申請 <span className="text-subtle font-normal">({returns.length})</span>
               </h3>
+              {returnTransport && (
+                <div className="mb-3 px-3 py-2 rounded-lg bg-surface-muted text-xs text-muted space-y-0.5">
+                  <div>
+                    <span className="text-subtle">返却方法:</span>{" "}
+                    <span className="text-foreground font-medium">
+                      {returnTransport.transportMethod === "pickup"
+                        ? "取りに来てもらう"
+                        : `業所に持ち込む${
+                            returnTransport.dropoffOfficeName
+                              ? `（${returnTransport.dropoffOfficeName}）`
+                              : ""
+                          }`}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-subtle">希望日:</span>{" "}
+                    <span className="text-foreground font-medium tabular-nums">
+                      {returnTransport.desiredDate}
+                    </span>
+                  </div>
+                </div>
+              )}
               <ul className="divide-y divide-border">
                 {returns.map((it) => (
                   <li

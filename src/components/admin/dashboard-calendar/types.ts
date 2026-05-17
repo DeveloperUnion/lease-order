@@ -2,7 +2,7 @@ import type { OrderStatus } from "@/lib/order-status";
 
 export type CalendarView = "month" | "week";
 
-export type EventKind = "shipment" | "return";
+export type EventKind = "shipment" | "return" | "return-scheduled";
 
 export type CalendarEvent = {
   kind: EventKind;
@@ -15,6 +15,8 @@ export type CalendarEvent = {
   date: string;
   /** True when this is an overdue shipment (past date, still approved). */
   overdue: boolean;
+  /** return-scheduled イベントのみ：輸送手段 */
+  transport_method?: "pickup" | "dropoff";
 };
 
 export type DayBucket = {

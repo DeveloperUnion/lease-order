@@ -10,6 +10,15 @@ export type PendingExtension = {
   requested_at: string;
 };
 
+export type ScheduledReturn = {
+  id: string;
+  requested_quantity_delta: number;
+  scheduled_date: string;
+  transport_method: "pickup" | "dropoff";
+  dropoff_office_name: string | null;
+  material_name: string;
+};
+
 export type RentalItemRow = {
   id: string;
   material_id: string;
@@ -38,6 +47,7 @@ export type RentalOrder = {
   items: RentalItemRow[];
   // 承認済み延長履歴のみ。pending は各 item.pending_extension に格納。
   extensions: Record<string, { previous_end_date: string; new_end_date: string; reason: string | null; requested_at: string }[]>;
+  scheduled_returns: ScheduledReturn[];
 };
 
 export type RentalSite = {
@@ -45,7 +55,14 @@ export type RentalSite = {
   active_order_count: number;
   overdue_item_count: number;
   soonest_end_date: string | null;
-  orders: { id: string; order_number: string; lease_end_date: string | null; overdue_item_count: number; active_item_count: number }[];
+  orders: {
+    id: string;
+    order_number: string;
+    lease_end_date: string | null;
+    overdue_item_count: number;
+    active_item_count: number;
+    next_return: { scheduled_date: string; transport_method: "pickup" | "dropoff" } | null;
+  }[];
 };
 
 export type OverdueItemEntry = {
@@ -100,11 +117,46 @@ export async function listRentalsByCustomer(customerId: string, tenantId: string
     .order("lease_end_date", { ascending: true, nullsFirst: false });
   if (error) throw error;
 
+  // 各発注の「直近の scheduled 返却」を取得するため、order_items 経由で
+  // 一発取得して order_id ごとに最早の scheduled_date を抜き出す。
+  const rawOrders = (data ?? []) as RentalsListRaw[];
+  const allItemIds = rawOrders.flatMap((o) => (o.order_items ?? []).map((it) => it.id));
+  const nextReturnByOrder = new Map<
+    string,
+    { scheduled_date: string; transport_method: "pickup" | "dropoff" }
+  >();
+  if (allItemIds.length > 0) {
+    const { data: scheduled, error: schedErr } = await supabaseAdmin
+      .from("return_requests")
+      .select(
+        "scheduled_date, transport_method, order_items!inner(id, order_id)"
+      )
+      .in("order_item_id", allItemIds)
+      .eq("status", "scheduled")
+      .order("scheduled_date", { ascending: true });
+    if (schedErr) throw schedErr;
+    type SchedRow = {
+      scheduled_date: string;
+      transport_method: "pickup" | "dropoff";
+      order_items: { id: string; order_id: string } | null;
+    };
+    for (const row of (scheduled ?? []) as unknown as SchedRow[]) {
+      const orderId = row.order_items?.order_id;
+      if (!orderId || !row.scheduled_date || !row.transport_method) continue;
+      if (!nextReturnByOrder.has(orderId)) {
+        nextReturnByOrder.set(orderId, {
+          scheduled_date: row.scheduled_date,
+          transport_method: row.transport_method,
+        });
+      }
+    }
+  }
+
   const today = todayIsoLocal();
   const sitesMap = new Map<string, RentalSite>();
   const overdueItems: OverdueItemEntry[] = [];
 
-  for (const raw of (data ?? []) as RentalsListRaw[]) {
+  for (const raw of rawOrders) {
     const items = (raw.order_items ?? [])
       .map((it) => {
         const remaining = it.quantity - it.returned_quantity;
@@ -144,6 +196,7 @@ export async function listRentalsByCustomer(customerId: string, tenantId: string
       lease_end_date: earliestEnd,
       overdue_item_count: overdueCount,
       active_item_count: items.length,
+      next_return: nextReturnByOrder.get(raw.id) ?? null,
     });
 
     for (const x of items) {
@@ -222,6 +275,17 @@ type ReturnRequestRaw = {
   requested_quantity_delta: number;
 };
 
+type ScheduledReturnRaw = {
+  id: string;
+  order_item_id: string;
+  requested_quantity_delta: number;
+  scheduled_date: string;
+  transport_method: "pickup" | "dropoff";
+  dropoff_office_id: string | null;
+  offices: { id: string; name: string } | null;
+  order_items: { id: string; material_name: string } | null;
+};
+
 export const getRentalOrder = cache(async (orderId: string, customerId: string, tenantId: string): Promise<RentalOrder | null> => {
   const { data, error } = await supabaseAdmin
     .from("orders")
@@ -245,21 +309,48 @@ export const getRentalOrder = cache(async (orderId: string, customerId: string, 
   const pendingExtensionByItem = new Map<string, PendingExtension>();
   const ackExtensions: Record<string, { previous_end_date: string; new_end_date: string; reason: string | null; requested_at: string }[]> = {};
 
+  const scheduledReturns: ScheduledReturn[] = [];
   if (itemIds.length > 0) {
-    const [{ data: extData, error: extErr }, { data: retData, error: retErr }] = await Promise.all([
+    const [
+      { data: extData, error: extErr },
+      { data: retData, error: retErr },
+      { data: scheduledData, error: scheduledErr },
+    ] = await Promise.all([
       supabaseAdmin
         .from("lease_extensions")
         .select("id, order_item_id, previous_end_date, new_end_date, reason, requested_at, status")
         .in("order_item_id", itemIds)
         .order("requested_at", { ascending: false }),
+      // pending (予定確定待ち) と scheduled (受領待ち) は両方とも「申請中」扱いで
+      // effective_remaining から差し引く。
       supabaseAdmin
         .from("return_requests")
         .select("order_item_id, requested_quantity_delta")
         .in("order_item_id", itemIds)
-        .eq("status", "pending"),
+        .in("status", ["pending", "scheduled"]),
+      supabaseAdmin
+        .from("return_requests")
+        .select(
+          "id, order_item_id, requested_quantity_delta, scheduled_date, transport_method, dropoff_office_id, offices:dropoff_office_id(id, name), order_items!inner(id, material_name)"
+        )
+        .in("order_item_id", itemIds)
+        .eq("status", "scheduled")
+        .order("scheduled_date", { ascending: true }),
     ]);
     if (extErr) throw extErr;
     if (retErr) throw retErr;
+    if (scheduledErr) throw scheduledErr;
+    for (const s of (scheduledData ?? []) as unknown as ScheduledReturnRaw[]) {
+      if (!s.scheduled_date || !s.transport_method || !s.order_items) continue;
+      scheduledReturns.push({
+        id: s.id,
+        requested_quantity_delta: s.requested_quantity_delta,
+        scheduled_date: s.scheduled_date,
+        transport_method: s.transport_method,
+        dropoff_office_name: s.offices?.name ?? null,
+        material_name: s.order_items.material_name,
+      });
+    }
 
     for (const e of (extData ?? []) as ExtensionRaw[]) {
       if (e.status === "pending") {
@@ -321,6 +412,7 @@ export const getRentalOrder = cache(async (orderId: string, customerId: string, 
     created_at: raw.created_at,
     items,
     extensions: ackExtensions,
+    scheduled_returns: scheduledReturns,
   };
 });
 
