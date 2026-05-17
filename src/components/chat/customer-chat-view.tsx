@@ -252,7 +252,7 @@ export default function CustomerChatView({
                 msg={m}
                 mine={mine}
                 senderLabel={mine ? customerName : `${tenantDisplayName}より`}
-                orderLinkPrefix="/orders"
+                orderLinkPrefix="/rentals"
               />
             );
           })
