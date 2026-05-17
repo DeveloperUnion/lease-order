@@ -1,5 +1,5 @@
 import { eachDayOfInterval, format, parseISO } from "date-fns";
-import type { CalendarOrderRow } from "@/lib/admin-data";
+import type { CalendarOrderRow, CalendarScheduledReturnRow } from "@/lib/admin-data";
 import type { CalendarEvent, CalendarRange, DayBucket } from "./types";
 
 function inRange(dateISO: string, range: CalendarRange): boolean {
@@ -8,6 +8,7 @@ function inRange(dateISO: string, range: CalendarRange): boolean {
 
 export function buildDayBuckets(
   orders: CalendarOrderRow[],
+  scheduledReturns: CalendarScheduledReturnRow[],
   range: CalendarRange,
   todayISO: string,
 ): Map<string, DayBucket> {
@@ -47,6 +48,21 @@ export function buildDayBuckets(
         overdue: false,
       });
     }
+  }
+
+  for (const s of scheduledReturns) {
+    if (!inRange(s.scheduled_date, range)) continue;
+    pushEvent(map, s.scheduled_date, {
+      kind: "return-scheduled",
+      order_id: s.order_id,
+      order_number: s.order_number,
+      company_name: s.company_name,
+      site_name: s.site_name,
+      status: s.order_status,
+      date: s.scheduled_date,
+      overdue: false,
+      transport_method: s.transport_method,
+    });
   }
 
   return map;

@@ -1,4 +1,4 @@
-import { listOrdersInRange } from "@/lib/admin-data";
+import { listOrdersInRange, listScheduledReturnsInRange } from "@/lib/admin-data";
 import { PageHeader } from "@/components/admin/ui";
 import DashboardCalendar from "@/components/admin/dashboard-calendar";
 import { computeRange } from "@/components/admin/dashboard-calendar/range";
@@ -24,7 +24,10 @@ export default async function AdminPage({
   const sp = await searchParams;
   const view = normalizeView(sp.view);
   const range = computeRange(view, sp.ym, sp.wk);
-  const orders = await listOrdersInRange(range.from, range.to);
+  const [orders, scheduledReturns] = await Promise.all([
+    listOrdersInRange(range.from, range.to),
+    listScheduledReturnsInRange(range.from, range.to),
+  ]);
 
   return (
     <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8">
@@ -32,7 +35,12 @@ export default async function AdminPage({
         title="ダッシュボード"
         description="出荷予定と返却予定をカレンダーで確認します。"
       />
-      <DashboardCalendar view={view} range={range} orders={orders} />
+      <DashboardCalendar
+        view={view}
+        range={range}
+        orders={orders}
+        scheduledReturns={scheduledReturns}
+      />
     </main>
   );
 }

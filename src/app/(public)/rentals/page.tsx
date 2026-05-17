@@ -105,6 +105,12 @@ export default async function RentalsPage() {
                           {o.active_item_count} 品目
                           {o.lease_end_date && <> ・ 期限 {formatDate(o.lease_end_date)}</>}
                         </p>
+                        {o.next_return && (
+                          <p className="text-xs text-info mt-0.5">
+                            返却予定 {formatDate(o.next_return.scheduled_date)} ・{" "}
+                            {o.next_return.transport_method === "pickup" ? "取りに来てもらう" : "持ち込み"}
+                          </p>
+                        )}
                       </div>
                       {o.overdue_item_count > 0 && (
                         <StatusBadge tone="danger">

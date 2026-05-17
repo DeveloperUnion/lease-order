@@ -1,6 +1,6 @@
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
-import type { CalendarOrderRow } from "@/lib/admin-data";
+import type { CalendarOrderRow, CalendarScheduledReturnRow } from "@/lib/admin-data";
 import { buildDayBuckets } from "./build-events";
 import { shiftMonth, shiftWeek, todayISO } from "./range";
 import CalendarToolbar from "./CalendarToolbar";
@@ -11,6 +11,7 @@ type Props = {
   view: CalendarView;
   range: CalendarRange;
   orders: CalendarOrderRow[];
+  scheduledReturns: CalendarScheduledReturnRow[];
 };
 
 function buildHrefs(view: CalendarView, range: CalendarRange) {
@@ -46,9 +47,9 @@ function buildTitle(view: CalendarView, range: CalendarRange): string {
   return `${format(start, "yyyy年")} ${startLabel} – ${endLabel}`;
 }
 
-export default function DashboardCalendar({ view, range, orders }: Props) {
+export default function DashboardCalendar({ view, range, orders, scheduledReturns }: Props) {
   const today = todayISO();
-  const bucketMap = buildDayBuckets(orders, range, today);
+  const bucketMap = buildDayBuckets(orders, scheduledReturns, range, today);
   const days = Array.from(bucketMap.values());
 
   return (
@@ -78,7 +79,10 @@ function Legend() {
         <span className={`${dot} bg-info`} /> 出荷
       </span>
       <span className={item}>
-        <span className={`${dot} bg-warning`} /> 返却
+        <span className={`${dot} bg-warning`} /> 期限
+      </span>
+      <span className={item}>
+        <span className={`${dot} bg-accent`} /> 返却取り
       </span>
       <span className={item}>
         <span className={`${dot} bg-danger`} /> 遅延 (出荷未済)

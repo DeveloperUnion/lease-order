@@ -32,6 +32,7 @@ export default function DayDrawer({ date, events, onClose }: Props) {
   const heading = format(d, "M月d日 (E)", { locale: ja });
   const shipments = events.filter((e) => e.kind === "shipment");
   const returns = events.filter((e) => e.kind === "return");
+  const scheduledReturns = events.filter((e) => e.kind === "return-scheduled");
 
   return (
     <div
@@ -74,8 +75,22 @@ export default function DayDrawer({ date, events, onClose }: Props) {
                 {shipments.map((e) => (
                   <li key={`s-${e.order_id}`}>
                     <OrderBadge ev={e} variant="row" />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+
+          <Section title="返却取り (予定確定済み)" count={scheduledReturns.length}>
+            {scheduledReturns.length === 0 ? (
+              <Empty>この日に確定済みの返却予定はありません。</Empty>
+            ) : (
+              <ul className="space-y-2">
+                {scheduledReturns.map((e) => (
+                  <li key={`rs-${e.order_id}`}>
+                    <OrderBadge ev={e} variant="row" />
                     <p className="mt-1 text-[11px] text-muted truncate pl-1">
-                      {e.site_name ?? "現場名未設定"}
+                      {e.transport_method === "pickup" ? "取りに行く" : "持ち込み"}
                     </p>
                   </li>
                 ))}
@@ -83,17 +98,14 @@ export default function DayDrawer({ date, events, onClose }: Props) {
             )}
           </Section>
 
-          <Section title="返却" count={returns.length}>
+          <Section title="返却期限" count={returns.length}>
             {returns.length === 0 ? (
-              <Empty>この日の返却予定はありません。</Empty>
+              <Empty>この日の返却期限はありません。</Empty>
             ) : (
               <ul className="space-y-2">
                 {returns.map((e) => (
                   <li key={`r-${e.order_id}`}>
                     <OrderBadge ev={e} variant="row" />
-                    <p className="mt-1 text-[11px] text-muted truncate pl-1">
-                      {e.site_name ?? "現場名未設定"}
-                    </p>
                   </li>
                 ))}
               </ul>
