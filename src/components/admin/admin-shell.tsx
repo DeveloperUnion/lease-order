@@ -16,11 +16,12 @@ function SidebarWithData({
   promise: Promise<SidebarData>;
   onNavigate?: () => void;
 }) {
-  const { pendingCount, pendingRequestCount, email } = use(promise);
+  const { pendingCount, pendingRequestCount, chatUnreadCount, email } = use(promise);
   return (
     <Sidebar
       pendingCount={pendingCount}
       pendingRequestCount={pendingRequestCount}
+      chatUnreadCount={chatUnreadCount}
       email={email}
       onNavigate={onNavigate}
     />

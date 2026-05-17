@@ -20,6 +20,7 @@ type NavGroup = {
 export type SidebarProps = {
   pendingCount: number;
   pendingRequestCount: number;
+  chatUnreadCount: number;
   email: string | null;
   onNavigate?: () => void;
 };
@@ -27,6 +28,7 @@ export type SidebarProps = {
 export default function Sidebar({
   pendingCount,
   pendingRequestCount,
+  chatUnreadCount,
   email,
   onNavigate,
 }: SidebarProps) {
@@ -46,6 +48,11 @@ export default function Sidebar({
           href: "/admin/requests",
           label: "返却・延長申請",
           badge: pendingRequestCount > 0 ? pendingRequestCount : undefined,
+        },
+        {
+          href: "/admin/messages",
+          label: "メッセージ",
+          badge: chatUnreadCount > 0 ? chatUnreadCount : undefined,
         },
       ],
     },

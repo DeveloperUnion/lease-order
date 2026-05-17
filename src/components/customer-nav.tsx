@@ -28,7 +28,7 @@ function ItemIcon({ d, active }: { d: string; active: boolean }) {
   );
 }
 
-function getNavItems(overdueCount: number): NavItem[] {
+function getNavItems(overdueCount: number, chatUnreadCount: number): NavItem[] {
   return [
     {
       label: "発注",
@@ -69,6 +69,18 @@ function getNavItems(overdueCount: number): NavItem[] {
       ),
     },
     {
+      label: "連絡",
+      href: "/messages",
+      isActive: (p) => p.startsWith("/messages"),
+      badge: chatUnreadCount,
+      icon: (active) => (
+        <ItemIcon
+          active={active}
+          d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"
+        />
+      ),
+    },
+    {
       label: "マイページ",
       href: "/account",
       isActive: (p) => p.startsWith("/account"),
@@ -91,9 +103,17 @@ function Badge({ count }: { count: number }) {
   );
 }
 
-export default function CustomerNav({ customer, overdueCount }: { customer: CustomerSummary; overdueCount: number }) {
+export default function CustomerNav({
+  customer,
+  overdueCount,
+  chatUnreadCount,
+}: {
+  customer: CustomerSummary;
+  overdueCount: number;
+  chatUnreadCount: number;
+}) {
   const pathname = usePathname();
-  const items = getNavItems(overdueCount);
+  const items = getNavItems(overdueCount, chatUnreadCount);
 
   if (pathname.startsWith("/admin") || pathname === "/login") {
     return null;
@@ -145,7 +165,7 @@ export default function CustomerNav({ customer, overdueCount }: { customer: Cust
       </aside>
 
       {/* モバイル: ボトムタブ */}
-      <nav className="fixed bottom-0 left-0 right-0 md:hidden bg-surface border-t border-border z-40 grid grid-cols-4 pb-[env(safe-area-inset-bottom,0)]">
+      <nav className="fixed bottom-0 left-0 right-0 md:hidden bg-surface border-t border-border z-40 grid grid-cols-5 pb-[env(safe-area-inset-bottom,0)]">
         {items.map((item) => {
           const active = item.isActive(pathname);
           return (

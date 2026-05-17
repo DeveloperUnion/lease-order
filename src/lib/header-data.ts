@@ -5,11 +5,13 @@ import {
   listNotificationsForCustomer,
   type NotificationRow,
 } from "./notifications-data";
+import { getCustomerChatBadge } from "./chat/data";
 
 export type CustomerHeaderData = {
   overdueCount: number;
   unreadCount: number;
   recent: NotificationRow[];
+  chatUnreadCount: number;
 };
 
 // Header / CustomerNav 用の集約クエリ。Header.tsx (Server) で await せずに
@@ -18,10 +20,11 @@ export async function getCustomerHeaderData(
   customerId: string,
   tenantId: string
 ): Promise<CustomerHeaderData> {
-  const [overdueCount, unreadCount, recent] = await Promise.all([
+  const [overdueCount, unreadCount, recent, chatUnreadCount] = await Promise.all([
     countOverdueForCustomer(customerId, tenantId),
     countUnreadForCustomer(customerId, tenantId),
     listNotificationsForCustomer(customerId, tenantId, 10),
+    getCustomerChatBadge(customerId, tenantId),
   ]);
-  return { overdueCount, unreadCount, recent };
+  return { overdueCount, unreadCount, recent, chatUnreadCount };
 }

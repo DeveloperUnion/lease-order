@@ -40,7 +40,7 @@ export default async function Header() {
           </Suspense>
         }
       />
-      <Suspense fallback={<CustomerNav customer={customerProp} overdueCount={0} />}>
+      <Suspense fallback={<CustomerNav customer={customerProp} overdueCount={0} chatUnreadCount={0} />}>
         <CustomerNavWithData customer={customerProp} promise={dataPromise} />
       </Suspense>
     </>
