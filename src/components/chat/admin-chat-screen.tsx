@@ -7,7 +7,11 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import MessageBubble, { type BubbleMessage } from "./message-bubble";
 import ChatComposer from "./chat-composer";
 import { sendChatMessage } from "@/lib/chat/client";
-import type { ConversationSummary, MessageAttachment } from "@/lib/chat/types";
+import type {
+  ConversationSummary,
+  MessageAttachment,
+  OrderRef,
+} from "@/lib/chat/types";
 import type { SignedAttachment } from "@/lib/chat/sign-attachments";
 
 type TokenResponse = {
@@ -25,6 +29,7 @@ type Props = {
     customerId: string;
     customerName: string;
     initialMessages: BubbleMessage[];
+    initialOrderQuote: OrderRef | null;
   } | null;
   tenantId: string;
   tenantDisplayName: string;
@@ -62,6 +67,7 @@ export default function AdminChatScreen({
     [selected]
   );
   const [serverMessages, setServerMessages] = useState<BubbleMessage[]>(initialFromProp);
+  const [quoted, setQuoted] = useState<OrderRef | null>(selected?.initialOrderQuote ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const knownIdsRef = useRef<Set<string>>(new Set(initialFromProp.map((m) => m.id)));
   const prevSelectedIdRef = useRef<string | null>(selectedId);
@@ -69,9 +75,11 @@ export default function AdminChatScreen({
   // 会話切替時は extras を捨てる。BubbleMessage は conversation_id を持たないため、
   // 「server に id がないもの」フィルタだと前の会話の optimistic stub が次の会話に
   // 混じってしまう（送信直後に別の顧客を選ぶと吹き出しが付いてくる現象）。
+  // 同時に「この発注について」引用も新しい selected のものに差し替える。
   if (prevSelectedIdRef.current !== selectedId) {
     prevSelectedIdRef.current = selectedId;
     setExtras([]);
+    setQuoted(selected?.initialOrderQuote ?? null);
     knownIdsRef.current = new Set(initialFromProp.map((m) => m.id));
   }
 
@@ -123,8 +131,9 @@ export default function AdminChatScreen({
 
     function scheduleListRefresh() {
       if (listRefreshTimer) clearTimeout(listRefreshTimer);
-      // 3 秒以内の連投は 1 回にまとめる
-      listRefreshTimer = setTimeout(() => router.refresh(), 3000);
+      // 連投を 1 回にまとめつつ、体感はほぼ realtime に近づける。
+      // 以前は 3 秒で「届くのが遅い」と感じられたため短縮。
+      listRefreshTimer = setTimeout(() => router.refresh(), 800);
     }
 
     async function fetchToken(): Promise<TokenResponse | null> {
@@ -198,9 +207,10 @@ export default function AdminChatScreen({
                 read_at: row.read_at,
               };
               setExtras((prev) => [...prev, stub]);
-              // 添付や注文引用がある場合のみ refresh で signed URL / order_ref を取りに行く
+              // 開いている会話の bubble に signed URL / order_ref を即時に乗せたい場合は
+              // 3 秒待たず router.refresh する。customer-chat-view 側と歩調を合わせる。
               if ((row.attachments?.length ?? 0) > 0 || row.order_id) {
-                scheduleListRefresh();
+                router.refresh();
               }
             } else {
               // 別の会話 → 一覧の last_message_at / 未読バッジを更新
@@ -364,8 +374,8 @@ export default function AdminChatScreen({
             </div>
             <ChatComposer
               onSend={handleSend}
-              quoted={null}
-              onClearQuoted={() => {}}
+              quoted={quoted}
+              onClearQuoted={() => setQuoted(null)}
               uploadUrl="/api/chat/admin/uploads"
             />
           </>

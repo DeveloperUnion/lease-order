@@ -79,11 +79,14 @@ export default function NotificationBell({
     let channel: ReturnType<SupabaseClient["channel"]> | null = null;
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
+    const tokenUrl =
+      audience === "admin"
+        ? "/api/notifications/admin/realtime-token"
+        : "/api/notifications/customer/realtime-token";
+
     async function fetchToken(): Promise<TokenResponse | null> {
       try {
-        const res = await fetch("/api/notifications/realtime-token", {
-          cache: "no-store",
-        });
+        const res = await fetch(tokenUrl, { cache: "no-store" });
         if (!res.ok) return null;
         return (await res.json()) as TokenResponse;
       } catch {
@@ -104,6 +107,8 @@ export default function NotificationBell({
     async function setup() {
       const token = await fetchToken();
       if (!token || cancelled) return;
+      // URL でどっち側か明示しているので token.audience は必ず一致する。
+      // 念のため不一致なら何もしない（古い service worker キャッシュ等の保険）。
       if (token.audience !== audience) return;
 
       supabase = createClient(
