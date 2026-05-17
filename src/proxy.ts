@@ -93,6 +93,14 @@ export async function proxy(request: NextRequest) {
   // のフォールバックでテナントの最初の有効 customer / admin が割り当てられる。
   // 本番では DISABLE_AUTH を未設定にして従来通り認証を強制する。
   if (process.env.DISABLE_AUTH === "1") {
+    const { pathname } = request.nextUrl;
+    // ログイン画面は意味がないので飛ばす
+    if (pathname === "/admin/login") {
+      return NextResponse.redirect(new URL("/admin", request.url));
+    }
+    if (pathname === "/login") {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
     return NextResponse.next({ request });
   }
   if (request.nextUrl.pathname.startsWith("/admin")) {

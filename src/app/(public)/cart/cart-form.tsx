@@ -1,24 +1,34 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useCart } from "@/lib/cart-context";
 import type { CustomerSession } from "@/lib/customer-auth";
 import type { DeliveryMethod, Office } from "@/lib/types";
-import { submitOrder } from "./actions";
 import AddressAutocomplete from "./address-autocomplete";
 import MapPicker, { type LatLng } from "@/components/map/map-picker";
+import {
+  getDraft,
+  updateDraftFormFields,
+  deleteDraft,
+} from "@/lib/offline/drafts";
+import { enqueue, flushOne, removeItem as removeOutboxItem } from "@/lib/offline/outbox";
+import type { SubmitOrderInput } from "@/lib/order-submission";
 
 type Props = { offices: Office[]; customer: CustomerSession };
 
-const STEPS: { key: "cart" | "form" | "done"; label: string }[] = [
+type Step = "cart" | "form" | "done" | "queued";
+
+const STEPS: { key: Step; label: string }[] = [
   { key: "cart", label: "カート" },
   { key: "form", label: "発注情報" },
   { key: "done", label: "完了" },
 ];
 
-function StepProgress({ active }: { active: "cart" | "form" | "done" }) {
-  const activeIdx = STEPS.findIndex((s) => s.key === active);
+function StepProgress({ active }: { active: Step }) {
+  // 'queued' は 'done' と同じ進捗位置で表示する
+  const lookup = active === "queued" ? "done" : active;
+  const activeIdx = STEPS.findIndex((s) => s.key === lookup);
   return (
     <ol className="flex items-center gap-3 mb-8">
       {STEPS.map((s, i) => {
@@ -62,8 +72,14 @@ function StepProgress({ active }: { active: "cart" | "form" | "done" }) {
 }
 
 export default function CartForm({ offices, customer }: Props) {
-  const { items, updateQuantity, removeItem, clearCart } = useCart();
-  const [step, setStep] = useState<"cart" | "form" | "done">("cart");
+  const {
+    items,
+    updateQuantity,
+    removeItem,
+    activeDraftId,
+    startNewDraft,
+  } = useCart();
+  const [step, setStep] = useState<Step>("cart");
   const [siteName, setSiteName] = useState("");
   const [contactName, setContactName] = useState("");
   const [phone, setPhone] = useState(customer.phone ?? "");
@@ -77,6 +93,86 @@ export default function CartForm({ offices, customer }: Props) {
   const [orderNumber, setOrderNumber] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [formLoaded, setFormLoaded] = useState(false);
+  const loadedDraftIdRef = useRef<string | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    const update = () => setIsOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+
+  // active draft が変わったら下書きから form fields をシード
+  useEffect(() => {
+    if (!activeDraftId) return;
+    if (loadedDraftIdRef.current === activeDraftId) return;
+    let cancelled = false;
+    setFormLoaded(false);
+    (async () => {
+      const d = await getDraft(activeDraftId);
+      if (cancelled || !d) return;
+      const f = d.formFields;
+      if (f.siteName) setSiteName(f.siteName);
+      if (f.contactName) setContactName(f.contactName);
+      if (f.phone) setPhone(f.phone);
+      if (f.note) setNote(f.note);
+      if (f.deliveryMethod) setDeliveryMethod(f.deliveryMethod);
+      if (f.deliveryAddress) setDeliveryAddress(f.deliveryAddress);
+      if (f.deliveryLat != null && f.deliveryLng != null) {
+        setDeliveryLocation({ lat: f.deliveryLat, lng: f.deliveryLng });
+      }
+      if (f.pickupOfficeId) setPickupOfficeId(f.pickupOfficeId);
+      if (f.leaseStartDate) setLeaseStartDate(f.leaseStartDate);
+      if (f.leaseEndDate) setLeaseEndDate(f.leaseEndDate);
+      loadedDraftIdRef.current = activeDraftId;
+      setFormLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeDraftId]);
+
+  // form fields を debounce で active draft に保存
+  useEffect(() => {
+    if (!formLoaded || !activeDraftId) return;
+    const t = setTimeout(() => {
+      updateDraftFormFields(activeDraftId, {
+        siteName,
+        contactName,
+        phone,
+        note,
+        deliveryMethod,
+        deliveryAddress,
+        deliveryLat: deliveryLocation?.lat ?? null,
+        deliveryLng: deliveryLocation?.lng ?? null,
+        pickupOfficeId,
+        leaseStartDate,
+        leaseEndDate,
+      }).catch(() => {
+        /* offline write best-effort */
+      });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [
+    formLoaded,
+    activeDraftId,
+    siteName,
+    contactName,
+    phone,
+    note,
+    deliveryMethod,
+    deliveryAddress,
+    deliveryLocation,
+    pickupOfficeId,
+    leaseStartDate,
+    leaseEndDate,
+  ]);
 
   const officesByArea = offices.reduce<Record<string, Office[]>>((acc, o) => {
     const key = o.area ?? "その他";
@@ -101,43 +197,122 @@ export default function CartForm({ offices, customer }: Props) {
     if (!isFormValid) return;
     setErrorMessage("");
 
-    startTransition(async () => {
-      const result = await submitOrder({
-        siteName,
-        contactName,
-        phone,
-        note,
-        deliveryMethod,
-        deliveryAddress: deliveryMethod === "delivery" ? deliveryAddress : "",
-        deliveryLat:
-          deliveryMethod === "delivery" ? deliveryLocation?.lat ?? null : null,
-        deliveryLng:
-          deliveryMethod === "delivery" ? deliveryLocation?.lng ?? null : null,
-        pickupOfficeId: deliveryMethod === "pickup" ? pickupOfficeId : "",
-        leaseStartDate,
-        leaseEndDate,
-        items: items.map((i) => ({
-          materialId: i.material.id,
-          quantity: i.quantity,
-          selections: i.selections.map((s) => ({
-            spec_group_id: s.spec_group_id,
-            spec_option_id: s.spec_option_id,
-            group_name: s.group_name,
-            option_label: s.option_label,
-          })),
+    const payload: SubmitOrderInput = {
+      siteName,
+      contactName,
+      phone,
+      note,
+      deliveryMethod,
+      deliveryAddress: deliveryMethod === "delivery" ? deliveryAddress : "",
+      deliveryLat:
+        deliveryMethod === "delivery" ? deliveryLocation?.lat ?? null : null,
+      deliveryLng:
+        deliveryMethod === "delivery" ? deliveryLocation?.lng ?? null : null,
+      pickupOfficeId: deliveryMethod === "pickup" ? pickupOfficeId : "",
+      leaseStartDate,
+      leaseEndDate,
+      items: items.map((i) => ({
+        materialId: i.material.id,
+        quantity: i.quantity,
+        selections: i.selections.map((s) => ({
+          spec_group_id: s.spec_group_id,
+          spec_option_id: s.spec_option_id,
+          group_name: s.group_name,
+          option_label: s.option_label,
         })),
+      })),
+    };
+
+    startTransition(async () => {
+      const consumedDraftId = activeDraftId;
+
+      // 1. まず outbox にキュー登録（ここで client_request_id を発行）。
+      //    以降のネットワーク失敗・タブクラッシュなどでも復旧できる。
+      const item = await enqueue({
+        tenantId: customer.tenant_id,
+        customerId: customer.id,
+        payload,
       });
 
-      if (!result.ok) {
+      // 2. オンラインなら即時送信を試みる。オフラインならスキップして
+      //    "送信予約" 画面を出し、sync-runner に任せる。
+      const result = isOnline
+        ? await flushOne(item.id, 12_000)
+        : ({ status: "pending", reason: "network" } as const);
+
+      if (result.status === "failed") {
+        // サーバ側で 4xx 拒否（入力不備など）。
+        // outbox は再送しても無駄なので除去し、下書きは温存して
+        // ユーザに修正のチャンスを残す。
+        await removeOutboxItem(item.id);
         setErrorMessage(result.error);
         return;
       }
 
-      setOrderNumber(result.orderNumber);
-      clearCart();
-      setStep("done");
+      // 送信成功 or 送信予約 → 下書きを消費して新規 draft に切替
+      await startNewDraft();
+      if (consumedDraftId) {
+        await deleteDraft(consumedDraftId).catch(() => {});
+      }
+
+      if (result.status === "sent") {
+        setOrderNumber(result.orderNumber);
+        setStep("done");
+      } else {
+        // pending: 圏外 or タイムアウト or サーバ 5xx
+        setStep("queued");
+      }
     });
   };
+
+  if (step === "queued") {
+    return (
+      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-10">
+        <StepProgress active="queued" />
+
+        <div className="border border-border bg-surface rounded-2xl overflow-hidden">
+          <div className="px-6 py-8 sm:py-10 text-center border-b border-border bg-accent-soft">
+            <span className="inline-flex items-center justify-center w-12 h-12 bg-accent rounded-full">
+              <svg className="h-6 w-6 text-accent-ink" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </span>
+            <h1 className="mt-5 text-xl font-bold text-foreground">送信予約しました</h1>
+            <p className="text-sm text-muted mt-2 leading-relaxed">
+              {isOnline
+                ? "サーバへの送信が完了しなかったため、送信待ちに保存しました。"
+                : "オフラインのため送信待ちに保存しました。"}
+              <br />
+              圏内になれば自動的に送信されます。
+            </p>
+          </div>
+          <div className="px-6 py-5 text-xs text-subtle leading-relaxed">
+            <p>
+              送信状態は「送信待ち一覧」でいつでも確認・再送できます。
+              この端末から離れる前に、念のため一度オンラインで開き直すことを推奨します。
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-8 flex flex-col sm:flex-row gap-3">
+          <Link
+            href="/outbox"
+            className="flex-1 h-12 inline-flex items-center justify-center gap-2 border border-border bg-surface text-foreground rounded-lg text-sm font-semibold hover:bg-surface-muted transition-colors"
+          >
+            送信待ち一覧
+            <span aria-hidden>→</span>
+          </Link>
+          <Link
+            href="/"
+            className="flex-1 h-12 inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99]"
+          >
+            発注画面に戻る
+            <span aria-hidden>→</span>
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   if (step === "done") {
     return (
@@ -203,6 +378,15 @@ export default function CartForm({ offices, customer }: Props) {
             資材を探す
             <span aria-hidden>→</span>
           </Link>
+          <div className="mt-4">
+            <Link
+              href="/drafts"
+              className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors"
+            >
+              下書き一覧を見る
+              <span aria-hidden>→</span>
+            </Link>
+          </div>
         </div>
       </main>
     );
@@ -214,12 +398,20 @@ export default function CartForm({ offices, customer }: Props) {
 
       {step === "cart" && (
         <>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors mb-3"
-          >
-            <span aria-hidden>←</span> 発注画面に戻る
-          </Link>
+          <div className="flex items-center justify-between mb-3">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors"
+            >
+              <span aria-hidden>←</span> 発注画面に戻る
+            </Link>
+            <Link
+              href="/drafts"
+              className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors"
+            >
+              下書き一覧 <span aria-hidden>→</span>
+            </Link>
+          </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground mb-6">カート</h1>
 
           <div className="border border-border bg-surface rounded-xl overflow-hidden mb-6">
@@ -494,9 +686,14 @@ export default function CartForm({ offices, customer }: Props) {
             <button
               onClick={handleSubmit}
               disabled={!isFormValid || isPending}
+              title={!isOnline ? "オフラインのため、送信は圏内になってから自動実行されます" : undefined}
               className="flex-1 h-11 inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99]"
             >
-              {isPending ? "送信中…" : "発注する"}
+              {isPending
+                ? "送信中…"
+                : !isOnline
+                ? "オフライン送信予約する"
+                : "発注する"}
               <span aria-hidden>→</span>
             </button>
           </div>
