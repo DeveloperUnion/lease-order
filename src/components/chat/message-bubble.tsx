@@ -72,7 +72,7 @@ export default function MessageBubble({
                 <a key={a.path} href={a.url} target="_blank" rel="noopener noreferrer">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={a.thumbnail_url ?? a.url}
+                    src={a.url}
                     alt={a.name}
                     loading="lazy"
                     decoding="async"

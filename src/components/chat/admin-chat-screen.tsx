@@ -218,7 +218,6 @@ export default function AdminChatScreen({
                 attachments: (row.attachments ?? []).map<SignedAttachment>((a) => ({
                   ...a,
                   url: null,
-                  thumbnail_url: null,
                 })),
                 order_ref: null,
                 created_at: row.created_at,
@@ -262,7 +261,7 @@ export default function AdminChatScreen({
       id: tempId,
       sender_type: "admin",
       body: input.body,
-      attachments: input.attachments.map<SignedAttachment>((a) => ({ ...a, url: null, thumbnail_url: null })),
+      attachments: input.attachments.map<SignedAttachment>((a) => ({ ...a, url: null })),
       order_ref: null,
       created_at: new Date().toISOString(),
       read_at: null,

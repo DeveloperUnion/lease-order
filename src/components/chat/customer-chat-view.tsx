@@ -173,7 +173,6 @@ export default function CustomerChatView({
               attachments: (row.attachments ?? []).map<SignedAttachment>((a) => ({
                 ...a,
                 url: null,
-                thumbnail_url: null,
               })),
               order_ref: null,
               created_at: row.created_at,
@@ -213,7 +212,7 @@ export default function CustomerChatView({
       id: tempId,
       sender_type: "customer",
       body: input.body,
-      attachments: input.attachments.map<SignedAttachment>((a) => ({ ...a, url: null, thumbnail_url: null })),
+      attachments: input.attachments.map<SignedAttachment>((a) => ({ ...a, url: null })),
       order_ref: null,
       created_at: new Date().toISOString(),
       read_at: null,
