@@ -921,6 +921,138 @@ export async function removeAdminUser(id: string) {
 // Spec groups / options / variant ↔ option binding
 // ============================================================
 
+// 全 active spec_groups × spec_options のクロスプロダクトから不足する variant
+// を自動生成。既存 variants は触らず、組み合わせが一致する variant が無いもの
+// だけを追加する。SKU や単位は admin が後で個別調整できるよう空のままにする。
+async function syncVariantsForMaterial(
+  materialId: string,
+  tenantId: string
+): Promise<void> {
+  const supabase = await getSupabaseTenant();
+
+  // 全 active spec_groups + active spec_options をロード
+  const { data: groupsData, error: gErr } = await supabase
+    .from("spec_groups")
+    .select(
+      "id, name, sort_order, spec_options(id, label, sort_order, is_active)"
+    )
+    .eq("material_id", materialId)
+    .eq("is_active", true)
+    .order("sort_order");
+  if (gErr) throw new Error(`仕様読み込みに失敗: ${gErr.message}`);
+
+  type GroupRow = {
+    id: string;
+    name: string;
+    sort_order: number;
+    spec_options:
+      | { id: string; label: string; sort_order: number; is_active: boolean }[]
+      | null;
+  };
+  const groups = (groupsData ?? []) as unknown as GroupRow[];
+  const activeGroups = groups
+    .map((g) => ({
+      ...g,
+      options: (g.spec_options ?? [])
+        .filter((o) => o.is_active)
+        .sort((a, b) => a.sort_order - b.sort_order),
+    }))
+    .filter((g) => g.options.length > 0);
+
+  // 仕様グループも選択肢もなければ variant の追加は不要
+  if (activeGroups.length === 0) return;
+
+  // 既存 variants と紐付をロード
+  const { data: variantsData, error: vErr } = await supabase
+    .from("material_variants")
+    .select(
+      "id, sort_order, material_variant_options(spec_group_id, spec_option_id)"
+    )
+    .eq("material_id", materialId);
+  if (vErr) throw new Error(`バリエーション読み込みに失敗: ${vErr.message}`);
+
+  type VariantRow = {
+    id: string;
+    sort_order: number;
+    material_variant_options:
+      | { spec_group_id: string; spec_option_id: string }[]
+      | null;
+  };
+  const variants = (variantsData ?? []) as unknown as VariantRow[];
+
+  // 既存 variant の組み合わせシグネチャ
+  const signatureOf = (
+    selections: { spec_group_id: string; spec_option_id: string }[]
+  ) =>
+    [...selections]
+      .map((s) => `${s.spec_group_id}=${s.spec_option_id}`)
+      .sort()
+      .join("|");
+  const existing = new Set<string>();
+  for (const v of variants) {
+    const sels = v.material_variant_options ?? [];
+    if (sels.length !== activeGroups.length) continue;
+    existing.add(signatureOf(sels));
+  }
+
+  // 全組み合わせを生成
+  type Combo = {
+    selections: { spec_group_id: string; spec_option_id: string }[];
+    name: string;
+  };
+  const combos: Combo[] = [];
+  function expand(idx: number, sel: Combo["selections"], labels: string[]) {
+    if (idx === activeGroups.length) {
+      combos.push({ selections: [...sel], name: labels.join(" / ") });
+      return;
+    }
+    const g = activeGroups[idx];
+    for (const o of g.options) {
+      sel.push({ spec_group_id: g.id, spec_option_id: o.id });
+      labels.push(o.label);
+      expand(idx + 1, sel, labels);
+      sel.pop();
+      labels.pop();
+    }
+  }
+  expand(0, [], []);
+
+  // 不足分のみ insert
+  let nextSort = (variants.reduce((m, v) => Math.max(m, v.sort_order), 0) || 0) + 1;
+  for (const c of combos) {
+    if (existing.has(signatureOf(c.selections))) continue;
+
+    const { data: variantRow, error: insErr } = await supabase
+      .from("material_variants")
+      .insert({
+        tenant_id: tenantId,
+        material_id: materialId,
+        name: c.name,
+        spec: {},
+        sort_order: nextSort++,
+        is_active: true,
+      })
+      .select("id")
+      .single();
+    if (insErr || !variantRow) {
+      throw new Error(`バリエーション自動追加に失敗: ${insErr?.message ?? "unknown"}`);
+    }
+    const { error: linkErr } = await supabase
+      .from("material_variant_options")
+      .insert(
+        c.selections.map((s) => ({
+          variant_id: variantRow.id,
+          spec_group_id: s.spec_group_id,
+          spec_option_id: s.spec_option_id,
+          tenant_id: tenantId,
+        }))
+      );
+    if (linkErr) {
+      throw new Error(`バリエーション紐付に失敗: ${linkErr.message}`);
+    }
+  }
+}
+
 export type SpecGroupInput = {
   name: string;
   description: string | null;
@@ -943,7 +1075,7 @@ export async function createSpecGroup(
 ) {
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
-  if (!input.name.trim()) throw new Error("仕様グループ名は必須です");
+  if (!input.name.trim()) throw new Error("仕様名は必須です");
   const supabase = await getSupabaseTenant();
   const { error } = await supabase.from("spec_groups").insert({
     tenant_id: tenantId,
@@ -955,7 +1087,8 @@ export async function createSpecGroup(
     sort_order: input.sortOrder,
     is_active: input.isActive,
   });
-  if (error) throw new Error(`仕様グループの追加に失敗しました: ${error.message}`);
+  if (error) throw new Error(`仕様の追加に失敗しました: ${error.message}`);
+  await syncVariantsForMaterial(materialId, tenantId);
   revalidatePath(`/admin/materials/${materialId}`);
 }
 
@@ -966,7 +1099,7 @@ export async function updateSpecGroup(
 ) {
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
-  if (!input.name.trim()) throw new Error("仕様グループ名は必須です");
+  if (!input.name.trim()) throw new Error("仕様名は必須です");
   const supabase = await getSupabaseTenant();
   const { error } = await supabase
     .from("spec_groups")
@@ -981,7 +1114,8 @@ export async function updateSpecGroup(
     })
     .eq("id", groupId)
     .eq("material_id", materialId);
-  if (error) throw new Error(`仕様グループの更新に失敗しました: ${error.message}`);
+  if (error) throw new Error(`仕様の更新に失敗しました: ${error.message}`);
+  await syncVariantsForMaterial(materialId, tenantId);
   revalidatePath(`/admin/materials/${materialId}`);
 }
 
@@ -997,7 +1131,7 @@ export async function deleteSpecGroup(materialId: string, groupId: string) {
   if (countErr) throw countErr;
   if ((count ?? 0) > 0) {
     throw new Error(
-      "このグループはバリエーションに紐付いているため削除できません。非公開にしてください。"
+      "この仕様はバリエーションに紐付いているため削除できません。非公開にしてください。"
     );
   }
 
@@ -1006,7 +1140,7 @@ export async function deleteSpecGroup(materialId: string, groupId: string) {
     .delete()
     .eq("id", groupId)
     .eq("material_id", materialId);
-  if (error) throw new Error(`仕様グループの削除に失敗しました: ${error.message}`);
+  if (error) throw new Error(`仕様の削除に失敗しました: ${error.message}`);
   revalidatePath(`/admin/materials/${materialId}`);
 }
 
@@ -1024,7 +1158,7 @@ async function assertSpecGroupOwnedByMaterial(
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (error) throw error;
-  if (!data) throw new Error("対象の仕様グループが見つかりません");
+  if (!data) throw new Error("対象の仕様が見つかりません");
 }
 
 export async function createSpecOption(
@@ -1035,7 +1169,7 @@ export async function createSpecOption(
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
   await assertSpecGroupOwnedByMaterial(groupId, materialId, tenantId);
-  if (!input.label.trim()) throw new Error("選択肢ラベルは必須です");
+  if (!input.label.trim()) throw new Error("バリエーション名は必須です");
   const supabase = await getSupabaseTenant();
   const { error } = await supabase.from("spec_options").insert({
     tenant_id: tenantId,
@@ -1045,7 +1179,8 @@ export async function createSpecOption(
     sort_order: input.sortOrder,
     is_active: input.isActive,
   });
-  if (error) throw new Error(`選択肢の追加に失敗しました: ${error.message}`);
+  if (error) throw new Error(`バリエーションの追加に失敗しました: ${error.message}`);
+  await syncVariantsForMaterial(materialId, tenantId);
   revalidatePath(`/admin/materials/${materialId}`);
 }
 
@@ -1058,7 +1193,7 @@ export async function updateSpecOption(
   const tenantId = await getTenantId();
   await assertMaterialOwnedByTenant(materialId, tenantId);
   await assertSpecGroupOwnedByMaterial(groupId, materialId, tenantId);
-  if (!input.label.trim()) throw new Error("選択肢ラベルは必須です");
+  if (!input.label.trim()) throw new Error("バリエーション名は必須です");
   const supabase = await getSupabaseTenant();
   const { error } = await supabase
     .from("spec_options")
@@ -1071,7 +1206,8 @@ export async function updateSpecOption(
     })
     .eq("id", optionId)
     .eq("spec_group_id", groupId);
-  if (error) throw new Error(`選択肢の更新に失敗しました: ${error.message}`);
+  if (error) throw new Error(`バリエーションの更新に失敗しました: ${error.message}`);
+  await syncVariantsForMaterial(materialId, tenantId);
   revalidatePath(`/admin/materials/${materialId}`);
 }
 
@@ -1092,7 +1228,7 @@ export async function deleteSpecOption(
   if (countErr) throw countErr;
   if ((count ?? 0) > 0) {
     throw new Error(
-      "この選択肢はバリエーションに紐付いているため削除できません。非公開にしてください。"
+      "このバリエーションは既存の組み合わせで使われているため削除できません。非公開にしてください。"
     );
   }
 
@@ -1101,7 +1237,7 @@ export async function deleteSpecOption(
     .delete()
     .eq("id", optionId)
     .eq("spec_group_id", groupId);
-  if (error) throw new Error(`選択肢の削除に失敗しました: ${error.message}`);
+  if (error) throw new Error(`バリエーションの削除に失敗しました: ${error.message}`);
   revalidatePath(`/admin/materials/${materialId}`);
 }
 
