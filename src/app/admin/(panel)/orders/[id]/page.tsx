@@ -12,6 +12,7 @@ import {
 } from "@/components/admin/ui";
 import OrderActions from "./order-actions";
 import MapView from "@/components/map/map-view";
+import CompletedReturnsSection from "./completed-returns-section";
 
 type OrderDetailItem = NonNullable<Awaited<ReturnType<typeof getOrder>>>["items"][number];
 
@@ -248,6 +249,8 @@ export default async function OrderDetailPage({
           caption="注文明細"
         />
       </section>
+
+      <CompletedReturnsSection orderId={order.id} />
 
       <section>
         <SectionRule label="操作" className="mb-4" />

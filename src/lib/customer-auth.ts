@@ -63,11 +63,40 @@ export function verifySessionToken(token: string | undefined | null): Payload | 
   }
 }
 
+// フィードバック収集モード (DISABLE_AUTH=1) のとき、未ログイン訪問者には
+// このテナントの最古 active customer を「ゲスト identity」として割り当てる。
+// 既存ログインセッションがある場合はこちらに入らず従来分岐を通る。
+async function resolveGuestCustomer(): Promise<CustomerSession | null> {
+  const tenantId = await getTenantId();
+  const { data } = await supabaseAdmin
+    .from("customers")
+    .select("id, tenant_id, company_id, name, default_address, phone, contact_email, must_change_password")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    id: data.id,
+    tenant_id: data.tenant_id,
+    company_id: data.company_id,
+    name: data.name,
+    default_address: data.default_address,
+    phone: data.phone,
+    contact_email: data.contact_email,
+    must_change_password: data.must_change_password,
+  };
+}
+
 export const getCurrentCustomer = cache(async (): Promise<CustomerSession | null> => {
   const store = await cookies();
   const token = store.get(COOKIE_NAME)?.value;
   const payload = verifySessionToken(token);
-  if (!payload) return null;
+  if (!payload) {
+    if (process.env.DISABLE_AUTH === "1") return resolveGuestCustomer();
+    return null;
+  }
 
   const tenantId = await getTenantId();
   if (payload.tid !== tenantId) return null;

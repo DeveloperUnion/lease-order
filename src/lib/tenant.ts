@@ -6,7 +6,7 @@ import { supabaseAdmin } from "./supabase-admin";
 const PRODUCT_DOMAIN = "lease-order.kensetsu-tech.com";
 const FALLBACK_SLUG = "union";
 
-function extractSlugFromHost(rawHost: string): string | null {
+export function extractSlugFromHost(rawHost: string): string | null {
   const host = rawHost.split(":")[0].toLowerCase();
   const noStaging = host.startsWith("staging.") ? host.slice("staging.".length) : host;
   if (noStaging === PRODUCT_DOMAIN) return FALLBACK_SLUG;

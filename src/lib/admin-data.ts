@@ -557,6 +557,74 @@ export async function listOrdersInRange(
   return (data ?? []) as unknown as CalendarOrderRow[];
 }
 
+export type CalendarScheduledReturnRow = {
+  id: string;
+  order_id: string;
+  order_number: string;
+  company_name: string;
+  site_name: string | null;
+  scheduled_date: string;
+  transport_method: "pickup" | "dropoff";
+  order_status: OrderStatus;
+};
+
+export async function listScheduledReturnsInRange(
+  fromISO: string,
+  toISO: string,
+): Promise<CalendarScheduledReturnRow[]> {
+  const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
+    .from("return_requests")
+    .select(
+      "id, scheduled_date, transport_method, order_items!inner(id, orders!inner(id, order_number, company_name, site_name, status))"
+    )
+    .eq("tenant_id", tenantId)
+    .eq("status", "scheduled")
+    .gte("scheduled_date", fromISO)
+    .lte("scheduled_date", toISO)
+    .order("scheduled_date", { ascending: true });
+  if (error) throw error;
+
+  type Row = {
+    id: string;
+    scheduled_date: string;
+    transport_method: "pickup" | "dropoff";
+    order_items: {
+      id: string;
+      orders: {
+        id: string;
+        order_number: string;
+        company_name: string;
+        site_name: string | null;
+        status: OrderStatus;
+      } | null;
+    } | null;
+  };
+
+  // 同じ order に対して複数の scheduled が同日にある場合は 1 件にまとめる。
+  const seen = new Set<string>();
+  const out: CalendarScheduledReturnRow[] = [];
+  for (const r of (data ?? []) as unknown as Row[]) {
+    const order = r.order_items?.orders;
+    if (!order) continue;
+    const dedupeKey = `${order.id}_${r.scheduled_date}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    out.push({
+      id: r.id,
+      order_id: order.id,
+      order_number: order.order_number,
+      company_name: order.company_name,
+      site_name: order.site_name,
+      scheduled_date: r.scheduled_date,
+      transport_method: r.transport_method,
+      order_status: order.status,
+    });
+  }
+  return out;
+}
+
 export { statusLabels } from "./order-status";
 
 export type AdminUserRow = {
@@ -597,6 +665,20 @@ export type PendingReturnRequest = PendingRequestBase & {
   type: "return";
   id: string;
   requested_quantity_delta: number;
+  transport_method: "pickup" | "dropoff" | null;
+  desired_date: string | null;
+  dropoff_office_id: string | null;
+  dropoff_office_name: string | null;
+};
+
+export type ScheduledReturnRequest = PendingRequestBase & {
+  type: "return";
+  id: string;
+  requested_quantity_delta: number;
+  transport_method: "pickup" | "dropoff";
+  scheduled_date: string;
+  dropoff_office_id: string | null;
+  dropoff_office_name: string | null;
 };
 
 export type PendingExtensionRequest = PendingRequestBase & {
@@ -630,7 +712,14 @@ type RequestRowBase = {
     } | null;
   } | null;
 };
-type ReturnRequestRow = RequestRowBase & { requested_quantity_delta: number };
+type ReturnRequestRow = RequestRowBase & {
+  requested_quantity_delta: number;
+  transport_method: "pickup" | "dropoff" | null;
+  desired_date: string | null;
+  dropoff_office_id: string | null;
+  scheduled_date: string | null;
+  offices: { id: string; name: string } | null;
+};
 type ExtensionRequestRow = RequestRowBase & {
   previous_end_date: string;
   new_end_date: string;
@@ -639,13 +728,16 @@ type ExtensionRequestRow = RequestRowBase & {
 const PENDING_REQUEST_SELECT =
   "id, order_item_id, reason, requested_at, order_items!inner(id, material_name, orders!inner(id, order_number, site_name, company_name, contact_name))";
 
+const RETURN_TRANSPORT_FIELDS =
+  "transport_method, desired_date, dropoff_office_id, scheduled_date, offices:dropoff_office_id(id, name)";
+
 export async function listPendingRequests(): Promise<PendingRequest[]> {
   const tenantId = await getTenantId();
   const supabase = await getSupabaseTenant();
   const [returnsRes, extensionsRes] = await Promise.all([
     supabase
       .from("return_requests")
-      .select(`${PENDING_REQUEST_SELECT}, requested_quantity_delta`)
+      .select(`${PENDING_REQUEST_SELECT}, requested_quantity_delta, ${RETURN_TRANSPORT_FIELDS}`)
       .eq("tenant_id", tenantId)
       .eq("status", "pending"),
     supabase
@@ -675,6 +767,10 @@ export async function listPendingRequests(): Promise<PendingRequest[]> {
       contact_name: order.contact_name,
       order_item_id: oi.id,
       material_name: oi.material_name,
+      transport_method: r.transport_method,
+      desired_date: r.desired_date,
+      dropoff_office_id: r.dropoff_office_id,
+      dropoff_office_name: r.offices?.name ?? null,
     });
   }
   for (const e of (extensionsRes.data ?? []) as unknown as ExtensionRequestRow[]) {
@@ -701,17 +797,60 @@ export async function listPendingRequests(): Promise<PendingRequest[]> {
   return items;
 }
 
+// 受領待ちの返却（status='scheduled'）を一覧で取得。
+// pending と分けて表示することで、検品待ちの量がひと目で分かる。
+export async function listScheduledReturns(): Promise<ScheduledReturnRequest[]> {
+  const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
+  const { data, error } = await supabase
+    .from("return_requests")
+    .select(`${PENDING_REQUEST_SELECT}, requested_quantity_delta, ${RETURN_TRANSPORT_FIELDS}`)
+    .eq("tenant_id", tenantId)
+    .eq("status", "scheduled")
+    .order("scheduled_date", { ascending: true });
+  if (error) throw error;
+
+  const items: ScheduledReturnRequest[] = [];
+  for (const r of (data ?? []) as unknown as ReturnRequestRow[]) {
+    const oi = r.order_items;
+    const order = oi?.orders;
+    if (!oi || !order) continue;
+    if (!r.transport_method || !r.scheduled_date) continue;
+    items.push({
+      type: "return",
+      id: r.id,
+      requested_quantity_delta: r.requested_quantity_delta,
+      reason: r.reason,
+      requested_at: r.requested_at,
+      order_id: order.id,
+      order_number: order.order_number,
+      site_name: order.site_name,
+      company_name: order.company_name,
+      contact_name: order.contact_name,
+      order_item_id: oi.id,
+      material_name: oi.material_name,
+      transport_method: r.transport_method,
+      scheduled_date: r.scheduled_date,
+      dropoff_office_id: r.dropoff_office_id,
+      dropoff_office_name: r.offices?.name ?? null,
+    });
+  }
+  return items;
+}
+
 // 申請は発注単位で一括承認するため、バッジは「申請が来ている発注数」をカウントする。
 // pending な申請数 × order_item の JOIN だけ取り、order_id で dedupe する。
 export async function countPendingRequests(): Promise<number> {
   const tenantId = await getTenantId();
   const supabase = await getSupabaseTenant();
+  // 返却は pending（予定確定待ち）と scheduled（受領待ち）の両方が「要対応」。
+  // 延長は pending のみ。
   const [returnsRes, extensionsRes] = await Promise.all([
     supabase
       .from("return_requests")
-      .select("order_items!inner(order_id)")
+      .select("status, order_items!inner(order_id)")
       .eq("tenant_id", tenantId)
-      .eq("status", "pending"),
+      .in("status", ["pending", "scheduled"]),
     supabase
       .from("lease_extensions")
       .select("order_items!inner(order_id)")

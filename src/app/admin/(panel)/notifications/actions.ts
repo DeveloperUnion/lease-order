@@ -1,25 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getTenantId } from "@/lib/tenant";
 import { markAllRead, markRead } from "@/lib/notifications-data";
-
-async function currentAdminUserId(tenantId: string): Promise<string | null> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user?.email) return null;
-  const { data } = await supabaseAdmin
-    .from("admin_users")
-    .select("id")
-    .eq("tenant_id", tenantId)
-    .eq("email", user.email.toLowerCase())
-    .maybeSingle();
-  return data?.id ?? null;
-}
+import { currentAdminUserId } from "@/lib/current-admin";
 
 export async function markAdminNotificationsRead(ids: string[]) {
   const tenantId = await getTenantId();

@@ -7,7 +7,14 @@ import { getTenantId } from "@/lib/tenant";
 import { notifyAdmins } from "@/lib/notifications";
 
 export type ItemAction =
-  | { type: "return"; orderItemId: string; deltaQuantity: number }
+  | {
+      type: "return";
+      orderItemId: string;
+      deltaQuantity: number;
+      transportMethod: "pickup" | "dropoff";
+      desiredDate: string;
+      dropoffOfficeId?: string | null;
+    }
   | { type: "extend"; orderItemId: string; newEndDate: string; reason?: string };
 
 export type ProcessResult = { ok: true } | { ok: false; error: string };
@@ -78,7 +85,7 @@ export async function processItemActions(input: {
         .from("return_requests")
         .select("order_item_id, requested_quantity_delta")
         .in("order_item_id", itemIds)
-        .eq("status", "pending"),
+        .in("status", ["pending", "scheduled"]),
       supabase
         .from("lease_extensions")
         .select("order_item_id")
@@ -96,7 +103,13 @@ export async function processItemActions(input: {
     }
   }
 
-  type ParsedReturn = { item: Item; delta: number };
+  type ParsedReturn = {
+    item: Item;
+    delta: number;
+    transportMethod: "pickup" | "dropoff";
+    desiredDate: string;
+    dropoffOfficeId: string | null;
+  };
   type ParsedExtend = {
     item: Item;
     previousEndDate: string | null;
@@ -120,7 +133,24 @@ export async function processItemActions(input: {
       if (delta > available) {
         return { ok: false, error: "申請中・返却済みを除いた残りを超えています" };
       }
-      returns.push({ item, delta });
+      if (a.transportMethod !== "pickup" && a.transportMethod !== "dropoff") {
+        return { ok: false, error: "輸送手段を選択してください" };
+      }
+      if (!ISO_DATE.test(a.desiredDate)) {
+        return { ok: false, error: "返却希望日の形式が不正です" };
+      }
+      const dropoffOfficeId =
+        a.transportMethod === "dropoff" ? a.dropoffOfficeId ?? null : null;
+      if (a.transportMethod === "dropoff" && !dropoffOfficeId) {
+        return { ok: false, error: "持ち込み先の業所を選択してください" };
+      }
+      returns.push({
+        item,
+        delta,
+        transportMethod: a.transportMethod,
+        desiredDate: a.desiredDate,
+        dropoffOfficeId,
+      });
     } else if (a.type === "extend") {
       if (!ISO_DATE.test(a.newEndDate)) {
         return { ok: false, error: "延長日付の形式が不正です" };
@@ -147,6 +177,9 @@ export async function processItemActions(input: {
         order_item_id: r.item.id,
         requested_quantity_delta: r.delta,
         requested_by_customer_id: customer.id,
+        transport_method: r.transportMethod,
+        desired_date: r.desiredDate,
+        dropoff_office_id: r.dropoffOfficeId,
       }))
     );
     if (error) {
