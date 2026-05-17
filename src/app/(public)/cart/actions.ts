@@ -18,7 +18,12 @@ type SubmitOrderInput = {
   pickupOfficeId: string;
   leaseStartDate: string;
   leaseEndDate: string;
-  items: { materialId: string; quantity: number }[];
+  items: {
+    materialId: string;
+    variantId?: string;
+    variantName?: string;
+    quantity: number;
+  }[];
 };
 
 function sanitizeCoord(v: number | null, min: number, max: number): number | null {
@@ -71,6 +76,8 @@ export async function submitOrder(
   const items = input.items
     .map((i) => ({
       materialId: String(i.materialId),
+      variantId: i.variantId ? String(i.variantId) : null,
+      variantName: i.variantName ?? null,
       quantity: Math.max(1, Math.floor(Number(i.quantity) || 0)),
     }))
     .filter((i) => i.materialId);
@@ -119,6 +126,34 @@ export async function submitOrder(
     return { ok: false, error: "存在しない資材が含まれています" };
   }
 
+  // 指定された variant_id がアクティブかつ同 material に属することを再 validate
+  const variantIds = Array.from(
+    new Set(items.map((i) => i.variantId).filter((v): v is string => !!v))
+  );
+  if (variantIds.length > 0) {
+    const { data: variants, error: vErr } = await supabase
+      .from("material_variants")
+      .select("id, material_id, name, is_active")
+      .eq("tenant_id", tenantId)
+      .in("id", variantIds);
+    if (vErr) {
+      console.error("submitOrder: variants lookup failed", vErr);
+      return { ok: false, error: "発注の登録に失敗しました" };
+    }
+    const variantMap = new Map((variants ?? []).map((v) => [v.id, v]));
+    for (const it of items) {
+      if (!it.variantId) continue;
+      const v = variantMap.get(it.variantId);
+      if (!v || !v.is_active || v.material_id !== it.materialId) {
+        return {
+          ok: false,
+          error: "在庫構成が変更されました。カートを更新してください。",
+        };
+      }
+      it.variantName = v.name;
+    }
+  }
+
   const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}`;
 
   const { data: order, error: orderErr } = await supabase
@@ -164,6 +199,8 @@ export async function submitOrder(
       order_id: order.id,
       material_id: i.materialId,
       material_name: materialMap.get(i.materialId)!,
+      variant_id: i.variantId,
+      variant_name: i.variantName,
       quantity: i.quantity,
       lease_end_date: input.leaseEndDate,
     }))

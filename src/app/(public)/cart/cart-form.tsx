@@ -118,6 +118,8 @@ export default function CartForm({ offices, customer }: Props) {
         leaseEndDate,
         items: items.map((i) => ({
           materialId: i.material.id,
+          variantId: i.variantId,
+          variantName: i.variantName,
           quantity: i.quantity,
         })),
       });
@@ -217,54 +219,64 @@ export default function CartForm({ offices, customer }: Props) {
           <h1 className="text-2xl font-bold tracking-tight text-foreground mb-6">カート</h1>
 
           <div className="border border-border bg-surface rounded-xl overflow-hidden mb-6">
-            {items.map((item) => (
-              <div
-                key={item.material.id}
-                className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-b-0"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">
-                    {item.material.name}
-                  </p>
-                  {item.material.spec && Object.keys(item.material.spec).length > 0 && (
-                    <p className="text-xs text-subtle mt-0.5 truncate">
-                      {Object.entries(item.material.spec)
-                        .slice(0, 2)
-                        .map(([k, v]) => `${k}: ${v}`)
-                        .join("  /  ")}
-                    </p>
-                  )}
-                </div>
-                <div className="inline-flex items-stretch border border-border rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => updateQuantity(item.material.id, Math.max(1, item.quantity - 1))}
-                    aria-label="数量を減らす"
-                    className="w-8 inline-flex items-center justify-center text-muted hover:bg-surface-muted hover:text-foreground transition-colors"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" d="M5 12h14" /></svg>
-                  </button>
-                  <span className="w-9 text-center self-center text-sm font-semibold text-foreground border-x border-border h-8 leading-8 tabular-nums">
-                    {item.quantity}
-                  </span>
-                  <button
-                    onClick={() => updateQuantity(item.material.id, item.quantity + 1)}
-                    aria-label="数量を増やす"
-                    className="w-8 inline-flex items-center justify-center text-muted hover:bg-surface-muted hover:text-foreground transition-colors"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
-                  </button>
-                </div>
-                <button
-                  onClick={() => removeItem(item.material.id)}
-                  aria-label="削除"
-                  className="ml-1 inline-flex items-center justify-center w-8 h-8 rounded-lg text-subtle hover:bg-surface-muted hover:text-danger transition-colors"
+            {items.map((item) => {
+              const selectionText = item.selections && item.selections.length > 0
+                ? item.selections.map((s) => `${s.group_name}: ${s.option_label}`).join("  /  ")
+                : item.material.spec && Object.keys(item.material.spec).length > 0
+                ? Object.entries(item.material.spec)
+                    .slice(0, 2)
+                    .map(([k, v]) => `${k}: ${v}`)
+                    .join("  /  ")
+                : null;
+              return (
+                <div
+                  key={item.cartLineId}
+                  className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-b-0"
                 >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6h12z" />
-                  </svg>
-                </button>
-              </div>
-            ))}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">
+                      {item.material.name}
+                      {item.variantName && (
+                        <span className="ml-2 text-xs font-normal text-muted">
+                          ({item.variantName})
+                        </span>
+                      )}
+                    </p>
+                    {selectionText && (
+                      <p className="text-xs text-subtle mt-0.5 truncate">{selectionText}</p>
+                    )}
+                  </div>
+                  <div className="inline-flex items-stretch border border-border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => updateQuantity(item.cartLineId, Math.max(1, item.quantity - 1))}
+                      aria-label="数量を減らす"
+                      className="w-8 inline-flex items-center justify-center text-muted hover:bg-surface-muted hover:text-foreground transition-colors"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" d="M5 12h14" /></svg>
+                    </button>
+                    <span className="w-9 text-center self-center text-sm font-semibold text-foreground border-x border-border h-8 leading-8 tabular-nums">
+                      {item.quantity}
+                    </span>
+                    <button
+                      onClick={() => updateQuantity(item.cartLineId, item.quantity + 1)}
+                      aria-label="数量を増やす"
+                      className="w-8 inline-flex items-center justify-center text-muted hover:bg-surface-muted hover:text-foreground transition-colors"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => removeItem(item.cartLineId)}
+                    aria-label="削除"
+                    className="ml-1 inline-flex items-center justify-center w-8 h-8 rounded-lg text-subtle hover:bg-surface-muted hover:text-danger transition-colors"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6h12z" />
+                    </svg>
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           <button
@@ -447,10 +459,15 @@ export default function CartForm({ offices, customer }: Props) {
             </div>
             {items.map((item) => (
               <div
-                key={item.material.id}
+                key={item.cartLineId}
                 className="flex items-baseline justify-between gap-3 px-4 py-2.5 border-b border-border last:border-b-0"
               >
-                <span className="text-sm text-foreground truncate">{item.material.name}</span>
+                <span className="text-sm text-foreground truncate">
+                  {item.material.name}
+                  {item.variantName && (
+                    <span className="ml-2 text-xs text-muted">({item.variantName})</span>
+                  )}
+                </span>
                 <span className="text-sm font-semibold text-foreground flex-shrink-0 tabular-nums">
                   × {item.quantity}
                 </span>
