@@ -46,10 +46,10 @@ export default function MessageBubble({
         {mine && msg.read_at ? <span className="ml-2 text-accent">既読</span> : null}
       </div>
       <div
-        className={`max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
+        className={`max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap border ${
           mine
-            ? "bg-accent text-accent-ink rounded-br-sm"
-            : "bg-surface-muted text-foreground rounded-bl-sm"
+            ? "bg-accent text-accent-ink rounded-br-sm border-accent-hover/40"
+            : "bg-surface text-foreground rounded-bl-sm border-border"
         }`}
       >
         {msg.order_ref ? (

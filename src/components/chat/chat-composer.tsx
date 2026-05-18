@@ -2,7 +2,6 @@
 
 import {
   useState,
-  useTransition,
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
@@ -33,9 +32,8 @@ export default function ChatComposer({
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
 
-  const canSubmit = !disabled && !uploading && !isPending && (body.trim() !== "" || attachments.length > 0);
+  const canSubmit = !disabled && !uploading && (body.trim() !== "" || attachments.length > 0);
 
   function handleSubmit(e?: FormEvent) {
     if (e) e.preventDefault();
@@ -45,15 +43,14 @@ export default function ChatComposer({
       attachments,
       orderId: quoted?.id ?? null,
     };
-    startTransition(async () => {
-      try {
-        await onSend(payload);
-        setBody("");
-        setAttachments([]);
-        onClearQuoted();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "送信に失敗しました");
-      }
+    // 入力欄を即クリアして次の入力を解放する。送信処理は裏で進行し、
+    // 失敗時のみエラー表示する (吹き出し自体は handleSend 側で楽観表示済み)。
+    setBody("");
+    setAttachments([]);
+    onClearQuoted();
+    setError(null);
+    onSend(payload).catch((err) => {
+      setError(err instanceof Error ? err.message : "送信に失敗しました");
     });
   }
 
