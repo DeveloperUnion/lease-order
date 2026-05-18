@@ -491,11 +491,26 @@ type AllOrdersRaw = {
 
 export type OrderStatusFilter = "active" | "completed" | "cancelled" | "all";
 
+export type ListOrdersOptions = {
+  /** デフォルト 50。ページ内に表示する最大件数。 */
+  limit?: number;
+  /** 直前ページ末尾の created_at。これより古い行を取得する（cursor pagination）。 */
+  cursorCreatedAt?: string | null;
+};
+
+export type ListOrdersResult = {
+  rows: CustomerOrderRow[];
+  /** さらに古い発注が残っていれば次の cursor をセット。 */
+  nextCursor: string | null;
+};
+
 export async function listAllOrdersByCustomer(
   customerId: string,
   tenantId: string,
-  statusFilter: OrderStatusFilter = "all"
-): Promise<CustomerOrderRow[]> {
+  statusFilter: OrderStatusFilter = "all",
+  opts: ListOrdersOptions = {}
+): Promise<ListOrdersResult> {
+  const limit = opts.limit ?? 50;
   let query = supabaseAdmin
     .from("orders")
     .select(
@@ -503,7 +518,13 @@ export async function listAllOrdersByCustomer(
     )
     .eq("tenant_id", tenantId)
     .eq("customer_id", customerId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    // limit + 1 件取得して「次がまだあるか」を判定する。
+    .limit(limit + 1);
+
+  if (opts.cursorCreatedAt) {
+    query = query.lt("created_at", opts.cursorCreatedAt);
+  }
 
   if (statusFilter === "completed") {
     query = query.eq("status", "completed");
@@ -516,8 +537,13 @@ export async function listAllOrdersByCustomer(
   const { data, error } = await query;
   if (error) throw error;
 
+  const raws = (data ?? []) as AllOrdersRaw[];
+  const hasMore = raws.length > limit;
+  const sliced = hasMore ? raws.slice(0, limit) : raws;
+  const nextCursor = hasMore ? sliced[sliced.length - 1]?.created_at ?? null : null;
+
   const today = todayIsoLocal();
-  return ((data ?? []) as AllOrdersRaw[]).map((raw) => {
+  const rows = sliced.map((raw) => {
     const items = raw.order_items ?? [];
     const activeItems = items.filter((it) => it.quantity - it.returned_quantity > 0);
     const overdueCount = activeItems.filter((it) => isItemOverdue(it.lease_end_date, today)).length;
@@ -534,6 +560,8 @@ export async function listAllOrdersByCustomer(
       created_at: raw.created_at,
     };
   });
+
+  return { rows, nextCursor };
 }
 
 export async function countOverdueForCustomer(customerId: string, tenantId: string): Promise<number> {

@@ -123,22 +123,49 @@ const fetchCategoriesCached = unstable_cache(
   { tags: ["catalog"], revalidate: 3600 }
 );
 
+// 4 階層 nested JOIN を cold で叩くとプランナーが重いので、
+//   1) materials + material_images + images
+//   2) spec_groups + spec_options
+// の 2 クエリを並列で投げ、JS 側で material_id 別に merge する。
+// 戻り型は MaterialRow と同じなので、既存の mapMaterial をそのまま使える。
 const fetchAllMaterialsCached = unstable_cache(
   async (tenantId: string): Promise<Material[]> => {
     const supabase = createTenantClient(tenantId);
-    const { data, error } = await supabase
-      .from("materials")
-      .select(
-        `id, category_id, name, description, spec, sort_order, is_active,
-         material_images(sort_order, is_primary, images(url)),
-         spec_groups(id, material_id, name, sort_order, is_active,
-           spec_options(id, spec_group_id, label, sort_order, is_active))`
-      )
-      .eq("tenant_id", tenantId)
-      .eq("is_active", true)
-      .order("sort_order");
-    if (error) throw error;
-    return (data ?? []).map((row) => mapMaterial(row as unknown as MaterialRow));
+    const [matsRes, groupsRes] = await Promise.all([
+      supabase
+        .from("materials")
+        .select(
+          "id, category_id, name, description, spec, sort_order, is_active, material_images(sort_order, is_primary, images(url))"
+        )
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("sort_order"),
+      supabase
+        .from("spec_groups")
+        .select(
+          "id, material_id, name, sort_order, is_active, spec_options(id, spec_group_id, label, sort_order, is_active)"
+        )
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("sort_order"),
+    ]);
+    if (matsRes.error) throw matsRes.error;
+    if (groupsRes.error) throw groupsRes.error;
+
+    const groupsByMaterial = new Map<string, SpecGroupRow[]>();
+    for (const g of (groupsRes.data ?? []) as unknown as SpecGroupRow[]) {
+      const arr = groupsByMaterial.get(g.material_id) ?? [];
+      arr.push(g);
+      groupsByMaterial.set(g.material_id, arr);
+    }
+
+    return (matsRes.data ?? []).map((row) => {
+      const r = row as unknown as Omit<MaterialRow, "spec_groups"> & {
+        spec_groups?: SpecGroupRow[] | null;
+      };
+      r.spec_groups = groupsByMaterial.get(r.id) ?? null;
+      return mapMaterial(r as MaterialRow);
+    });
   },
   ["catalog:materials"],
   { tags: ["catalog"], revalidate: 3600 }

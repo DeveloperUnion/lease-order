@@ -39,7 +39,7 @@ function formatDateLong(iso: string | null): string {
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; cursor?: string }>;
 }) {
   const customer = await requireCustomer();
   const sp = await searchParams;
@@ -49,7 +49,20 @@ export default async function OrdersPage({
       : "all"
   ) as OrderStatusFilter;
 
-  const orders = await listAllOrdersByCustomer(customer.id, customer.tenant_id, filter);
+  const { rows: orders, nextCursor } = await listAllOrdersByCustomer(
+    customer.id,
+    customer.tenant_id,
+    filter,
+    { cursorCreatedAt: sp.cursor ?? null }
+  );
+
+  function buildHref(opts: { status?: string; cursor?: string | null }): string {
+    const usp = new URLSearchParams();
+    if (opts.status && opts.status !== "all") usp.set("status", opts.status);
+    if (opts.cursor) usp.set("cursor", opts.cursor);
+    const qs = usp.toString();
+    return `/orders${qs ? `?${qs}` : ""}`;
+  }
 
   return (
     <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-7">
@@ -62,7 +75,7 @@ export default async function OrdersPage({
           return (
             <Link
               key={tab.value}
-              href={`/orders${tab.value === "all" ? "" : `?status=${tab.value}`}`}
+              href={buildHref({ status: tab.value })}
               className={`relative px-4 pt-2 pb-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
                 active ? "text-accent" : "text-muted hover:text-foreground"
               }`}
@@ -81,45 +94,57 @@ export default async function OrdersPage({
           <p className="text-sm text-muted">該当する発注がありません</p>
         </div>
       ) : (
-        <div className="mt-6 bg-surface border border-border rounded-xl overflow-hidden">
-          {orders.map((o) => {
-            const s = STATUS[o.status] ?? { label: o.status, tone: "neutral" as const };
-            return (
-              <Link
-                key={o.id}
-                href={`/rentals/${o.id}?from=orders`}
-                className="flex items-start gap-4 px-4 py-4 border-b border-border last:border-b-0 hover:bg-surface-muted transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-foreground truncate">
-                      {o.site_name ?? "現場未設定"}
-                    </span>
-                    <StatusBadge tone={s.tone}>{s.label}</StatusBadge>
-                    {o.overdue_item_count > 0 && (
-                      <StatusBadge tone="danger">
-                        期限超過 {o.overdue_item_count}
-                      </StatusBadge>
-                    )}
+        <>
+          <div className="mt-6 bg-surface border border-border rounded-xl overflow-hidden">
+            {orders.map((o) => {
+              const s = STATUS[o.status] ?? { label: o.status, tone: "neutral" as const };
+              return (
+                <Link
+                  key={o.id}
+                  href={`/rentals/${o.id}?from=orders`}
+                  className="flex items-start gap-4 px-4 py-4 border-b border-border last:border-b-0 hover:bg-surface-muted transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-foreground truncate">
+                        {o.site_name ?? "現場未設定"}
+                      </span>
+                      <StatusBadge tone={s.tone}>{s.label}</StatusBadge>
+                      {o.overdue_item_count > 0 && (
+                        <StatusBadge tone="danger">
+                          期限超過 {o.overdue_item_count}
+                        </StatusBadge>
+                      )}
+                    </div>
+                    <p className="text-xs text-subtle mt-0.5">{o.order_number}</p>
+                    <p className="text-xs text-subtle mt-0.5">
+                      {o.item_count} 品目
+                      {o.lease_start_date && o.lease_end_date && (
+                        <>
+                          <span className="mx-1.5 text-subtle">·</span>
+                          <span className="text-foreground">
+                            {formatDateLong(o.lease_start_date)} 〜 {formatDate(o.lease_end_date)}
+                          </span>
+                        </>
+                      )}
+                    </p>
                   </div>
-                  <p className="text-xs text-subtle mt-0.5">{o.order_number}</p>
-                  <p className="text-xs text-subtle mt-0.5">
-                    {o.item_count} 品目
-                    {o.lease_start_date && o.lease_end_date && (
-                      <>
-                        <span className="mx-1.5 text-subtle">·</span>
-                        <span className="text-foreground">
-                          {formatDateLong(o.lease_start_date)} 〜 {formatDate(o.lease_end_date)}
-                        </span>
-                      </>
-                    )}
-                  </p>
-                </div>
-                <span aria-hidden className="text-sm text-subtle flex-shrink-0 mt-0.5">→</span>
+                  <span aria-hidden className="text-sm text-subtle flex-shrink-0 mt-0.5">→</span>
+                </Link>
+              );
+            })}
+          </div>
+          {nextCursor && (
+            <div className="mt-6 flex justify-center">
+              <Link
+                href={buildHref({ status: filter, cursor: nextCursor })}
+                className="px-5 h-10 inline-flex items-center text-sm font-medium border border-border rounded-lg text-muted hover:text-foreground hover:border-border-strong transition-colors"
+              >
+                もっと見る
               </Link>
-            );
-          })}
-        </div>
+            </div>
+          )}
+        </>
       )}
     </main>
   );
