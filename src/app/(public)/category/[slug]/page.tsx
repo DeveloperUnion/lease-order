@@ -1,4 +1,4 @@
-import { getAllMaterials, getCategories } from "@/lib/data";
+import { getCategories, getMaterialsByCategory } from "@/lib/data";
 import { requireCustomer } from "@/lib/customer-auth";
 import CategoryView from "./category-view";
 
@@ -7,14 +7,13 @@ export default async function CategoryPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  // catalog cache と顧客認証を 1 ラウンドで並列実行。
-  // getCategories / getAllMaterials は同じ unstable_cache を引くので、
-  // 後段で category.id でフィルタするだけで OK。
-  const [, { slug }, categories, allMaterials] = await Promise.all([
+  // 認証とカテゴリ一覧を並列に。資材は category.id が確定してから取得。
+  // categories は cache hit が前提（小さい）。materials は category 単位の
+  // 軽量クエリ + Redis L3 で cold start も短時間で済む。
+  const [, { slug }, categories] = await Promise.all([
     requireCustomer(),
     params,
     getCategories(),
-    getAllMaterials(),
   ]);
 
   const category = categories.find((c) => c.slug === slug) ?? null;
@@ -27,7 +26,7 @@ export default async function CategoryPage({
     );
   }
 
-  const materials = allMaterials.filter((m) => m.category_id === category.id);
+  const materials = await getMaterialsByCategory(category.id);
 
   return (
     <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-6">

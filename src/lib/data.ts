@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { mintTenantJwt } from "./supabase-jwt";
 import { getTenantId } from "./tenant";
+import { readJson, writeJson } from "./redis-cache";
 import {
   Category,
   Material,
@@ -10,6 +11,33 @@ import {
   SpecGroup,
   SpecOption,
 } from "./types";
+
+// catalog 系のキャッシュ階層:
+//   L1: React cache() — 同一 request 内のデデュープ
+//   L2: unstable_cache — function instance ローカル (warm 時に高速)
+//   L3: Redis (Upstash) — function instance 間で共有、cold start も即応答
+//   L4: Supabase — 真実
+//
+// L3 が未設定 (env なし or @upstash/redis 未 install) の場合は単に skip され、
+// L1+L2 だけで動く (= 元の挙動)。
+//
+// admin が catalog を編集したときは src/lib/catalog-cache.ts の revalidateCatalog()
+// が L2 と L3 を同時に invalidate する。
+
+const REDIS_TTL_SECONDS = 60 * 60; // 1h
+const CATALOG_PREFIX = "catalog:";
+
+async function withRedis<T>(
+  key: string,
+  fetcher: () => Promise<T>
+): Promise<T> {
+  const cached = await readJson<T>(key);
+  if (cached != null) return cached;
+  const fresh = await fetcher();
+  // 非同期にし、Redis 書き込みは応答を待たない
+  void writeJson(key, fresh, REDIS_TTL_SECONDS);
+  return fresh;
+}
 
 type MaterialImageJoin = {
   sort_order: number;
@@ -110,14 +138,16 @@ function createTenantClient(tenantId: string): SupabaseClient {
 
 const fetchCategoriesCached = unstable_cache(
   async (tenantId: string): Promise<Category[]> => {
-    const supabase = createTenantClient(tenantId);
-    const { data, error } = await supabase
-      .from("categories")
-      .select("id, name, slug, image_url, sort_order")
-      .eq("tenant_id", tenantId)
-      .order("sort_order");
-    if (error) throw error;
-    return data ?? [];
+    return withRedis(`${CATALOG_PREFIX}cats:${tenantId}`, async () => {
+      const supabase = createTenantClient(tenantId);
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id, name, slug, image_url, sort_order")
+        .eq("tenant_id", tenantId)
+        .order("sort_order");
+      if (error) throw error;
+      return data ?? [];
+    });
   },
   ["catalog:categories"],
   { tags: ["catalog"], revalidate: 3600 }
@@ -128,60 +158,95 @@ const fetchCategoriesCached = unstable_cache(
 //   2) spec_groups + spec_options
 // の 2 クエリを並列で投げ、JS 側で material_id 別に merge する。
 // 戻り型は MaterialRow と同じなので、既存の mapMaterial をそのまま使える。
+// 4 階層 nested を JOIN すると cold プランが重いので、
+//   1) materials + material_images + images
+//   2) spec_groups + spec_options
+// を並列で投げ、JS で material_id 別に merge する。
+async function loadMaterialsAndMerge(
+  tenantId: string,
+  filter: { byCategory?: string } = {}
+): Promise<Material[]> {
+  const supabase = createTenantClient(tenantId);
+
+  let matsQuery = supabase
+    .from("materials")
+    .select(
+      "id, category_id, name, description, spec, sort_order, is_active, material_images(sort_order, is_primary, images(url))"
+    )
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+    .order("sort_order");
+  let groupsQuery = supabase
+    .from("spec_groups")
+    .select(
+      "id, material_id, name, sort_order, is_active, spec_options(id, spec_group_id, label, sort_order, is_active), materials!inner(id, category_id)"
+    )
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+    .order("sort_order");
+
+  if (filter.byCategory) {
+    matsQuery = matsQuery.eq("category_id", filter.byCategory);
+    // spec_groups 側は materials.category_id 経由で絞る（!inner join）
+    groupsQuery = groupsQuery.eq("materials.category_id", filter.byCategory);
+  }
+
+  const [matsRes, groupsRes] = await Promise.all([matsQuery, groupsQuery]);
+  if (matsRes.error) throw matsRes.error;
+  if (groupsRes.error) throw groupsRes.error;
+
+  const groupsByMaterial = new Map<string, SpecGroupRow[]>();
+  for (const g of (groupsRes.data ?? []) as unknown as SpecGroupRow[]) {
+    const arr = groupsByMaterial.get(g.material_id) ?? [];
+    arr.push(g);
+    groupsByMaterial.set(g.material_id, arr);
+  }
+
+  return (matsRes.data ?? []).map((row) => {
+    const r = row as unknown as Omit<MaterialRow, "spec_groups"> & {
+      spec_groups?: SpecGroupRow[] | null;
+    };
+    r.spec_groups = groupsByMaterial.get(r.id) ?? null;
+    return mapMaterial(r as MaterialRow);
+  });
+}
+
 const fetchAllMaterialsCached = unstable_cache(
   async (tenantId: string): Promise<Material[]> => {
-    const supabase = createTenantClient(tenantId);
-    const [matsRes, groupsRes] = await Promise.all([
-      supabase
-        .from("materials")
-        .select(
-          "id, category_id, name, description, spec, sort_order, is_active, material_images(sort_order, is_primary, images(url))"
-        )
-        .eq("tenant_id", tenantId)
-        .eq("is_active", true)
-        .order("sort_order"),
-      supabase
-        .from("spec_groups")
-        .select(
-          "id, material_id, name, sort_order, is_active, spec_options(id, spec_group_id, label, sort_order, is_active)"
-        )
-        .eq("tenant_id", tenantId)
-        .eq("is_active", true)
-        .order("sort_order"),
-    ]);
-    if (matsRes.error) throw matsRes.error;
-    if (groupsRes.error) throw groupsRes.error;
-
-    const groupsByMaterial = new Map<string, SpecGroupRow[]>();
-    for (const g of (groupsRes.data ?? []) as unknown as SpecGroupRow[]) {
-      const arr = groupsByMaterial.get(g.material_id) ?? [];
-      arr.push(g);
-      groupsByMaterial.set(g.material_id, arr);
-    }
-
-    return (matsRes.data ?? []).map((row) => {
-      const r = row as unknown as Omit<MaterialRow, "spec_groups"> & {
-        spec_groups?: SpecGroupRow[] | null;
-      };
-      r.spec_groups = groupsByMaterial.get(r.id) ?? null;
-      return mapMaterial(r as MaterialRow);
-    });
+    return withRedis(`${CATALOG_PREFIX}mats-all:${tenantId}`, () =>
+      loadMaterialsAndMerge(tenantId)
+    );
   },
   ["catalog:materials"],
   { tags: ["catalog"], revalidate: 3600 }
 );
 
+const fetchMaterialsByCategoryCached = unstable_cache(
+  async (tenantId: string, categoryId: string): Promise<Material[]> => {
+    return withRedis(
+      `${CATALOG_PREFIX}mats-by-cat:${tenantId}:${categoryId}`,
+      () => loadMaterialsAndMerge(tenantId, { byCategory: categoryId })
+    );
+  },
+  ["catalog:materials-by-category"],
+  { tags: ["catalog"], revalidate: 3600 }
+);
+
 const fetchOfficesCached = unstable_cache(
   async (tenantId: string): Promise<Office[]> => {
-    const supabase = createTenantClient(tenantId);
-    const { data, error } = await supabase
-      .from("offices")
-      .select("id, name, area, address, phone, fax, lat, lng, sort_order, is_active")
-      .eq("tenant_id", tenantId)
-      .eq("is_active", true)
-      .order("sort_order");
-    if (error) throw error;
-    return data ?? [];
+    return withRedis(`${CATALOG_PREFIX}offices:${tenantId}`, async () => {
+      const supabase = createTenantClient(tenantId);
+      const { data, error } = await supabase
+        .from("offices")
+        .select(
+          "id, name, area, address, phone, fax, lat, lng, sort_order, is_active"
+        )
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("sort_order");
+      if (error) throw error;
+      return data ?? [];
+    });
   },
   ["catalog:offices"],
   { tags: ["catalog"], revalidate: 3600 }
@@ -207,7 +272,9 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
   return cats.find((c) => c.slug === slug) ?? null;
 }
 
-export async function getMaterialsByCategory(categoryId: string): Promise<Material[]> {
-  const all = await getAllMaterials();
-  return all.filter((m) => m.category_id === categoryId);
-}
+export const getMaterialsByCategory = cache(
+  async (categoryId: string): Promise<Material[]> => {
+    const tenantId = await getTenantId();
+    return fetchMaterialsByCategoryCached(tenantId, categoryId);
+  }
+);
