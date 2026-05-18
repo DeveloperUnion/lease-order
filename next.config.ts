@@ -5,6 +5,16 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
+  // クライアントサイドのページキャッシュ。dynamic ページの戻る/再訪を高速化。
+  // default は dynamic=0 (キャッシュなし) / static=300s。dynamic を 30s に伸ばすと、
+  // 30 秒以内に同じページに戻った場合は RSC payload を再 fetch せずキャッシュから即表示する。
+  // ユーザー固有データの陳腐化は最大 30 秒。realtime 系は別途追従するので無害。
+  experimental: {
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
+  },
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [
