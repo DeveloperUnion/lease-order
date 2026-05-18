@@ -17,6 +17,11 @@ const nextConfig: NextConfig = {
   },
   images: {
     formats: ["image/avif", "image/webp"],
+    // デフォルトは多くのデバイス幅を生成するが、本アプリは
+    // スマホ・タブレット・PC の 3 帯域あれば十分。最適化キャッシュの
+    // 多様性を抑え、Vercel image opt の cold 生成コストも削減する。
+    deviceSizes: [360, 640, 1080, 1920],
+    imageSizes: [56, 96, 200, 384],
     remotePatterns: [
       {
         protocol: "https",

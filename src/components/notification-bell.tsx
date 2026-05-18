@@ -9,6 +9,7 @@ import {
   reasonForNotification,
   type NotificationRow,
 } from "@/lib/notifications/display";
+import { getRealtimeToken } from "@/lib/realtime-token-client";
 
 type Props = {
   unreadCount: number;
@@ -86,13 +87,7 @@ export default function NotificationBell({
         : "/api/notifications/customer/realtime-token";
 
     async function fetchToken(): Promise<TokenResponse | null> {
-      try {
-        const res = await fetch(tokenUrl, { cache: "no-store" });
-        if (!res.ok) return null;
-        return (await res.json()) as TokenResponse;
-      } catch {
-        return null;
-      }
+      return getRealtimeToken(tokenUrl) as Promise<TokenResponse | null>;
     }
 
     function scheduleNext(expiresAt: number) {

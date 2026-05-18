@@ -119,54 +119,61 @@ export async function submitOrderCore(
     }
   }
 
-  if (input.deliveryMethod === "pickup") {
-    const { data: office, error: officeErr } = await supabase
-      .from("offices")
-      .select("id")
+  // office / materials / spec_options の 3 つは互いに依存しないので並列化。
+  // ネットワーク RTT × 3 → 1 に短縮。発注ボタン押下時の体感に直結する。
+  const optionIds = Array.from(
+    new Set(items.flatMap((i) => i.selections.map((s) => s.spec_option_id)))
+  );
+  const materialIds = items.map((i) => i.materialId);
+
+  const [officeRes, matRes, optRes] = await Promise.all([
+    input.deliveryMethod === "pickup"
+      ? supabase
+          .from("offices")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("id", pickupOfficeId)
+          .eq("is_active", true)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null } as const),
+    supabase
+      .from("materials")
+      .select("id, name")
       .eq("tenant_id", tenantId)
-      .eq("id", pickupOfficeId)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (officeErr) {
-      console.error("submitOrderCore: office lookup failed", officeErr);
+      .in("id", materialIds),
+    optionIds.length > 0
+      ? supabase
+          .from("spec_options")
+          .select(
+            "id, spec_group_id, is_active, spec_groups!inner(id, material_id, is_active)"
+          )
+          .eq("tenant_id", tenantId)
+          .in("id", optionIds)
+      : Promise.resolve({ data: [], error: null } as const),
+  ]);
+
+  if (input.deliveryMethod === "pickup") {
+    if (officeRes.error) {
+      console.error("submitOrderCore: office lookup failed", officeRes.error);
       return { ok: false, error: "発注の登録に失敗しました" };
     }
-    if (!office) return { ok: false, error: "選択された営業所が見つかりません" };
+    if (!officeRes.data) return { ok: false, error: "選択された営業所が見つかりません" };
   }
 
-  const { data: materials, error: matErr } = await supabase
-    .from("materials")
-    .select("id, name")
-    .eq("tenant_id", tenantId)
-    .in(
-      "id",
-      items.map((i) => i.materialId)
-    );
-
-  if (matErr) {
-    console.error("submitOrderCore: materials lookup failed", matErr);
+  if (matRes.error) {
+    console.error("submitOrderCore: materials lookup failed", matRes.error);
     return { ok: false, error: "発注の登録に失敗しました" };
   }
-
+  const materials = matRes.data;
   const materialMap = new Map(materials?.map((m) => [m.id, m.name]) ?? []);
   const missing = items.filter((i) => !materialMap.has(i.materialId));
   if (missing.length) {
     return { ok: false, error: "存在しない資材が含まれています" };
   }
 
-  // 参照されている spec_option が、その material に属する active な
-  // spec_group/option として存在することを validate
-  const optionIds = Array.from(
-    new Set(items.flatMap((i) => i.selections.map((s) => s.spec_option_id)))
-  );
   if (optionIds.length > 0) {
-    const { data: validOptions, error: optErr } = await supabase
-      .from("spec_options")
-      .select("id, spec_group_id, is_active, spec_groups!inner(id, material_id, is_active)")
-      .eq("tenant_id", tenantId)
-      .in("id", optionIds);
-    if (optErr) {
-      console.error("submitOrderCore: spec_options lookup failed", optErr);
+    if (optRes.error) {
+      console.error("submitOrderCore: spec_options lookup failed", optRes.error);
       return { ok: false, error: "発注の登録に失敗しました" };
     }
     type OptRow = {
@@ -176,7 +183,7 @@ export async function submitOrderCore(
       spec_groups: { id: string; material_id: string; is_active: boolean } | null;
     };
     const optMap = new Map<string, OptRow>(
-      ((validOptions ?? []) as unknown as OptRow[]).map((o) => [o.id, o])
+      ((optRes.data ?? []) as unknown as OptRow[]).map((o) => [o.id, o])
     );
     for (const it of items) {
       for (const s of it.selections) {

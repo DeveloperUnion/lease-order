@@ -13,6 +13,7 @@ import type {
   OrderRef,
 } from "@/lib/chat/types";
 import type { SignedAttachment } from "@/lib/chat/sign-attachments";
+import { getRealtimeToken } from "@/lib/realtime-token-client";
 
 type TokenResponse = {
   jwt: string;
@@ -139,13 +140,7 @@ export default function AdminChatScreen({
     }
 
     async function fetchToken(): Promise<TokenResponse | null> {
-      try {
-        const res = await fetch("/api/chat/realtime-token", { cache: "no-store" });
-        if (!res.ok) return null;
-        return (await res.json()) as TokenResponse;
-      } catch {
-        return null;
-      }
+      return getRealtimeToken("/api/chat/realtime-token") as Promise<TokenResponse | null>;
     }
 
     // 開いている会話の realtime stub を「order_ref + signed attachments 付き」へ

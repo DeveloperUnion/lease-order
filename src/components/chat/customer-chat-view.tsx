@@ -7,6 +7,7 @@ import ChatComposer from "./chat-composer";
 import { sendChatMessage } from "@/lib/chat/client";
 import type { MessageAttachment, OrderRef } from "@/lib/chat/types";
 import type { SignedAttachment } from "@/lib/chat/sign-attachments";
+import { getRealtimeToken } from "@/lib/realtime-token-client";
 
 type TokenResponse = {
   jwt: string;
@@ -93,13 +94,7 @@ export default function CustomerChatView({
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function fetchToken(): Promise<TokenResponse | null> {
-      try {
-        const res = await fetch("/api/chat/realtime-token", { cache: "no-store" });
-        if (!res.ok) return null;
-        return (await res.json()) as TokenResponse;
-      } catch {
-        return null;
-      }
+      return getRealtimeToken("/api/chat/realtime-token") as Promise<TokenResponse | null>;
     }
 
     // 単発 enrichment：realtime INSERT を受けてから add 済みの stub を

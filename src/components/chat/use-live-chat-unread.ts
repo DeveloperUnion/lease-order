@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getRealtimeToken } from "@/lib/realtime-token-client";
 
 type TokenResponse = {
   jwt: string;
@@ -45,13 +46,7 @@ export function useLiveChatUnread(
     const otherSide = audience === "customer" ? "admin" : "customer";
 
     async function fetchToken(): Promise<TokenResponse | null> {
-      try {
-        const res = await fetch("/api/chat/realtime-token", { cache: "no-store" });
-        if (!res.ok) return null;
-        return (await res.json()) as TokenResponse;
-      } catch {
-        return null;
-      }
+      return getRealtimeToken("/api/chat/realtime-token") as Promise<TokenResponse | null>;
     }
 
     function scheduleNext(expiresAt: number) {
