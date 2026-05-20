@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import type { Category, Material } from "@/lib/types";
 import {
   createMaterial,
+  duplicateMaterial,
   reorderMaterials,
   setMaterialActive,
 } from "@/app/admin/actions";
@@ -97,6 +98,19 @@ export default function AdminMaterialsView({
         showToast(material.is_active ? "非公開にしました" : "公開しました");
       } catch (e) {
         showToast(e instanceof Error ? e.message : "更新に失敗しました");
+      }
+    });
+  };
+
+  const handleDuplicate = (material: Material) => {
+    if (!confirm(`「${material.name}」をコピーします。よろしいですか？`)) return;
+    startTransition(async () => {
+      try {
+        const newId = await duplicateMaterial(material.id);
+        showToast("コピーしました");
+        router.push(`/admin/materials/${newId}`);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "コピーに失敗しました");
       }
     });
   };
@@ -217,6 +231,14 @@ export default function AdminMaterialsView({
                   disabled={isPending}
                 >
                   {mat.is_active ? "非公開" : "公開"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleDuplicate(mat)}
+                  disabled={isPending}
+                >
+                  コピー
                 </Button>
                 <Button
                   size="sm"

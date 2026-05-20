@@ -305,6 +305,125 @@ export async function updateMaterial(materialId: string, formData: FormData) {
   await revalidateCatalog();
 }
 
+export async function duplicateMaterial(sourceMaterialId: string): Promise<string> {
+  const tenantId = await getTenantId();
+  await assertMaterialOwnedByTenant(sourceMaterialId, tenantId);
+  const supabase = await getSupabaseTenant();
+
+  const { data: src, error: srcErr } = await supabase
+    .from("materials")
+    .select("category_id, name, description, spec")
+    .eq("id", sourceMaterialId)
+    .single();
+  if (srcErr || !src) throw new Error("コピー元の資材が見つかりません");
+
+  const { data: lastRow } = await supabase
+    .from("materials")
+    .select("sort_order")
+    .eq("tenant_id", tenantId)
+    .eq("category_id", src.category_id)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  const nextSort = (lastRow?.[0]?.sort_order ?? 0) + 1;
+
+  const { data: newMat, error: insErr } = await supabase
+    .from("materials")
+    .insert({
+      tenant_id: tenantId,
+      category_id: src.category_id,
+      name: `${src.name}のコピー`,
+      description: src.description,
+      spec: src.spec ?? {},
+      sort_order: nextSort,
+      is_active: false,
+    })
+    .select("id")
+    .single();
+  if (insErr || !newMat) {
+    throw new Error(`複製に失敗しました: ${insErr?.message ?? "unknown"}`);
+  }
+
+  try {
+    const { data: oldGroups, error: gFetchErr } = await supabase
+      .from("spec_groups")
+      .select("id, name, is_required, sort_order, is_active")
+      .eq("material_id", sourceMaterialId)
+      .order("sort_order");
+    if (gFetchErr) throw new Error(`仕様グループの取得に失敗: ${gFetchErr.message}`);
+
+    const groupIdMap = new Map<string, string>();
+    for (const g of oldGroups ?? []) {
+      const { data: newGroup, error: gErr } = await supabase
+        .from("spec_groups")
+        .insert({
+          tenant_id: tenantId,
+          material_id: newMat.id,
+          name: g.name,
+          is_required: g.is_required,
+          sort_order: g.sort_order,
+          is_active: g.is_active,
+        })
+        .select("id")
+        .single();
+      if (gErr || !newGroup) {
+        throw new Error(`仕様グループの複製に失敗: ${gErr?.message ?? "unknown"}`);
+      }
+      groupIdMap.set(g.id, newGroup.id);
+    }
+
+    if (groupIdMap.size > 0) {
+      const { data: oldOptions, error: oFetchErr } = await supabase
+        .from("spec_options")
+        .select("spec_group_id, label, sort_order, is_active")
+        .in("spec_group_id", [...groupIdMap.keys()]);
+      if (oFetchErr) throw new Error(`バリエーションの取得に失敗: ${oFetchErr.message}`);
+
+      const optionRows = (oldOptions ?? []).map((o) => ({
+        tenant_id: tenantId,
+        spec_group_id: groupIdMap.get(o.spec_group_id)!,
+        label: o.label,
+        sort_order: o.sort_order,
+        is_active: o.is_active,
+      }));
+      if (optionRows.length > 0) {
+        const { error: oErr } = await supabase
+          .from("spec_options")
+          .insert(optionRows);
+        if (oErr) throw new Error(`バリエーションの複製に失敗: ${oErr.message}`);
+      }
+    }
+
+    const { data: oldImgs, error: imgFetchErr } = await supabase
+      .from("material_images")
+      .select("image_id, sort_order, is_primary")
+      .eq("material_id", sourceMaterialId);
+    if (imgFetchErr) throw new Error(`画像の取得に失敗: ${imgFetchErr.message}`);
+
+    if ((oldImgs?.length ?? 0) > 0) {
+      const imgRows = oldImgs!.map((i) => ({
+        tenant_id: tenantId,
+        material_id: newMat.id,
+        image_id: i.image_id,
+        sort_order: i.sort_order,
+        is_primary: i.is_primary,
+      }));
+      const { error: imgErr } = await supabase
+        .from("material_images")
+        .insert(imgRows);
+      if (imgErr) throw new Error(`画像の複製に失敗: ${imgErr.message}`);
+    }
+  } catch (e) {
+    await supabase.from("materials").delete().eq("id", newMat.id);
+    throw e;
+  }
+
+  revalidatePath("/admin/materials");
+  revalidatePath(`/admin/materials/${newMat.id}`);
+  revalidatePath("/admin");
+  await revalidateCatalog();
+  return newMat.id as string;
+}
+
 export async function reorderMaterials(
   categoryId: string,
   orderedMaterialIds: string[]
