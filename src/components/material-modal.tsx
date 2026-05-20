@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Material, SpecGroup, SpecSelectionLabel } from "@/lib/types";
 import { useCart } from "@/lib/cart-context";
@@ -24,6 +24,10 @@ export default function MaterialModal({ material, onClose }: Props) {
   // 仕様ごとに 1 option を選ぶ。{ [groupId]: optionId | undefined }
   const [selections, setSelections] = useState<Record<string, string | undefined>>({});
 
+  // バリデーション時に未選択グループへスクロール＋ハイライトするための ref / state
+  const groupRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [errorGroupId, setErrorGroupId] = useState<string | null>(null);
+
   const catalogPages = material.catalog_pages || [];
   const hasMultiplePages = catalogPages.length > 1;
 
@@ -41,9 +45,21 @@ export default function MaterialModal({ material, onClose }: Props) {
 
   function selectOption(groupId: string, optionId: string) {
     setSelections((prev) => ({ ...prev, [groupId]: optionId }));
+    if (errorGroupId === groupId) setErrorGroupId(null);
   }
 
-  const handleAdd = () => {
+  const handleCtaClick = () => {
+    if (!allSelected) {
+      const firstMissing = specGroups.find((g) => !selections[g.id]);
+      if (firstMissing) {
+        setErrorGroupId(firstMissing.id);
+        groupRefs.current[firstMissing.id]?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+      return;
+    }
     const labels: SpecSelectionLabel[] = [];
     for (const g of specGroups) {
       const optId = selections[g.id];
@@ -162,7 +178,11 @@ export default function MaterialModal({ material, onClose }: Props) {
                     key={g.id}
                     group={g}
                     selectedId={selections[g.id]}
+                    error={errorGroupId === g.id}
                     onSelect={(optId) => selectOption(g.id, optId)}
+                    refCallback={(el) => {
+                      groupRefs.current[g.id] = el;
+                    }}
                   />
                 ))}
               </div>
@@ -197,9 +217,9 @@ export default function MaterialModal({ material, onClose }: Props) {
             </button>
           </div>
           <button
-            onClick={handleAdd}
-            disabled={!ctaEnabled}
-            className="flex-1 h-11 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99] inline-flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-primary"
+            onClick={handleCtaClick}
+            aria-disabled={!ctaEnabled}
+            className="flex-1 h-11 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99] inline-flex items-center justify-center gap-2 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:bg-primary"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
@@ -215,16 +235,32 @@ export default function MaterialModal({ material, onClose }: Props) {
 function SpecGroupBlock({
   group,
   selectedId,
+  error = false,
   onSelect,
+  refCallback,
 }: {
   group: SpecGroup;
   selectedId: string | undefined;
+  error?: boolean;
   onSelect: (optionId: string) => void;
+  refCallback?: (el: HTMLDivElement | null) => void;
 }) {
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-2">
+    <div
+      ref={refCallback}
+      className={`scroll-mt-4 rounded-lg transition-colors ${
+        error
+          ? "bg-danger-soft/50 ring-1 ring-danger/40 p-3 -mx-3 motion-safe:animate-[pulse_1.2s_ease-in-out_1]"
+          : ""
+      }`}
+    >
+      <div className="flex items-baseline gap-2 mb-2">
         <span className="text-sm font-bold text-foreground">{group.name}</span>
+        {error && (
+          <span className="text-xs font-medium text-danger">
+            選択してください
+          </span>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-2">
         {group.options.map((opt) => {
