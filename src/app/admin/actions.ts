@@ -126,6 +126,8 @@ export async function rejectOrder(orderId: string, reason: string) {
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath("/admin");
+  // 引き当て中の在庫が解放されるので catalog を invalidate
+  await revalidateCatalog();
   await notifyCustomer(orderId, "order_rejected", { rejectReason: reason });
 }
 
@@ -158,6 +160,8 @@ export async function cancelOrder(orderId: string) {
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath("/admin");
+  // 引き当て中の在庫が解放されるので catalog を invalidate
+  await revalidateCatalog();
   await notifyCustomer(orderId, "order_cancelled");
 }
 
@@ -1198,6 +1202,63 @@ export async function reorderSpecOptions(
       throw new Error(`バリエーションの並び替えに失敗しました: ${error.message}`);
     }
   }
+  revalidatePath(`/admin/materials/${materialId}`);
+  await revalidateCatalog();
+}
+
+// ============================================================
+// 在庫数量（マスタ）の更新
+//
+// 派生計算（quantity - returned - lost）で残数を出すため、ここで設定するのは
+// 保有数（マスタ値）。0 以上の整数のみ受け付ける。
+// ============================================================
+
+// null は「未設定」を意味し、明示的にクリアできる。空文字や未指定も null 扱い。
+function parseStockQuantity(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error("在庫数は 0 以上の整数で入力してください");
+  }
+  return n;
+}
+
+export async function updateMaterialStock(
+  materialId: string,
+  quantity: number | null
+) {
+  const tenantId = await getTenantId();
+  await assertMaterialOwnedByTenant(materialId, tenantId);
+  const value = parseStockQuantity(quantity);
+  const supabase = await getSupabaseTenant();
+  const { error } = await supabase
+    .from("materials")
+    .update({ stock_quantity: value })
+    .eq("id", materialId)
+    .eq("tenant_id", tenantId);
+  if (error) throw new Error(`在庫の更新に失敗しました: ${error.message}`);
+  revalidatePath(`/admin/materials/${materialId}`);
+  await revalidateCatalog();
+}
+
+export async function updateSpecOptionStock(
+  materialId: string,
+  groupId: string,
+  optionId: string,
+  quantity: number | null
+) {
+  const tenantId = await getTenantId();
+  await assertMaterialOwnedByTenant(materialId, tenantId);
+  await assertSpecGroupOwnedByMaterial(groupId, materialId, tenantId);
+  const value = parseStockQuantity(quantity);
+  const supabase = await getSupabaseTenant();
+  const { error } = await supabase
+    .from("spec_options")
+    .update({ stock_quantity: value, updated_at: new Date().toISOString() })
+    .eq("id", optionId)
+    .eq("spec_group_id", groupId)
+    .eq("tenant_id", tenantId);
+  if (error) throw new Error(`在庫の更新に失敗しました: ${error.message}`);
   revalidatePath(`/admin/materials/${materialId}`);
   await revalidateCatalog();
 }

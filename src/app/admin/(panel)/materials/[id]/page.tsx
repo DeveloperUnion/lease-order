@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import {
   getMaterialDetail,
+  getMaterialStockSummary,
   listCategoriesForAdmin,
 } from "@/lib/admin-data";
 import MaterialDetailView from "./material-detail-view";
@@ -18,10 +19,15 @@ export default async function MaterialDetailPage({
     listCategoriesForAdmin(),
   ]);
   if (!material) notFound();
+  const stock = await getMaterialStockSummary(id);
 
   return (
     <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
-      <MaterialDetailView material={material} categories={categories} />
+      <MaterialDetailView
+        material={material}
+        categories={categories}
+        stock={stock}
+      />
     </main>
   );
 }

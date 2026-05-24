@@ -7,9 +7,11 @@ import { readJson, writeJson } from "./redis-cache";
 import {
   Category,
   Material,
+  MaterialStockSummary,
   Office,
   SpecGroup,
   SpecOption,
+  SpecOptionStock,
 } from "./types";
 
 // catalog 系のキャッシュ階層:
@@ -51,6 +53,7 @@ type SpecOptionRow = {
   label: string;
   sort_order: number;
   is_active: boolean;
+  stock_quantity: number | null;
 };
 
 type SpecGroupRow = {
@@ -70,6 +73,7 @@ type MaterialRow = {
   spec: Record<string, string> | null;
   sort_order: number;
   is_active: boolean;
+  stock_quantity: number | null;
   material_images: MaterialImageJoin[] | null;
   spec_groups: SpecGroupRow[] | null;
 };
@@ -80,6 +84,7 @@ function mapSpecOption(row: SpecOptionRow): SpecOption {
     spec_group_id: row.spec_group_id,
     label: row.label,
     sort_order: row.sort_order,
+    stock_quantity: row.stock_quantity,
   };
 }
 
@@ -116,6 +121,7 @@ function mapMaterial(row: MaterialRow): Material {
     sort_order: row.sort_order,
     is_active: row.is_active,
     catalog_pages: imgs.map((i) => i.images!.url),
+    stock_quantity: row.stock_quantity,
     spec_groups,
   };
 }
@@ -201,7 +207,7 @@ async function loadMaterialsAndMerge(
   let matsQuery = supabase
     .from("materials")
     .select(
-      "id, category_id, name, description, spec, sort_order, is_active, material_images(sort_order, is_primary, images(url))"
+      "id, category_id, name, description, spec, sort_order, is_active, stock_quantity, material_images(sort_order, is_primary, images(url))"
     )
     .eq("tenant_id", tenantId)
     .eq("is_active", true)
@@ -209,7 +215,7 @@ async function loadMaterialsAndMerge(
   let groupsQuery = supabase
     .from("spec_groups")
     .select(
-      "id, material_id, name, sort_order, is_active, spec_options(id, spec_group_id, label, sort_order, is_active), materials!inner(id, category_id)"
+      "id, material_id, name, sort_order, is_active, spec_options(id, spec_group_id, label, sort_order, is_active, stock_quantity), materials!inner(id, category_id)"
     )
     .eq("tenant_id", tenantId)
     .eq("is_active", true)
