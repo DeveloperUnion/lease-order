@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { DeliveryMethod, Material, Office, SpecSelectionLabel } from "@/lib/types";
@@ -74,6 +74,15 @@ export default function IntakeFlow(props: Props) {
 
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (file && file.type.startsWith("image/")) {
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+    setPreviewUrl(null);
+  }, [file]);
   const [errorMessage, setErrorMessage] = useState("");
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [resolved, setResolved] = useState<ResolvedIntake | null>(null);
@@ -339,42 +348,61 @@ export default function IntakeFlow(props: Props) {
               PDF / JPEG / PNG / WebP・10MB まで
             </span>
           </p>
-          <label
-            className={`relative flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl px-6 py-10 cursor-pointer transition-colors ${
-              file
-                ? "border-accent bg-accent-soft/40"
-                : "border-border hover:border-accent hover:bg-accent-soft/30"
-            }`}
-          >
-            <span aria-hidden className="text-4xl leading-none">
-              📷
-            </span>
-            {file ? (
-              <>
-                <p className="text-sm font-semibold text-foreground text-center break-all px-2">
-                  {file.name}
-                </p>
-                <p className="text-xs text-subtle">
-                  {(file.size / 1024 / 1024).toFixed(2)} MB ・ クリックで変更
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-semibold text-foreground">
-                  写真を撮る / ファイルを選ぶ
-                </p>
-                <p className="text-xs text-subtle">
-                  発注書の画像 or PDF をアップロード
-                </p>
-              </>
-            )}
-            <input
-              type="file"
-              accept="application/pdf,image/jpeg,image/png,image/webp"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="sr-only"
-            />
-          </label>
+          {file ? (
+            <div className="border-2 border-accent bg-accent-soft/30 rounded-xl p-4">
+              <div className="flex items-start gap-4">
+                {previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewUrl}
+                    alt="選択中のファイル"
+                    className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-lg border border-border shrink-0 bg-surface"
+                  />
+                ) : (
+                  <div className="w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center rounded-lg border border-border bg-surface shrink-0">
+                    <span className="font-[family-name:var(--font-mono)] text-xs font-bold text-accent">
+                      PDF
+                    </span>
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded">
+                    <span aria-hidden>✓</span> 選択済み
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-foreground break-all">
+                    {file.name}
+                  </p>
+                  <p className="mt-1 text-xs text-subtle">
+                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                  <label className="mt-3 inline-flex items-center text-xs text-accent hover:underline cursor-pointer">
+                    別のファイルを選ぶ
+                    <input
+                      type="file"
+                      accept="application/pdf,image/jpeg,image/png,image/webp"
+                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                      className="sr-only"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <label className="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-border rounded-xl px-6 py-10 cursor-pointer hover:border-accent hover:bg-accent-soft/30 transition-colors">
+              <p className="text-sm font-semibold text-foreground">
+                写真を撮る / ファイルを選ぶ
+              </p>
+              <p className="text-xs text-subtle">
+                発注書の画像 or PDF をアップロード
+              </p>
+              <input
+                type="file"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                className="sr-only"
+              />
+            </label>
+          )}
           {errorMessage && (
             <p className="mt-3 text-sm text-danger">{errorMessage}</p>
           )}
