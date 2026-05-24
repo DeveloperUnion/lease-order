@@ -14,6 +14,9 @@ export type OutboxItem = {
   tenantId: string | null;
   customerId: string | null;
   payload: SubmitOrderInput;
+  // AI 取り込みで生成された発注の場合、その intake document の id。
+  // /api/orders に転送して、サーバ側で order と紐付けて consumed に進める。
+  intakeDocumentId?: string | null;
   status: OutboxStatus;
   attempts: number;
   lastError: string | null;

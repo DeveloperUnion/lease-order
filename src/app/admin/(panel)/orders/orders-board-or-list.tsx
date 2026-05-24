@@ -92,23 +92,31 @@ export default function OrdersBoardOrList({
             title="発注管理"
             description="承認・出荷・完了をオペレーターが順次処理します。"
             actions={
-              <div
-                role="tablist"
-                aria-label="表示モード切り替え"
-                className="inline-flex border border-rule"
-              >
-                <ToggleButton
-                  active={view === "board"}
-                  onClick={() => setView("board")}
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/admin/orders/new"
+                  className="inline-flex items-center gap-1.5 px-3 h-8 border border-rule text-sm text-foreground hover:bg-surface-muted transition-colors"
                 >
-                  ボード
-                </ToggleButton>
-                <ToggleButton
-                  active={view === "list"}
-                  onClick={() => setView("list")}
+                  + 代行発注（AI 取り込み）
+                </Link>
+                <div
+                  role="tablist"
+                  aria-label="表示モード切り替え"
+                  className="inline-flex border border-rule"
                 >
-                  リスト
-                </ToggleButton>
+                  <ToggleButton
+                    active={view === "board"}
+                    onClick={() => setView("board")}
+                  >
+                    ボード
+                  </ToggleButton>
+                  <ToggleButton
+                    active={view === "list"}
+                    onClick={() => setView("list")}
+                  >
+                    リスト
+                  </ToggleButton>
+                </div>
               </div>
             }
           />

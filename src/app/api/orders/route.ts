@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 type RequestBody = {
   client_request_id?: unknown;
   payload?: SubmitOrderInput;
+  intake_document_id?: unknown;
 };
 
 export async function POST(req: Request): Promise<Response> {
@@ -29,7 +30,14 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const result = await submitOrderCore(body.payload, body.client_request_id);
+  const intakeDocumentId =
+    typeof body.intake_document_id === "string" && body.intake_document_id
+      ? body.intake_document_id
+      : undefined;
+
+  const result = await submitOrderCore(body.payload, body.client_request_id, {
+    intakeDocumentId,
+  });
 
   if (!result.ok) {
     return NextResponse.json(result, { status: 400 });
