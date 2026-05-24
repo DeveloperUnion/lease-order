@@ -63,6 +63,7 @@ export default function Sidebar({
       label: "マスタ",
       items: [
         { href: "/admin/materials", label: "資材" },
+        { href: "/admin/inventory", label: "在庫" },
         { href: "/admin/categories", label: "カテゴリ" },
         { href: "/admin/offices", label: "営業所" },
         { href: "/admin/customers", label: "顧客" },

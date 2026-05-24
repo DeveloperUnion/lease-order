@@ -355,6 +355,226 @@ export async function getMaterialStockSummary(
   return { kind: "spec_options", options };
 }
 
+// ============================================================
+// 在庫一覧（バルク取得）
+//
+// /admin/inventory で全資材の在庫サマリを 1 ページに表示するための関数。
+// getMaterialStockSummary は 1 件ずつなので N+1 になる。ここでは
+//   1. materials 一括
+//   2. order_items（spec 無し資材向け）一括
+//   3. order_item_spec_options（spec あり資材向け）一括
+// の最大 3 クエリで仕上げる。
+// ============================================================
+
+export type InventoryListRow = {
+  material: {
+    id: string;
+    name: string;
+    image_url: string | null;
+    category: { id: string; name: string } | null;
+  };
+  stock: MaterialStockSummary;
+  // spec_options 表示時にラベル順を保ちたいので、active な spec_groups/options を併せて返す
+  spec_groups: {
+    id: string;
+    name: string;
+    options: { id: string; label: string }[];
+  }[];
+};
+
+type InventoryMaterialRaw = {
+  id: string;
+  category_id: string | null;
+  name: string;
+  sort_order: number;
+  stock_quantity: number | null;
+  material_images:
+    | { sort_order: number; is_primary: boolean; images: { url: string } | null }[]
+    | null;
+  spec_groups:
+    | {
+        id: string;
+        name: string;
+        sort_order: number;
+        is_active: boolean;
+        spec_options:
+          | {
+              id: string;
+              spec_group_id: string;
+              label: string;
+              sort_order: number;
+              stock_quantity: number | null;
+              is_active: boolean;
+            }[]
+          | null;
+      }[]
+    | null;
+};
+
+export async function listInventoryForAdmin(): Promise<InventoryListRow[]> {
+  const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
+
+  const [matRes, catRes] = await Promise.all([
+    supabase
+      .from("materials")
+      .select(
+        `id, category_id, name, sort_order, stock_quantity,
+         material_images(sort_order, is_primary, images(url)),
+         spec_groups(id, name, sort_order, is_active,
+           spec_options(id, spec_group_id, label, sort_order, stock_quantity, is_active))`
+      )
+      .eq("tenant_id", tenantId)
+      .eq("is_active", true)
+      .order("sort_order"),
+    supabase
+      .from("categories")
+      .select("id, name")
+      .eq("tenant_id", tenantId),
+  ]);
+  if (matRes.error) throw matRes.error;
+  if (catRes.error) throw catRes.error;
+
+  const materials = (matRes.data ?? []) as unknown as InventoryMaterialRaw[];
+  const categoryById = new Map(
+    ((catRes.data ?? []) as unknown as { id: string; name: string }[]).map(
+      (c) => [c.id, c]
+    )
+  );
+
+  // active spec_options を持つ material と持たない material に分類
+  const noSpecMaterialIds: string[] = [];
+  const allOptionIds: string[] = [];
+  for (const m of materials) {
+    const activeOptions = (m.spec_groups ?? [])
+      .filter((g) => g.is_active)
+      .flatMap((g) =>
+        (g.spec_options ?? []).filter((o) => o.is_active).map((o) => o.id)
+      );
+    if (activeOptions.length === 0) noSpecMaterialIds.push(m.id);
+    else allOptionIds.push(...activeOptions);
+  }
+
+  // spec 無し: order_items を material_id でまとめて集計
+  const inUseByMaterial = new Map<string, number>();
+  if (noSpecMaterialIds.length > 0) {
+    const { data, error } = await supabase
+      .from("order_items")
+      .select(
+        "material_id, quantity, returned_quantity, lost_quantity, orders!inner(status)"
+      )
+      .eq("tenant_id", tenantId)
+      .in("material_id", noSpecMaterialIds)
+      .in("orders.status", ACTIVE_ORDER_STATUSES as unknown as string[]);
+    if (error) throw error;
+    type Row = {
+      material_id: string;
+      quantity: number;
+      returned_quantity: number;
+      lost_quantity: number | null;
+      orders: { status: string } | null;
+    };
+    for (const row of (data ?? []) as unknown as Row[]) {
+      const remaining =
+        row.quantity - row.returned_quantity - (row.lost_quantity ?? 0);
+      if (remaining <= 0) continue;
+      inUseByMaterial.set(
+        row.material_id,
+        (inUseByMaterial.get(row.material_id) ?? 0) + remaining
+      );
+    }
+  }
+
+  // spec 有り: order_item_spec_options を spec_option_id でまとめて集計
+  const inUseByOption = new Map<string, number>();
+  if (allOptionIds.length > 0) {
+    const { data, error } = await supabase
+      .from("order_item_spec_options")
+      .select(
+        "spec_option_id, order_items!inner(quantity, returned_quantity, lost_quantity, orders!inner(status))"
+      )
+      .eq("tenant_id", tenantId)
+      .in("spec_option_id", allOptionIds)
+      .in("order_items.orders.status", ACTIVE_ORDER_STATUSES as unknown as string[]);
+    if (error) throw error;
+    for (const row of (data ?? []) as unknown as StockUsageRow[]) {
+      const oi = row.order_items;
+      if (!oi) continue;
+      const remaining =
+        oi.quantity - oi.returned_quantity - (oi.lost_quantity ?? 0);
+      if (remaining <= 0) continue;
+      inUseByOption.set(
+        row.spec_option_id,
+        (inUseByOption.get(row.spec_option_id) ?? 0) + remaining
+      );
+    }
+  }
+
+  return materials.map((m) => {
+    const imgs = (m.material_images ?? [])
+      .filter((mi) => mi.images?.url)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    const primary = imgs.find((i) => i.is_primary) ?? imgs[0];
+
+    const activeGroups = (m.spec_groups ?? [])
+      .filter((g) => g.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((g) => ({
+        id: g.id,
+        name: g.name,
+        options: (g.spec_options ?? [])
+          .filter((o) => o.is_active)
+          .sort((a, b) => a.sort_order - b.sort_order),
+      }));
+
+    const activeOptions = activeGroups.flatMap((g) => g.options);
+
+    let stock: MaterialStockSummary;
+    if (activeOptions.length === 0) {
+      const inUse = inUseByMaterial.get(m.id) ?? 0;
+      const s = m.stock_quantity;
+      stock = {
+        kind: "material",
+        stock: s ?? null,
+        in_use: inUse,
+        available: s == null ? null : Math.max(0, s - inUse),
+      };
+    } else {
+      const options: SpecOptionStock[] = activeOptions.map((o) => {
+        const inUse = inUseByOption.get(o.id) ?? 0;
+        return {
+          spec_option_id: o.id,
+          group_id: o.spec_group_id,
+          stock: o.stock_quantity ?? null,
+          in_use: inUse,
+          available:
+            o.stock_quantity == null
+              ? null
+              : Math.max(0, o.stock_quantity - inUse),
+        };
+      });
+      stock = { kind: "spec_options", options };
+    }
+
+    return {
+      material: {
+        id: m.id,
+        name: m.name,
+        image_url: primary?.images?.url ?? null,
+        category: m.category_id
+          ? categoryById.get(m.category_id) ?? null
+          : null,
+      },
+      stock,
+      spec_groups: activeGroups.map((g) => ({
+        id: g.id,
+        name: g.name,
+        options: g.options.map((o) => ({ id: o.id, label: o.label })),
+      })),
+    };
+  });
+}
+
 export type AdminOfficeRow = Office & { in_use_count: number };
 
 export const listOfficesForAdmin = cache(
