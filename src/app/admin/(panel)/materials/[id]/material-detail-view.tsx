@@ -1,18 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import type {
   AdminCategoryRow,
   MaterialDetail,
   MaterialImageRow,
 } from "@/lib/admin-data";
-import type {
-  MaterialStockSummary,
-  SpecGroup,
-  SpecOption,
-  SpecOptionStock,
-} from "@/lib/types";
+import type { SpecGroup, SpecOption } from "@/lib/types";
 import {
   addMaterialImage,
   createSpecGroupWithOptions,
@@ -26,10 +21,8 @@ import {
   setMaterialActive,
   setPrimaryMaterialImage,
   updateMaterial,
-  updateMaterialStock,
   updateSpecGroup,
   updateSpecOption,
-  updateSpecOptionStock,
 } from "@/app/admin/actions";
 import {
   PageHeader,
@@ -47,11 +40,9 @@ const MAX_IMAGES = 5;
 export default function MaterialDetailView({
   material,
   categories,
-  stock,
 }: {
   material: MaterialDetail;
   categories: AdminCategoryRow[];
-  stock: MaterialStockSummary;
 }) {
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => {
@@ -75,8 +66,7 @@ export default function MaterialDetailView({
           onToast={showToast}
         />
         <ImagesSection material={material} onToast={showToast} />
-        <StockSection material={material} stock={stock} onToast={showToast} />
-        <SpecGroupsSection material={material} stock={stock} onToast={showToast} />
+        <SpecGroupsSection material={material} onToast={showToast} />
       </div>
 
       {toast && (
@@ -432,174 +422,6 @@ function ImagesSection({
 }
 
 // ============================================================
-// Stock section
-//
-// 仕様グループが無い資材は資材直下の在庫を編集。仕様グループがあれば
-// 在庫は各選択肢（spec_option）で管理する旨を案内し、合計値を出す。
-// ============================================================
-
-function StockSection({
-  material,
-  stock,
-  onToast,
-}: {
-  material: MaterialDetail;
-  stock: MaterialStockSummary;
-  onToast: (msg: string) => void;
-}) {
-  return (
-    <section>
-      <SectionRule label="在庫" className="mb-4" />
-      {stock.kind === "material" ? (
-        <MaterialStockEditor
-          materialId={material.id}
-          summary={stock}
-          onToast={onToast}
-        />
-      ) : (
-        <SpecOptionStockOverview options={stock.options} />
-      )}
-    </section>
-  );
-}
-
-function MaterialStockEditor({
-  materialId,
-  summary,
-  onToast,
-}: {
-  materialId: string;
-  summary: { stock: number | null; in_use: number; available: number | null };
-  onToast: (msg: string) => void;
-}) {
-  // 空文字 = 未設定（null）を表現。stock_quantity が null なら入力欄は空。
-  const initial = summary.stock === null ? "" : String(summary.stock);
-  const [value, setValue] = useState<string>(initial);
-  const [isPending, startTransition] = useTransition();
-  const parsed: number | null =
-    value === "" ? null : Math.max(0, Math.floor(Number(value) || 0));
-  const dirty = parsed !== summary.stock;
-  const handleSave = () => {
-    startTransition(async () => {
-      try {
-        await updateMaterialStock(materialId, parsed);
-        onToast(
-          parsed === null ? "在庫を未設定にしました" : "在庫を更新しました"
-        );
-      } catch (e) {
-        onToast(e instanceof Error ? e.message : "更新に失敗しました");
-      }
-    });
-  };
-  return (
-    <div className="flex flex-wrap items-end gap-6">
-      <FormField
-        label="保有数（マスタ）"
-        htmlFor="material-stock"
-        hint="空にすると「未設定」になります。0 を入力すると明示的に在庫切れになります。"
-      >
-        <div className="flex items-center gap-2">
-          <TextInput
-            id="material-stock"
-            type="number"
-            min={0}
-            value={value}
-            placeholder="未設定"
-            onChange={(e) => setValue(e.target.value)}
-            className="w-28 tabular-nums"
-          />
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={!dirty || isPending}
-          >
-            {isPending ? "保存中…" : "保存"}
-          </Button>
-        </div>
-      </FormField>
-      <StockBreakdown
-        stock={summary.stock}
-        inUse={summary.in_use}
-        available={summary.available}
-      />
-    </div>
-  );
-}
-
-function SpecOptionStockOverview({
-  options,
-}: {
-  options: SpecOptionStock[];
-}) {
-  // null （未設定）は集計から除外。「未設定 N 件」を別途併記する。
-  const unconfigured = options.filter((o) => o.stock === null).length;
-  const totals = options.reduce(
-    (acc, o) => ({
-      stock: acc.stock + (o.stock ?? 0),
-      in_use: acc.in_use + o.in_use,
-      available: acc.available + (o.available ?? 0),
-    }),
-    { stock: 0, in_use: 0, available: 0 }
-  );
-  return (
-    <div className="flex flex-wrap items-center gap-6">
-      <p className="text-sm text-muted">
-        この資材は仕様で在庫を管理します。下の「仕様」セクションの各選択肢で在庫数を入力してください。
-      </p>
-      <div className="flex items-center gap-3">
-        <StockBreakdown
-          stock={totals.stock}
-          inUse={totals.in_use}
-          available={totals.available}
-          compact
-        />
-        {unconfigured > 0 && (
-          <span className="text-xs text-subtle tabular-nums">
-            未設定 {unconfigured} 件
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StockBreakdown({
-  stock,
-  inUse,
-  available,
-  compact = false,
-}: {
-  stock: number | null;
-  inUse: number;
-  available: number | null;
-  compact?: boolean;
-}) {
-  const stockLabel = stock === null ? "-" : String(stock);
-  const availableIsOut = available !== null && available <= 0;
-  return (
-    <div
-      className={`flex items-center gap-4 ${
-        compact ? "text-xs" : "text-sm"
-      } tabular-nums`}
-    >
-      <span className="text-subtle">保有 {stockLabel}</span>
-      <span className="text-subtle">貸出中 {inUse}</span>
-      <span
-        className={`font-semibold ${
-          available === null
-            ? "text-subtle"
-            : availableIsOut
-            ? "text-[var(--color-status-rejected-fg)]"
-            : "text-foreground"
-        }`}
-      >
-        残 {available === null ? "-" : available}
-      </span>
-    </div>
-  );
-}
-
-// ============================================================
 // Spec groups section (v3: 仕様 + バリエーションの 2 層、DnD 並び替え)
 // ============================================================
 
@@ -614,17 +436,11 @@ function emptyGroupDraft(): GroupDraft {
 
 function SpecGroupsSection({
   material,
-  stock,
   onToast,
 }: {
   material: MaterialDetail;
-  stock: MaterialStockSummary;
   onToast: (msg: string) => void;
 }) {
-  const stockByOptionId = useMemo(() => {
-    if (stock.kind !== "spec_options") return new Map<string, SpecOptionStock>();
-    return new Map(stock.options.map((o) => [o.spec_option_id, o]));
-  }, [stock]);
   const [creating, setCreating] = useState<GroupDraft | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{ name: string } | null>(null);
@@ -776,7 +592,6 @@ function SpecGroupsSection({
                 key={g.id}
                 group={g}
                 materialId={material.id}
-                stockByOptionId={stockByOptionId}
                 isDragging={dragId === g.id}
                 onDragStart={() => setDragId(g.id)}
                 onDragOver={(e) => e.preventDefault()}
@@ -928,7 +743,6 @@ function SpecGroupEditForm({
 function SpecGroupRow({
   group,
   materialId,
-  stockByOptionId,
   isDragging,
   onDragStart,
   onDragOver,
@@ -941,7 +755,6 @@ function SpecGroupRow({
 }: {
   group: SpecGroup;
   materialId: string;
-  stockByOptionId: Map<string, SpecOptionStock>;
   isDragging: boolean;
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -982,12 +795,7 @@ function SpecGroupRow({
         </div>
       </div>
 
-      <SpecOptionsList
-        materialId={materialId}
-        group={group}
-        stockByOptionId={stockByOptionId}
-        onToast={onToast}
-      />
+      <SpecOptionsList materialId={materialId} group={group} onToast={onToast} />
     </div>
   );
 }
@@ -995,12 +803,10 @@ function SpecGroupRow({
 function SpecOptionsList({
   materialId,
   group,
-  stockByOptionId,
   onToast,
 }: {
   materialId: string;
   group: SpecGroup;
-  stockByOptionId: Map<string, SpecOptionStock>;
   onToast: (msg: string) => void;
 }) {
   const [order, setOrder] = useState<SpecOption[]>(group.options);
@@ -1159,13 +965,6 @@ function SpecOptionsList({
               <span className="flex-1 text-foreground truncate">
                 {o.label}
               </span>
-              <SpecOptionStockField
-                materialId={materialId}
-                groupId={group.id}
-                optionId={o.id}
-                summary={stockByOptionId.get(o.id)}
-                onToast={onToast}
-              />
               <Button size="sm" variant="ghost" onClick={() => handleDelete(o)} disabled={isPending}>
                 削除
               </Button>
@@ -1202,81 +1001,6 @@ function SpecOptionsList({
           {error}
         </p>
       )}
-    </div>
-  );
-}
-
-// spec_option 単位の「保有数」インライン編集 + 「貸出中 / 残」表示。
-// onBlur で保存（手動でのボタン押下を要求しないシンプル UX）。
-// 空文字 = 未設定（null）。0 を明示的に入れた場合は「在庫切れ」として扱う。
-function SpecOptionStockField({
-  materialId,
-  groupId,
-  optionId,
-  summary,
-  onToast,
-}: {
-  materialId: string;
-  groupId: string;
-  optionId: string;
-  summary: SpecOptionStock | undefined;
-  onToast: (msg: string) => void;
-}) {
-  const stockValue: number | null = summary?.stock ?? null;
-  const inUse = summary?.in_use ?? 0;
-  const initialString = stockValue === null ? "" : String(stockValue);
-  const [value, setValue] = useState<string>(initialString);
-  const [isPending, startTransition] = useTransition();
-  const parsed: number | null =
-    value === "" ? null : Math.max(0, Math.floor(Number(value) || 0));
-  const liveAvailable: number | null =
-    parsed === null ? null : Math.max(0, parsed - inUse);
-
-  const save = () => {
-    if (parsed === stockValue) return;
-    startTransition(async () => {
-      try {
-        await updateSpecOptionStock(materialId, groupId, optionId, parsed);
-        onToast(
-          parsed === null ? "在庫を未設定にしました" : "在庫を更新しました"
-        );
-      } catch (e) {
-        onToast(e instanceof Error ? e.message : "更新に失敗しました");
-        setValue(initialString);
-      }
-    });
-  };
-
-  return (
-    <div className="flex items-center gap-2 flex-shrink-0">
-      <input
-        type="number"
-        min={0}
-        value={value}
-        placeholder="-"
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={save}
-        disabled={isPending}
-        aria-label="在庫数"
-        title="空欄にすると未設定。0 で在庫切れを明示。"
-        className="w-16 h-8 px-2 text-sm text-right tabular-nums bg-surface border border-rule focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-50"
-      />
-      <span className="text-[11px] text-subtle tabular-nums whitespace-nowrap">
-        貸出 {inUse} / 残{" "}
-        {liveAvailable === null ? (
-          <span className="font-semibold text-subtle">-</span>
-        ) : (
-          <span
-            className={
-              liveAvailable <= 0
-                ? "text-[var(--color-status-rejected-fg)] font-semibold"
-                : "font-semibold text-foreground"
-            }
-          >
-            {liveAvailable}
-          </span>
-        )}
-      </span>
     </div>
   );
 }
