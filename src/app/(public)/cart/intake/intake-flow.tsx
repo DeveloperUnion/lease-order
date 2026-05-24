@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { DeliveryMethod, Material, Office, SpecSelectionLabel } from "@/lib/types";
-import { useCart } from "@/lib/cart-context";
+import { useOptionalCart } from "@/lib/cart-context";
 import { updateDraftFormFields } from "@/lib/offline/drafts";
 import type { ResolvedIntake } from "@/lib/intake/types";
 import {
@@ -63,7 +63,9 @@ export default function IntakeFlow(props: Props) {
   // あると面倒なので、admin 専用フィールドはここで取り出して非 admin 側では null/空。
   const adminOffices = props.mode === "admin" ? props.offices : [];
   const adminOnSubmit = props.mode === "admin" ? props.onSubmit : null;
-  const { prefillCart } = useCart();
+  // admin モードでは CartProvider 外でマウントされるため useOptionalCart を使う。
+  // customer モードでは必ず CartProvider 下で render されるので非 null になる。
+  const cart = useOptionalCart();
 
   const materialsById = useMemo(
     () => new Map(materials.map((m) => [m.id, m])),
@@ -235,8 +237,9 @@ export default function IntakeFlow(props: Props) {
     setErrorMessage("");
 
     if (mode === "customer") {
+      if (!cart) return; // customer モードでは provider 必須なので通常到達しない
       const { items: cartItems } = buildCartPrefill(rows, formFields);
-      const draftId = await prefillCart(cartItems);
+      const draftId = await cart.prefillCart(cartItems);
       // intake で読み取った form fields を新しい draft に流し込む
       const pickupOfficeId = ""; // intake には office id は無いので空。UI でユーザが選び直す
       await updateDraftFormFields(draftId, {
@@ -313,7 +316,7 @@ export default function IntakeFlow(props: Props) {
     <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-7">
       <div className="mb-4">
         <Link
-          href={mode === "customer" ? "/cart" : "/admin/orders"}
+          href={mode === "customer" ? "/" : "/admin/orders"}
           className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors"
         >
           <span aria-hidden>←</span> 戻る
@@ -329,22 +332,48 @@ export default function IntakeFlow(props: Props) {
 
       {step === "upload" && (
         <div className="border border-border bg-surface rounded-2xl p-6">
-          <label className="block">
-            <span className="text-sm font-semibold text-foreground">
-              発注書ファイル（PDF / JPEG / PNG / WebP、10MB まで）
+          <p className="text-sm font-semibold text-foreground mb-3">
+            発注書ファイル
+            <span className="ml-2 text-xs font-normal text-subtle">
+              PDF / JPEG / PNG / WebP・10MB まで
             </span>
+          </p>
+          <label
+            className={`relative flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl px-6 py-10 cursor-pointer transition-colors ${
+              file
+                ? "border-accent bg-accent-soft/40"
+                : "border-border hover:border-accent hover:bg-accent-soft/30"
+            }`}
+          >
+            <span aria-hidden className="text-4xl leading-none">
+              📷
+            </span>
+            {file ? (
+              <>
+                <p className="text-sm font-semibold text-foreground text-center break-all px-2">
+                  {file.name}
+                </p>
+                <p className="text-xs text-subtle">
+                  {(file.size / 1024 / 1024).toFixed(2)} MB ・ クリックで変更
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-foreground">
+                  写真を撮る / ファイルを選ぶ
+                </p>
+                <p className="text-xs text-subtle">
+                  発注書の画像 or PDF をアップロード
+                </p>
+              </>
+            )}
             <input
               type="file"
               accept="application/pdf,image/jpeg,image/png,image/webp"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="mt-3 block w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-accent-soft file:text-accent-ink hover:file:bg-accent/10"
+              className="sr-only"
             />
           </label>
-          {file && (
-            <p className="mt-3 text-xs text-subtle">
-              選択中: {file.name}（{(file.size / 1024 / 1024).toFixed(2)} MB）
-            </p>
-          )}
           {errorMessage && (
             <p className="mt-3 text-sm text-danger">{errorMessage}</p>
           )}
@@ -357,7 +386,7 @@ export default function IntakeFlow(props: Props) {
               読み取りを開始
             </button>
             <Link
-              href={mode === "customer" ? "/cart" : "/admin/orders"}
+              href={mode === "customer" ? "/" : "/admin/orders"}
               className="h-11 px-6 inline-flex items-center justify-center border border-border bg-surface text-foreground rounded-lg text-sm font-semibold hover:bg-surface-muted transition-colors"
             >
               手動入力に戻る
@@ -394,7 +423,7 @@ export default function IntakeFlow(props: Props) {
               別のファイルを試す
             </button>
             <Link
-              href={mode === "customer" ? "/cart" : "/admin/orders"}
+              href={mode === "customer" ? "/" : "/admin/orders"}
               className="h-10 px-5 inline-flex items-center justify-center bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
             >
               手動入力に進む
