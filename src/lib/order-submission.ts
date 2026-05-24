@@ -3,7 +3,7 @@ import "server-only";
 import { notifyAdmins } from "@/lib/notifications";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
-import { getCurrentCustomer } from "@/lib/customer-auth";
+import { getCurrentCustomer, type CustomerSession } from "@/lib/customer-auth";
 import { revalidateCatalog } from "@/lib/catalog-cache";
 import type { DeliveryMethod, SpecSelectionLabel } from "@/lib/types";
 
@@ -30,6 +30,19 @@ export type SubmitOrderResult =
   | { ok: true; orderNumber: string; duplicate: boolean }
   | { ok: false; error: string };
 
+// 管理者代行モードで submitOrderCore を呼ぶときに渡す。
+// 「呼び出し側で admin セッションが確認できている」ことが前提で、
+// 内部でも改めて adminId が tenant 内に存在することを検証する。
+export type SubmitOrderActingAs = {
+  customerId: string;
+  adminId: string;
+};
+
+export type SubmitOrderOptions = {
+  actingAs?: SubmitOrderActingAs;
+  intakeDocumentId?: string;
+};
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -48,14 +61,55 @@ function orderNumberFromClientRequestId(id: string): string {
 
 export async function submitOrderCore(
   input: SubmitOrderInput,
-  clientRequestId: string
+  clientRequestId: string,
+  options?: SubmitOrderOptions
 ): Promise<SubmitOrderResult> {
   if (!UUID_RE.test(clientRequestId)) {
     return { ok: false, error: "client_request_id が不正です" };
   }
 
-  const customer = await getCurrentCustomer();
-  if (!customer) return { ok: false, error: "ログインが必要です" };
+  const tenantId = await getTenantId();
+
+  // 顧客 self の場合は HMAC cookie から、admin proxy の場合は actingAs から解決。
+  let customer: CustomerSession;
+  if (options?.actingAs) {
+    if (!UUID_RE.test(options.actingAs.adminId) || !UUID_RE.test(options.actingAs.customerId)) {
+      return { ok: false, error: "代行情報が不正です" };
+    }
+    const supabaseCheck = await getSupabaseTenant();
+    const { data: adm } = await supabaseCheck
+      .from("admin_users")
+      .select("id")
+      .eq("id", options.actingAs.adminId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (!adm) return { ok: false, error: "管理者認証が確認できません" };
+    const { data: cust } = await supabaseCheck
+      .from("customers")
+      .select(
+        "id, tenant_id, company_id, name, default_address, phone, contact_email, must_change_password, is_active"
+      )
+      .eq("id", options.actingAs.customerId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (!cust || !cust.is_active) {
+      return { ok: false, error: "代行対象の顧客が見つかりません" };
+    }
+    customer = {
+      id: cust.id,
+      tenant_id: cust.tenant_id,
+      company_id: cust.company_id,
+      name: cust.name,
+      default_address: cust.default_address,
+      phone: cust.phone,
+      contact_email: cust.contact_email,
+      must_change_password: cust.must_change_password,
+    };
+  } else {
+    const cur = await getCurrentCustomer();
+    if (!cur) return { ok: false, error: "ログインが必要です" };
+    customer = cur;
+  }
 
   const siteName = input.siteName.trim();
   const contactName = input.contactName.trim();
@@ -95,12 +149,27 @@ export async function submitOrderCore(
 
   if (!items.length) return { ok: false, error: "有効な明細がありません" };
 
-  const tenantId = await getTenantId();
   if (customer.tenant_id !== tenantId) {
     return { ok: false, error: "テナントが一致しません" };
   }
 
   const supabase = await getSupabaseTenant();
+
+  // 取り込みドキュメントが指定されていれば、同テナントかつ未消費であることを検証。
+  // ここで弾いておくと order を作ってから arrival 連結に失敗するのを防げる。
+  if (options?.intakeDocumentId) {
+    const { data: intake } = await supabase
+      .from("order_intake_documents")
+      .select("id, tenant_id, status")
+      .eq("id", options.intakeDocumentId)
+      .maybeSingle();
+    if (!intake || intake.tenant_id !== tenantId) {
+      return { ok: false, error: "取り込みドキュメントが見つかりません" };
+    }
+    if (intake.status === "consumed") {
+      return { ok: false, error: "この取り込みは既に発注に変換されています" };
+    }
+  }
 
   // 冪等性チェック: 既に同 (tenant_id, client_request_id) の order があれば
   // 重複送信なので、その order_number を返して終わり。
@@ -236,6 +305,7 @@ export async function submitOrderCore(
         input.deliveryMethod === "pickup" ? pickupOfficeId : null,
       lease_start_date: input.leaseStartDate,
       lease_end_date: input.leaseEndDate,
+      intake_document_id: options?.intakeDocumentId ?? null,
       status: "pending",
     })
     .select("id")
@@ -312,6 +382,16 @@ export async function submitOrderCore(
       await supabase.from("orders").delete().eq("id", order.id);
       return { ok: false, error: "発注の登録に失敗しました" };
     }
+  }
+
+  // 取り込みドキュメントを消費済みに更新（best-effort）。orders.intake_document_id は
+  // 既に insert 時にセットしているので、ここはステータスのみ更新する。
+  if (options?.intakeDocumentId) {
+    await supabase
+      .from("order_intake_documents")
+      .update({ status: "consumed", consumed_order_id: order.id })
+      .eq("id", options.intakeDocumentId)
+      .eq("tenant_id", tenantId);
   }
 
   const itemSummary = items

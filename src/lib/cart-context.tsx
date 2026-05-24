@@ -35,6 +35,9 @@ type CartContextType = {
   activeDraftId: string | null;
   switchDraft: (draftId: string) => Promise<void>;
   startNewDraft: () => Promise<string>;
+  // 紙発注書からの取り込み等、外部入力で items 全体を一括差し替えるとき用。
+  // 新しい draft を作って items をそのままセットする（既存カートには触らない）。
+  prefillCart: (items: CartItem[]) => Promise<string>;
 };
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -141,6 +144,22 @@ export function CartProvider({ children, tenantId, customerId }: CartProviderPro
     return draft.id;
   }, [tenantId, customerId]);
 
+  const prefillCart = useCallback(
+    async (newItems: CartItem[]) => {
+      const draft = await createDraft({ tenantId, customerId });
+      loadedRef.current = false;
+      setActiveDraftIdSync(tenantId, customerId, draft.id);
+      setActiveDraftId(draft.id);
+      setItems(newItems);
+      loadedRef.current = true;
+      // 即時にも書き出しておく（useEffect の persistence にも頼るが、
+      // 直後に router.push しても消えないように防御的に書く）
+      await updateDraftItems(draft.id, newItems).catch(() => {});
+      return draft.id;
+    },
+    [tenantId, customerId]
+  );
+
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
@@ -155,6 +174,7 @@ export function CartProvider({ children, tenantId, customerId }: CartProviderPro
         activeDraftId,
         switchDraft,
         startNewDraft,
+        prefillCart,
       }}
     >
       {children}

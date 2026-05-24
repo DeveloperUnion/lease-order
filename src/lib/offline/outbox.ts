@@ -32,6 +32,7 @@ export async function enqueue(input: {
   tenantId: string | null;
   customerId: string | null;
   payload: SubmitOrderInput;
+  intakeDocumentId?: string | null;
 }): Promise<OutboxItem> {
   const now = Date.now();
   const item: OutboxItem = {
@@ -40,6 +41,7 @@ export async function enqueue(input: {
     tenantId: input.tenantId,
     customerId: input.customerId,
     payload: input.payload,
+    intakeDocumentId: input.intakeDocumentId ?? null,
     status: "pending",
     attempts: 0,
     lastError: null,
@@ -146,6 +148,7 @@ export async function flushOne(
         body: JSON.stringify({
           client_request_id: item.clientRequestId,
           payload: item.payload,
+          intake_document_id: item.intakeDocumentId ?? null,
         }),
         signal: controller.signal,
         credentials: "same-origin",

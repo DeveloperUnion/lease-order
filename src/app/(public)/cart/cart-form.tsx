@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCart } from "@/lib/cart-context";
 import type { CustomerSession } from "@/lib/customer-auth";
 import type { DeliveryMethod, Office } from "@/lib/types";
@@ -79,7 +80,11 @@ export default function CartForm({ offices, customer }: Props) {
     activeDraftId,
     startNewDraft,
   } = useCart();
-  const [step, setStep] = useState<Step>("cart");
+  const searchParams = useSearchParams();
+  // /cart?step=form&intake=<id> で /cart/intake → カートに反映後の遷移先になる。
+  const initialStep: Step = searchParams.get("step") === "form" ? "form" : "cart";
+  const intakeDocumentId = searchParams.get("intake");
+  const [step, setStep] = useState<Step>(initialStep);
   const [siteName, setSiteName] = useState("");
   const [contactName, setContactName] = useState("");
   const [phone, setPhone] = useState(customer.phone ?? "");
@@ -232,6 +237,7 @@ export default function CartForm({ offices, customer }: Props) {
         tenantId: customer.tenant_id,
         customerId: customer.id,
         payload,
+        intakeDocumentId: intakeDocumentId ?? null,
       });
 
       // 2. オンラインなら即時送信を試みる。オフラインならスキップして
@@ -378,7 +384,14 @@ export default function CartForm({ offices, customer }: Props) {
             資材を探す
             <span aria-hidden>→</span>
           </Link>
-          <div className="mt-4">
+          <div className="mt-4 flex items-center justify-center gap-4">
+            <Link
+              href="/cart/intake"
+              className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline transition-colors"
+            >
+              発注書から作成（AI）
+              <span aria-hidden>→</span>
+            </Link>
             <Link
               href="/drafts"
               className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors"
@@ -405,12 +418,20 @@ export default function CartForm({ offices, customer }: Props) {
             >
               <span aria-hidden>←</span> 発注画面に戻る
             </Link>
-            <Link
-              href="/drafts"
-              className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors"
-            >
-              下書き一覧 <span aria-hidden>→</span>
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/cart/intake"
+                className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline transition-colors"
+              >
+                発注書から作成（AI）<span aria-hidden>→</span>
+              </Link>
+              <Link
+                href="/drafts"
+                className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors"
+              >
+                下書き一覧 <span aria-hidden>→</span>
+              </Link>
+            </div>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground mb-6">カート</h1>
 
