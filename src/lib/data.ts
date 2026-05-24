@@ -142,7 +142,7 @@ const fetchCategoriesCached = unstable_cache(
       const supabase = createTenantClient(tenantId);
       const { data, error } = await supabase
         .from("categories")
-        .select("id, name, slug, image_url, sort_order")
+        .select("id, name, slug, sort_order")
         .eq("tenant_id", tenantId)
         .order("sort_order");
       if (error) throw error;
@@ -150,6 +150,36 @@ const fetchCategoriesCached = unstable_cache(
     });
   },
   ["catalog:categories"],
+  { tags: ["catalog"], revalidate: 3600 }
+);
+
+export type CategoryWithCount = Category & { material_count: number };
+
+const fetchCategoriesWithCountsCached = unstable_cache(
+  async (tenantId: string): Promise<CategoryWithCount[]> => {
+    return withRedis(
+      `${CATALOG_PREFIX}cats-counts:${tenantId}`,
+      async () => {
+        const supabase = createTenantClient(tenantId);
+        const { data, error } = await supabase
+          .from("categories")
+          .select("id, name, slug, sort_order, materials(id)")
+          .eq("tenant_id", tenantId)
+          .eq("materials.is_active", true)
+          .order("sort_order");
+        if (error) throw error;
+        type Row = Category & { materials: { id: string }[] | null };
+        return ((data ?? []) as unknown as Row[]).map((row) => ({
+          id: row.id,
+          name: row.name,
+          slug: row.slug,
+          sort_order: row.sort_order,
+          material_count: row.materials?.length ?? 0,
+        }));
+      }
+    );
+  },
+  ["catalog:categories-with-counts"],
   { tags: ["catalog"], revalidate: 3600 }
 );
 
@@ -256,6 +286,13 @@ export const getCategories = cache(async (): Promise<Category[]> => {
   const tenantId = await getTenantId();
   return fetchCategoriesCached(tenantId);
 });
+
+export const getCategoriesWithCounts = cache(
+  async (): Promise<CategoryWithCount[]> => {
+    const tenantId = await getTenantId();
+    return fetchCategoriesWithCountsCached(tenantId);
+  }
+);
 
 export const getAllMaterials = cache(async (): Promise<Material[]> => {
   const tenantId = await getTenantId();

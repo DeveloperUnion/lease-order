@@ -36,7 +36,7 @@ export const listCategoriesForAdmin = cache(
     const supabase = await getSupabaseTenant();
     const { data, error } = await supabase
       .from("categories")
-      .select("id, name, slug, image_url, sort_order, materials(id)")
+      .select("id, name, slug, sort_order, materials(id)")
       .eq("tenant_id", tenantId)
       .order("sort_order");
     if (error) throw error;
@@ -46,7 +46,6 @@ export const listCategoriesForAdmin = cache(
       id: row.id,
       name: row.name,
       slug: row.slug,
-      image_url: row.image_url,
       sort_order: row.sort_order,
       material_count: row.materials?.length ?? 0,
     }));

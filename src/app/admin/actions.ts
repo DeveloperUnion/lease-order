@@ -489,33 +489,16 @@ export async function createCategory(formData: FormData) {
   const tenantId = await getTenantId();
   const supabase = await getSupabaseTenant();
   const input = parseCategoryInput(formData);
-  const imageFile = formData.get("image") as File | null;
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from("categories")
     .insert({
       tenant_id: tenantId,
       name: input.name,
       slug: input.slug,
       sort_order: input.sortOrder,
-    })
-    .select("id")
-    .single();
+    });
   if (error) throw new Error(`カテゴリの作成に失敗しました: ${error.message}`);
-
-  if (imageFile && imageFile.size > 0) {
-    const url = await uploadImageToStorage(
-      imageFile,
-      tenantId,
-      `categories/${data.id}`
-    );
-    const { error: updErr } = await supabase
-      .from("categories")
-      .update({ image_url: url })
-      .eq("id", data.id)
-      .eq("tenant_id", tenantId);
-    if (updErr) throw updErr;
-  }
 
   revalidatePath("/admin/categories");
   revalidatePath("/admin");
@@ -527,28 +510,13 @@ export async function updateCategory(categoryId: string, formData: FormData) {
   const tenantId = await getTenantId();
   const supabase = await getSupabaseTenant();
   const input = parseCategoryInput(formData);
-  const imageFile = formData.get("image") as File | null;
-
-  const update: {
-    name: string;
-    slug: string;
-    image_url?: string;
-  } = {
-    name: input.name,
-    slug: input.slug,
-  };
-
-  if (imageFile && imageFile.size > 0) {
-    update.image_url = await uploadImageToStorage(
-      imageFile,
-      tenantId,
-      `categories/${categoryId}`
-    );
-  }
 
   const { error } = await supabase
     .from("categories")
-    .update(update)
+    .update({
+      name: input.name,
+      slug: input.slug,
+    })
     .eq("id", categoryId)
     .eq("tenant_id", tenantId);
   if (error) throw new Error(`カテゴリの更新に失敗しました: ${error.message}`);

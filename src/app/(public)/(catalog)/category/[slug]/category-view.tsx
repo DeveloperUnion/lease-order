@@ -2,7 +2,6 @@
 
 import { Suspense, useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import MaterialCard from "@/components/material-card";
 import MaterialModal from "@/components/material-modal";
 import type { Category, Material } from "@/lib/types";
@@ -30,13 +29,6 @@ function CategoryViewInner({
 
   return (
     <>
-      <Link
-        href="/"
-        className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors mb-5"
-      >
-        <span aria-hidden>←</span> 発注画面に戻る
-      </Link>
-
       <h1 className="text-2xl font-bold tracking-tight text-foreground">
         {category.name}
       </h1>
