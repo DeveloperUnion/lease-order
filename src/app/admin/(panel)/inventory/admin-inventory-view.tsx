@@ -96,8 +96,7 @@ export default function AdminInventoryView({
         if (categoryId && r.material.category?.id !== categoryId) return false;
         if (q && !r.material.name.toLowerCase().includes(q)) return false;
         const agg = aggregateRow(r);
-        if (onlyAlerts && !agg.hasOutOfStock && agg.unconfigured === 0)
-          return false;
+        if (onlyAlerts && !agg.hasOutOfStock) return false;
         if (!includeUnset && agg.stock === null && agg.unconfigured > 0) {
           // 「未設定を含む」OFF のとき、material 単位の未設定は除外。
           // spec_options ありで一部だけ未設定は表示（部分的に設定済なら見せたい）
@@ -213,7 +212,7 @@ export default function AdminInventoryView({
             onChange={(e) => setOnlyAlerts(e.target.checked)}
             className="accent-accent"
           />
-          要注意のみ
+          在庫切れのみ
         </label>
         <label className="flex items-center gap-2 text-sm text-foreground select-none h-10">
           <input
@@ -252,11 +251,11 @@ export default function AdminInventoryView({
               const agg = aggregateRow(row);
               const isSpec = row.stock.kind === "spec_options";
               const isOpen = expanded.has(row.material.id);
+              // border は「在庫切れ」だけを強く示す。未設定は右側のバッジに任せる
+              // （未設定が多発するとべったり茶色が並んで一覧性を損なうため）
               const borderColor =
-                agg.available !== null && agg.available <= 0
+                agg.hasOutOfStock
                   ? "border-l-[var(--color-status-rejected-fg)]"
-                  : agg.stock === null && row.stock.kind === "material"
-                  ? "border-l-[var(--color-status-pending-fg)]"
                   : "border-l-transparent";
 
               return (
@@ -364,8 +363,6 @@ export default function AdminInventoryView({
                           const childBorder =
                             s.available !== null && s.available <= 0
                               ? "border-l-[var(--color-status-rejected-fg)]"
-                              : s.stock === null
-                              ? "border-l-[var(--color-status-pending-fg)]"
                               : "border-l-transparent";
                           return (
                             <div
