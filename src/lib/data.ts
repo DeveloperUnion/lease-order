@@ -7,9 +7,11 @@ import { readJson, writeJson } from "./redis-cache";
 import {
   Category,
   Material,
+  MaterialStockSummary,
   Office,
   SpecGroup,
   SpecOption,
+  SpecOptionStock,
 } from "./types";
 
 // catalog 系のキャッシュ階層:
@@ -51,6 +53,7 @@ type SpecOptionRow = {
   label: string;
   sort_order: number;
   is_active: boolean;
+  stock_quantity: number | null;
 };
 
 type SpecGroupRow = {
@@ -70,6 +73,7 @@ type MaterialRow = {
   spec: Record<string, string> | null;
   sort_order: number;
   is_active: boolean;
+  stock_quantity: number | null;
   material_images: MaterialImageJoin[] | null;
   spec_groups: SpecGroupRow[] | null;
 };
@@ -80,6 +84,7 @@ function mapSpecOption(row: SpecOptionRow): SpecOption {
     spec_group_id: row.spec_group_id,
     label: row.label,
     sort_order: row.sort_order,
+    stock_quantity: row.stock_quantity,
   };
 }
 
@@ -116,6 +121,7 @@ function mapMaterial(row: MaterialRow): Material {
     sort_order: row.sort_order,
     is_active: row.is_active,
     catalog_pages: imgs.map((i) => i.images!.url),
+    stock_quantity: row.stock_quantity,
     spec_groups,
   };
 }
@@ -142,7 +148,7 @@ const fetchCategoriesCached = unstable_cache(
       const supabase = createTenantClient(tenantId);
       const { data, error } = await supabase
         .from("categories")
-        .select("id, name, slug, image_url, sort_order")
+        .select("id, name, slug, sort_order")
         .eq("tenant_id", tenantId)
         .order("sort_order");
       if (error) throw error;
@@ -150,6 +156,36 @@ const fetchCategoriesCached = unstable_cache(
     });
   },
   ["catalog:categories"],
+  { tags: ["catalog"], revalidate: 3600 }
+);
+
+export type CategoryWithCount = Category & { material_count: number };
+
+const fetchCategoriesWithCountsCached = unstable_cache(
+  async (tenantId: string): Promise<CategoryWithCount[]> => {
+    return withRedis(
+      `${CATALOG_PREFIX}cats-counts:${tenantId}`,
+      async () => {
+        const supabase = createTenantClient(tenantId);
+        const { data, error } = await supabase
+          .from("categories")
+          .select("id, name, slug, sort_order, materials(id)")
+          .eq("tenant_id", tenantId)
+          .eq("materials.is_active", true)
+          .order("sort_order");
+        if (error) throw error;
+        type Row = Category & { materials: { id: string }[] | null };
+        return ((data ?? []) as unknown as Row[]).map((row) => ({
+          id: row.id,
+          name: row.name,
+          slug: row.slug,
+          sort_order: row.sort_order,
+          material_count: row.materials?.length ?? 0,
+        }));
+      }
+    );
+  },
+  ["catalog:categories-with-counts"],
   { tags: ["catalog"], revalidate: 3600 }
 );
 
@@ -171,7 +207,7 @@ async function loadMaterialsAndMerge(
   let matsQuery = supabase
     .from("materials")
     .select(
-      "id, category_id, name, description, spec, sort_order, is_active, material_images(sort_order, is_primary, images(url))"
+      "id, category_id, name, description, spec, sort_order, is_active, stock_quantity, material_images(sort_order, is_primary, images(url))"
     )
     .eq("tenant_id", tenantId)
     .eq("is_active", true)
@@ -179,7 +215,7 @@ async function loadMaterialsAndMerge(
   let groupsQuery = supabase
     .from("spec_groups")
     .select(
-      "id, material_id, name, sort_order, is_active, spec_options(id, spec_group_id, label, sort_order, is_active), materials!inner(id, category_id)"
+      "id, material_id, name, sort_order, is_active, spec_options(id, spec_group_id, label, sort_order, is_active, stock_quantity), materials!inner(id, category_id)"
     )
     .eq("tenant_id", tenantId)
     .eq("is_active", true)
@@ -256,6 +292,13 @@ export const getCategories = cache(async (): Promise<Category[]> => {
   const tenantId = await getTenantId();
   return fetchCategoriesCached(tenantId);
 });
+
+export const getCategoriesWithCounts = cache(
+  async (): Promise<CategoryWithCount[]> => {
+    const tenantId = await getTenantId();
+    return fetchCategoriesWithCountsCached(tenantId);
+  }
+);
 
 export const getAllMaterials = cache(async (): Promise<Material[]> => {
   const tenantId = await getTenantId();

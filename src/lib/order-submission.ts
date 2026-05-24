@@ -4,6 +4,7 @@ import { notifyAdmins } from "@/lib/notifications";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 import { getCurrentCustomer, type CustomerSession } from "@/lib/customer-auth";
+import { revalidateCatalog } from "@/lib/catalog-cache";
 import type { DeliveryMethod, SpecSelectionLabel } from "@/lib/types";
 
 export type SubmitOrderInput = {
@@ -405,6 +406,9 @@ export async function submitOrderCore(
     itemSummary,
   };
   await notifyAdmins(tenantId, "admin_new_order", ctx, order.id);
+
+  // 引き当て中の在庫が増えるので catalog を invalidate
+  await revalidateCatalog();
 
   return { ok: true, orderNumber, duplicate: false };
 }

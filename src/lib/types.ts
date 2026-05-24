@@ -2,7 +2,6 @@ export type Category = {
   id: string;
   name: string;
   slug: string;
-  image_url: string | null;
   sort_order: number;
 };
 
@@ -17,6 +16,8 @@ export type Material = {
   is_active: boolean;
   catalog_pages?: string[];
   spec_groups?: SpecGroup[];
+  // null = 在庫未設定。0 = 明示的に在庫切れ。
+  stock_quantity?: number | null;
 };
 
 export type SpecOption = {
@@ -24,7 +25,31 @@ export type SpecOption = {
   spec_group_id: string;
   label: string;
   sort_order: number;
+  // null = 在庫未設定。0 = 明示的に在庫切れ。
+  stock_quantity?: number | null;
 };
+
+// 派生計算した在庫サマリ（管理画面の表示 / 発注モーダルでの残数表示に使う）。
+// stock / available が null の場合は「未設定」を意味し、UI 側でハイフン等で表現する。
+export type SpecOptionStock = {
+  spec_option_id: string;
+  group_id: string;
+  stock: number | null;
+  in_use: number;
+  available: number | null;
+};
+
+export type MaterialStockSummary =
+  | {
+      kind: "spec_options";
+      options: SpecOptionStock[];
+    }
+  | {
+      kind: "material";
+      stock: number | null;
+      in_use: number;
+      available: number | null;
+    };
 
 export type SpecGroup = {
   id: string;

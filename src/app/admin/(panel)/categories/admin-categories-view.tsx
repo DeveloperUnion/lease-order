@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useState, useTransition } from "react";
 import type { AdminCategoryRow } from "@/lib/admin-data";
 import {
@@ -16,7 +15,6 @@ import {
   TextInput,
   EmptyState,
 } from "@/components/admin/ui";
-import { resizeImage } from "@/lib/image/resize-client";
 
 type EditingState =
   | { mode: "create" }
@@ -174,22 +172,6 @@ export default function AdminCategoriesView({
                     <circle cx="13" cy="15" r="1.4" />
                   </svg>
                 </span>
-                <div className="relative w-12 h-12 bg-surface-muted border border-rule flex-shrink-0 flex items-center justify-center overflow-hidden">
-                  {cat.image_url ? (
-                    <Image
-                      src={cat.image_url}
-                      alt=""
-                      fill
-                      sizes="48px"
-                      draggable={false}
-                      className="object-cover"
-                    />
-                  ) : (
-                    <span className="font-[family-name:var(--font-mono)] text-[9px] text-subtle uppercase">
-                      no img
-                    </span>
-                  )}
-                </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">
                     {cat.name}
@@ -258,13 +240,11 @@ export default function AdminCategoriesView({
                   name: editing.category.name,
                   slug: editing.category.slug,
                   sort_order: editing.category.sort_order,
-                  image_url: editing.category.image_url,
                 }
               : {
                   name: "",
                   slug: "",
                   sort_order: (categories.at(-1)?.sort_order ?? 0) + 1,
-                  image_url: null,
                 }
           }
           isEdit={editing.mode === "edit"}
@@ -285,7 +265,6 @@ type EditInitial = {
   name: string;
   slug: string;
   sort_order: number;
-  image_url: string | null;
 };
 
 function EditModal({
@@ -305,19 +284,6 @@ function EditModal({
 }) {
   const [name, setName] = useState(initial.name);
   const [slug, setSlug] = useState(initial.slug);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(
-    initial.image_url
-  );
-
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const resized = await resizeImage(file, { maxEdge: 1200, quality: 0.85 });
-      setImageFile(resized);
-      setImagePreview(URL.createObjectURL(resized));
-    }
-  };
 
   const handleFormAction = (formData: FormData) => {
     formData.set("name", name);
@@ -325,7 +291,6 @@ function EditModal({
     // create 時のみ末尾に追加されるよう、initial.sort_order をそのまま渡す。
     // edit 時は updateCategory が sort_order を無視する（D&D で並び替え）。
     if (!isEdit) formData.set("sort_order", String(initial.sort_order));
-    if (imageFile) formData.set("image", imageFile);
     onSubmit(formData);
   };
 
@@ -383,26 +348,6 @@ function EditModal({
                 placeholder="例: karigakoi"
                 className="font-[family-name:var(--font-mono)]"
               />
-            </FormField>
-            <FormField label="画像">
-              <div className="flex items-center gap-4">
-                {imagePreview && (
-                  <div className="w-16 h-16 bg-surface-muted border border-rule overflow-hidden flex-shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={imagePreview}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="text-sm text-muted file:mr-3 file:h-9 file:px-4 file:border-0 file:text-xs file:font-medium file:bg-surface-muted file:text-foreground file:font-[family-name:var(--font-mono)] file:uppercase file:tracking-wider hover:file:bg-rule"
-                />
-              </div>
             </FormField>
           </div>
 

@@ -126,6 +126,8 @@ export async function rejectOrder(orderId: string, reason: string) {
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath("/admin");
+  // 引き当て中の在庫が解放されるので catalog を invalidate
+  await revalidateCatalog();
   await notifyCustomer(orderId, "order_rejected", { rejectReason: reason });
 }
 
@@ -158,6 +160,8 @@ export async function cancelOrder(orderId: string) {
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath("/admin");
+  // 引き当て中の在庫が解放されるので catalog を invalidate
+  await revalidateCatalog();
   await notifyCustomer(orderId, "order_cancelled");
 }
 
@@ -489,33 +493,16 @@ export async function createCategory(formData: FormData) {
   const tenantId = await getTenantId();
   const supabase = await getSupabaseTenant();
   const input = parseCategoryInput(formData);
-  const imageFile = formData.get("image") as File | null;
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from("categories")
     .insert({
       tenant_id: tenantId,
       name: input.name,
       slug: input.slug,
       sort_order: input.sortOrder,
-    })
-    .select("id")
-    .single();
+    });
   if (error) throw new Error(`カテゴリの作成に失敗しました: ${error.message}`);
-
-  if (imageFile && imageFile.size > 0) {
-    const url = await uploadImageToStorage(
-      imageFile,
-      tenantId,
-      `categories/${data.id}`
-    );
-    const { error: updErr } = await supabase
-      .from("categories")
-      .update({ image_url: url })
-      .eq("id", data.id)
-      .eq("tenant_id", tenantId);
-    if (updErr) throw updErr;
-  }
 
   revalidatePath("/admin/categories");
   revalidatePath("/admin");
@@ -527,28 +514,13 @@ export async function updateCategory(categoryId: string, formData: FormData) {
   const tenantId = await getTenantId();
   const supabase = await getSupabaseTenant();
   const input = parseCategoryInput(formData);
-  const imageFile = formData.get("image") as File | null;
-
-  const update: {
-    name: string;
-    slug: string;
-    image_url?: string;
-  } = {
-    name: input.name,
-    slug: input.slug,
-  };
-
-  if (imageFile && imageFile.size > 0) {
-    update.image_url = await uploadImageToStorage(
-      imageFile,
-      tenantId,
-      `categories/${categoryId}`
-    );
-  }
 
   const { error } = await supabase
     .from("categories")
-    .update(update)
+    .update({
+      name: input.name,
+      slug: input.slug,
+    })
     .eq("id", categoryId)
     .eq("tenant_id", tenantId);
   if (error) throw new Error(`カテゴリの更新に失敗しました: ${error.message}`);
@@ -1230,6 +1202,63 @@ export async function reorderSpecOptions(
       throw new Error(`バリエーションの並び替えに失敗しました: ${error.message}`);
     }
   }
+  revalidatePath(`/admin/materials/${materialId}`);
+  await revalidateCatalog();
+}
+
+// ============================================================
+// 在庫数量（マスタ）の更新
+//
+// 派生計算（quantity - returned - lost）で残数を出すため、ここで設定するのは
+// 保有数（マスタ値）。0 以上の整数のみ受け付ける。
+// ============================================================
+
+// null は「未設定」を意味し、明示的にクリアできる。空文字や未指定も null 扱い。
+function parseStockQuantity(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error("在庫数は 0 以上の整数で入力してください");
+  }
+  return n;
+}
+
+export async function updateMaterialStock(
+  materialId: string,
+  quantity: number | null
+) {
+  const tenantId = await getTenantId();
+  await assertMaterialOwnedByTenant(materialId, tenantId);
+  const value = parseStockQuantity(quantity);
+  const supabase = await getSupabaseTenant();
+  const { error } = await supabase
+    .from("materials")
+    .update({ stock_quantity: value })
+    .eq("id", materialId)
+    .eq("tenant_id", tenantId);
+  if (error) throw new Error(`在庫の更新に失敗しました: ${error.message}`);
+  revalidatePath(`/admin/materials/${materialId}`);
+  await revalidateCatalog();
+}
+
+export async function updateSpecOptionStock(
+  materialId: string,
+  groupId: string,
+  optionId: string,
+  quantity: number | null
+) {
+  const tenantId = await getTenantId();
+  await assertMaterialOwnedByTenant(materialId, tenantId);
+  await assertSpecGroupOwnedByMaterial(groupId, materialId, tenantId);
+  const value = parseStockQuantity(quantity);
+  const supabase = await getSupabaseTenant();
+  const { error } = await supabase
+    .from("spec_options")
+    .update({ stock_quantity: value, updated_at: new Date().toISOString() })
+    .eq("id", optionId)
+    .eq("spec_group_id", groupId)
+    .eq("tenant_id", tenantId);
+  if (error) throw new Error(`在庫の更新に失敗しました: ${error.message}`);
   revalidatePath(`/admin/materials/${materialId}`);
   await revalidateCatalog();
 }
