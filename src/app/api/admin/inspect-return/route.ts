@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateObject } from "ai";
+import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
@@ -8,8 +8,14 @@ import { currentAdminUserId } from "@/app/admin/(panel)/requests/_helpers";
 
 export const dynamic = "force-dynamic";
 
-const MODEL = "anthropic/claude-sonnet-4-6";
+// 暫定で intake と同じ Gemini を使う。自社の機械学習モデルが完成したら
+// （HuggingFace 等にデプロイ予定）こちらに差し替える。
+const MODEL = "gemini-2.5-pro";
 const SIGNED_URL_TTL = 60 * 10; // 10 分（AI 推論の所要時間に余裕を持たせる）
+const MAX_INLINE_BYTES = 20 * 1024 * 1024;
+
+const apiKey = process.env.GEMINI_API_KEY;
+const genai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 const InspectionResult = z.object({
   items: z
@@ -46,6 +52,12 @@ type ExpectedItem = {
 
 export async function POST(req: Request) {
   try {
+    if (!genai) {
+      return NextResponse.json(
+        { error: "GEMINI_API_KEY が未設定です。サーバー管理者に連絡してください。" },
+        { status: 500 }
+      );
+    }
     const body = (await req.json()) as { returnRequestId?: string };
     const requestId = body.returnRequestId;
     if (!requestId || typeof requestId !== "string") {
@@ -111,7 +123,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "写真が登録されていません" }, { status: 400 });
     }
 
-    const photos: { id: string; signedUrl: string }[] = [];
+    // Supabase 署名 URL は外部 URL なので Gemini が直接読めない。
+    // 各写真を fetch して base64 inlineData として渡す。
+    const photos: { id: string; base64: string; mimeType: string }[] = [];
     for (const row of photoEntries) {
       const { data: signed, error: sigErr } = await supabaseAdmin.storage
         .from("return-photos")
@@ -122,7 +136,27 @@ export async function POST(req: Request) {
           { status: 500 }
         );
       }
-      photos.push({ id: row.id as string, signedUrl: signed.signedUrl });
+      try {
+        const r = await fetch(signed.signedUrl);
+        if (!r.ok) throw new Error(`fetch ${r.status} ${r.statusText}`);
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.byteLength > MAX_INLINE_BYTES) {
+          throw new Error("写真サイズが大きすぎます");
+        }
+        const mime = r.headers.get("content-type") ?? "image/jpeg";
+        photos.push({
+          id: row.id as string,
+          base64: buf.toString("base64"),
+          mimeType: mime,
+        });
+      } catch (e) {
+        return NextResponse.json(
+          {
+            error: `写真の取得に失敗: ${e instanceof Error ? e.message : String(e)}`,
+          },
+          { status: 502 }
+        );
+      }
     }
 
     const expectedBlock = expected
@@ -145,29 +179,39 @@ export async function POST(req: Request) {
         expected.find((e) => e.order_item_id === rr.order_item_id)?.material_name ?? "(不明)"
       }`;
 
+    const responseJsonSchema = z.toJSONSchema(InspectionResult);
+
     let result: InspectionResult;
     let usedModel = MODEL;
     try {
-      const ai = await generateObject({
+      const aiRes = await genai.models.generateContent({
         model: MODEL,
-        schema: InspectionResult,
-        messages: [
+        contents: [
           {
             role: "user",
-            content: [
-              { type: "text", text: `${systemPrompt}\n\n${userText}` },
-              ...photos.map(
-                (p) =>
-                  ({
-                    type: "image" as const,
-                    image: new URL(p.signedUrl),
-                  })
-              ),
+            parts: [
+              { text: `${systemPrompt}\n\n${userText}` },
+              ...photos.map((p) => ({
+                inlineData: { mimeType: p.mimeType, data: p.base64 },
+              })),
             ],
           },
         ],
+        config: {
+          responseMimeType: "application/json",
+          responseJsonSchema,
+        },
       });
-      result = ai.object;
+      const rawText = aiRes.text;
+      if (!rawText) throw new Error("AI から空レスポンスが返ってきました");
+      const parsed = JSON.parse(rawText);
+      const validated = InspectionResult.safeParse(parsed);
+      if (!validated.success) {
+        throw new Error(
+          `AI 出力がスキーマ違反: ${validated.error.issues.slice(0, 3).map((e) => e.message).join(", ")}`
+        );
+      }
+      result = validated.data;
       usedModel = MODEL;
     } catch (err) {
       console.error("inspect-return: AI 呼び出し失敗", err);
