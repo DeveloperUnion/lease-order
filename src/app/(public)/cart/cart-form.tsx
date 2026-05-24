@@ -386,13 +386,6 @@ export default function CartForm({ offices, customer }: Props) {
           </Link>
           <div className="mt-4 flex items-center justify-center gap-4">
             <Link
-              href="/cart/intake"
-              className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline transition-colors"
-            >
-              発注書から作成（AI）
-              <span aria-hidden>→</span>
-            </Link>
-            <Link
               href="/drafts"
               className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors"
             >
@@ -418,20 +411,12 @@ export default function CartForm({ offices, customer }: Props) {
             >
               <span aria-hidden>←</span> 発注画面に戻る
             </Link>
-            <div className="flex items-center gap-4">
-              <Link
-                href="/cart/intake"
-                className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline transition-colors"
-              >
-                発注書から作成（AI）<span aria-hidden>→</span>
-              </Link>
-              <Link
-                href="/drafts"
-                className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors"
-              >
-                下書き一覧 <span aria-hidden>→</span>
-              </Link>
-            </div>
+            <Link
+              href="/drafts"
+              className="inline-flex items-center gap-1.5 text-xs text-subtle hover:text-accent transition-colors"
+            >
+              下書き一覧 <span aria-hidden>→</span>
+            </Link>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground mb-6">カート</h1>
 

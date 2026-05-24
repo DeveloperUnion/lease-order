@@ -15,6 +15,37 @@ export default async function HomePage() {
         <span className="text-foreground font-medium">{categories.length}</span> 種類
       </p>
 
+      <Link
+        href="/cart/intake"
+        className="group mt-5 flex items-center gap-3 rounded-xl border border-accent/30 bg-gradient-to-r from-accent/8 to-accent/4 px-4 py-3.5 hover:border-accent hover:shadow-sm transition-all duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.995]"
+      >
+        <span
+          aria-hidden
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-white text-lg"
+        >
+          📄
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="flex items-center gap-1.5">
+            <span className="text-sm font-semibold text-foreground">
+              発注書から作成
+            </span>
+            <span className="inline-flex items-center rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+              AI
+            </span>
+          </span>
+          <span className="mt-0.5 block text-xs text-muted">
+            写真をアップロードして自動でカートに入力
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className="text-accent text-lg group-hover:translate-x-0.5 transition-transform"
+        >
+          →
+        </span>
+      </Link>
+
       {categories.length === 0 ? (
         <div className="mt-6 border border-border rounded-xl bg-surface py-16 text-center">
           <p className="text-sm text-muted">

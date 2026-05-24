@@ -95,9 +95,10 @@ export default function OrdersBoardOrList({
               <div className="flex items-center gap-3">
                 <Link
                   href="/admin/orders/new"
-                  className="inline-flex items-center gap-1.5 px-3 h-8 border border-rule text-sm text-foreground hover:bg-surface-muted transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 h-8 bg-accent text-white text-sm font-semibold hover:bg-accent-hover transition-colors"
                 >
-                  + 代行発注（AI 取り込み）
+                  <span aria-hidden>＋</span>
+                  代行発注（AI 取り込み）
                 </Link>
                 <div
                   role="tablist"
