@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import {
   listOutbox,
   flushOne,
@@ -82,15 +81,7 @@ export default function OutboxList({ tenantId, customerId }: Props) {
 
   return (
     <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-7">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">送信待ち</h1>
-        <Link
-          href="/cart"
-          className="text-xs text-subtle hover:text-accent transition-colors"
-        >
-          カートへ <span aria-hidden>→</span>
-        </Link>
-      </div>
+      <h1 className="text-2xl font-bold tracking-tight text-foreground mb-6">送信待ち</h1>
 
       {items === null && (
         <p className="text-sm text-muted py-12 text-center">読み込み中…</p>
