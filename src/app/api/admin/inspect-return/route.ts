@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 // 暫定で intake と同じ Gemini を使う。自社の機械学習モデルが完成したら
 // （HuggingFace 等にデプロイ予定）こちらに差し替える。
-const MODEL = "gemini-2.5-pro";
+const MODEL = "gemini-3.1-flash-lite";
 const SIGNED_URL_TTL = 60 * 10; // 10 分（AI 推論の所要時間に余裕を持たせる）
 const MAX_INLINE_BYTES = 20 * 1024 * 1024;
 

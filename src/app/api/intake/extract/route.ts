@@ -15,7 +15,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const BUCKET = "order-intake-documents";
-const MODEL = "gemini-2.5-pro";
+const MODEL = "gemini-3.1-flash-lite";
 const SIGNED_URL_TTL = 60 * 10; // 10 分
 const MAX_INLINE_BYTES = 20 * 1024 * 1024; // Gemini inlineData の上限は 20MB
 
