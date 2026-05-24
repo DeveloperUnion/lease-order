@@ -35,7 +35,7 @@ type Props =
       }) => Promise<{ ok: true; orderNumber: string } | { ok: false; error: string }>;
     };
 
-type Step = "upload" | "extracting" | "review" | "failed" | "done";
+type Step = "upload" | "uploading" | "extracting" | "review" | "failed" | "done";
 
 function rowsFromResolved(
   resolved: ResolvedIntake,
@@ -107,7 +107,7 @@ export default function IntakeFlow(props: Props) {
       return;
     }
     setErrorMessage("");
-    setStep("extracting");
+    setStep("uploading");
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -121,6 +121,7 @@ export default function IntakeFlow(props: Props) {
       }
       const docId = upJson.documentId;
       setDocumentId(docId);
+      setStep("extracting");
 
       const exRes = await fetch("/api/intake/extract", {
         method: "POST",
@@ -395,14 +396,29 @@ export default function IntakeFlow(props: Props) {
         </div>
       )}
 
-      {step === "extracting" && (
-        <div className="border border-border bg-surface rounded-2xl p-10 text-center">
-          <div className="inline-block animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
-          <p className="mt-4 text-sm font-semibold text-foreground">
-            AI が発注書を読み取っています…
-          </p>
-          <p className="mt-1 text-xs text-subtle">
-            通常 15〜30 秒ほどで完了します。
+      {(step === "uploading" || step === "extracting") && (
+        <div className="border border-border bg-surface rounded-2xl p-8">
+          {file && (
+            <p className="text-xs text-subtle text-center mb-6 break-all px-2">
+              {file.name}（{(file.size / 1024 / 1024).toFixed(2)} MB）
+            </p>
+          )}
+          <ol className="space-y-3 max-w-xs mx-auto">
+            <ProgressStep
+              status={step === "uploading" ? "active" : "done"}
+              label="ファイルをアップロード中"
+              doneLabel="アップロード完了"
+            />
+            <ProgressStep
+              status={step === "extracting" ? "active" : "pending"}
+              label="AI が発注書を読み取り中"
+              pendingLabel="AI 読み取り待機中"
+            />
+          </ol>
+          <p className="mt-6 text-center text-xs text-subtle">
+            {step === "uploading"
+              ? "通信状況により数秒かかります。"
+              : "通常 10〜20 秒ほどで完了します。"}
           </p>
         </div>
       )}
@@ -568,6 +584,50 @@ export default function IntakeFlow(props: Props) {
         </div>
       )}
     </main>
+  );
+}
+
+function ProgressStep({
+  status,
+  label,
+  doneLabel,
+  pendingLabel,
+}: {
+  status: "pending" | "active" | "done";
+  label: string;
+  doneLabel?: string;
+  pendingLabel?: string;
+}) {
+  const text =
+    status === "done" ? doneLabel ?? label : status === "pending" ? pendingLabel ?? label : label;
+  return (
+    <li className="flex items-center gap-3">
+      <span
+        aria-hidden
+        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+          status === "done"
+            ? "bg-accent text-white"
+            : status === "active"
+            ? "bg-accent/15 text-accent"
+            : "bg-surface-muted text-subtle"
+        }`}
+      >
+        {status === "done" ? "✓" : status === "active" ? (
+          <span className="inline-block w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+        ) : "·"}
+      </span>
+      <span
+        className={`text-sm ${
+          status === "done"
+            ? "text-foreground"
+            : status === "active"
+            ? "text-foreground font-semibold"
+            : "text-subtle"
+        }`}
+      >
+        {text}
+      </span>
+    </li>
   );
 }
 
