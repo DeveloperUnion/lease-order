@@ -218,29 +218,53 @@ export default function IntakeFlow(props: Props) {
     setFormFields((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
-  const isReviewValid = useMemo(() => {
-    if (!rows.length) return false;
-    if (!formFields) return false;
+  const missingItems = useMemo(() => {
+    const msgs: string[] = [];
+    if (!rows.length) {
+      msgs.push("明細がありません");
+      return msgs;
+    }
+    if (!formFields) return msgs;
+
+    let unmatched = 0;
+    let missingSpec = 0;
+    let badQty = 0;
     for (const r of rows) {
-      if (!r.material) return false;
+      if (!r.material) {
+        unmatched++;
+        continue;
+      }
       const required = r.material.spec_groups ?? [];
       for (const g of required) {
-        if (!r.selections.some((s) => s.spec_group_id === g.id)) return false;
+        if (!r.selections.some((s) => s.spec_group_id === g.id)) {
+          missingSpec++;
+          break;
+        }
       }
-      if (r.quantity < 1) return false;
+      if (r.quantity < 1) badQty++;
     }
+    if (unmatched) msgs.push(`資材未選択の行が ${unmatched} 件`);
+    if (missingSpec) msgs.push(`仕様（色・サイズ等）未選択の行が ${missingSpec} 件`);
+    if (badQty) msgs.push(`数量が 0 の行が ${badQty} 件`);
+
     if (mode === "admin") {
-      if (!formFields.site_name?.trim()) return false;
-      if (!formFields.contact_name?.trim()) return false;
-      if (!formFields.rental_start_date || !formFields.rental_end_date) return false;
-      if (formFields.rental_end_date < formFields.rental_start_date) return false;
-      if (adminDeliveryMethod === "delivery" && !formFields.delivery_address?.trim()) {
-        return false;
+      if (!formFields.site_name?.trim()) msgs.push("現場名が未入力");
+      if (!formFields.contact_name?.trim()) msgs.push("担当者名が未入力");
+      if (!formFields.rental_start_date || !formFields.rental_end_date) {
+        msgs.push("リース期間が未入力");
+      } else if (formFields.rental_end_date < formFields.rental_start_date) {
+        msgs.push("リース終了日が開始日より前");
       }
-      if (adminDeliveryMethod === "pickup" && !adminPickupOfficeId) return false;
+      if (adminDeliveryMethod === "delivery" && !formFields.delivery_address?.trim()) {
+        msgs.push("配送先住所が未入力");
+      }
+      if (adminDeliveryMethod === "pickup" && !adminPickupOfficeId) {
+        msgs.push("引取営業所が未選択");
+      }
     }
-    return true;
+    return msgs;
   }, [rows, formFields, mode, adminDeliveryMethod, adminPickupOfficeId]);
+  const isReviewValid = missingItems.length === 0;
 
   async function handleApply() {
     if (!documentId || !formFields) return;
@@ -594,6 +618,19 @@ export default function IntakeFlow(props: Props) {
             <p className="text-sm text-danger">{errorMessage}</p>
           )}
 
+          {missingItems.length > 0 && (
+            <div className="border border-warning/30 bg-warning/5 rounded-xl px-4 py-3">
+              <p className="text-xs font-semibold text-warning mb-1.5">
+                {mode === "customer" ? "カートに反映" : "代行発注を作成"}するには以下を解消してください
+              </p>
+              <ul className="text-xs text-foreground space-y-0.5 list-disc list-inside">
+                {missingItems.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button
               onClick={handleApply}
@@ -671,7 +708,6 @@ function ReviewBanner({ resolved }: { resolved: ResolvedIntake }) {
     >
       <p>
         AI 自信度: <strong>{Math.round(resolved.overall_confidence * 100)}%</strong>
-        {resolved.ai_model ? `（${resolved.ai_model}）` : null}
       </p>
       {resolved.overall_notes && (
         <p className="mt-1 whitespace-pre-wrap">{resolved.overall_notes}</p>
