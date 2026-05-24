@@ -5,6 +5,7 @@ import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 import { notifyCustomer } from "@/lib/notifications";
 import { currentAdminUserId } from "@/lib/current-admin";
+import { revalidateCatalog } from "@/lib/catalog-cache";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -265,6 +266,8 @@ export async function completeReturn(
   }
 
   invalidate(loaded.item.orderId);
+  // returned_quantity / lost_quantity が増えると貸出中数量が減るので catalog を invalidate
+  await revalidateCatalog();
   await notifyCustomer(loaded.item.orderId, "return_completed", {
     itemSummary: `${loaded.item.materialName} ×${received}${
       cancelled + lost > 0 ? ` (キャンセル ${cancelled} / 損失 ${lost})` : ""

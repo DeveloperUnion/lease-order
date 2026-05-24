@@ -5,9 +5,11 @@ import type {
   Category,
   DeliveryMethod,
   Material,
+  MaterialStockSummary,
   Office,
   SpecGroup,
   SpecOption,
+  SpecOptionStock,
   SpecSelectionLabel,
 } from "./types";
 
@@ -102,6 +104,7 @@ type SpecOptionRaw = {
   label: string;
   sort_order: number;
   is_active: boolean;
+  stock_quantity: number | null;
 };
 
 type SpecGroupRaw = {
@@ -121,6 +124,7 @@ type MaterialDetailRaw = {
   spec: Record<string, string> | null;
   sort_order: number;
   is_active: boolean;
+  stock_quantity: number | null;
   spec_groups: SpecGroupRaw[] | null;
   material_images:
     | {
@@ -138,6 +142,7 @@ function mapSpecOption(row: SpecOptionRaw): SpecOption {
     spec_group_id: row.spec_group_id,
     label: row.label,
     sort_order: row.sort_order,
+    stock_quantity: row.stock_quantity,
   };
 }
 
@@ -164,9 +169,9 @@ export async function getMaterialDetail(
   const { data, error } = await supabase
     .from("materials")
     .select(
-      `id, category_id, name, description, spec, sort_order, is_active,
+      `id, category_id, name, description, spec, sort_order, is_active, stock_quantity,
        spec_groups(id, material_id, name, sort_order, is_active,
-         spec_options(id, spec_group_id, label, sort_order, is_active)),
+         spec_options(id, spec_group_id, label, sort_order, is_active, stock_quantity)),
        material_images(image_id, sort_order, is_primary, images(url, caption))`
     )
     .eq("tenant_id", tenantId)
@@ -203,9 +208,151 @@ export async function getMaterialDetail(
     is_active: raw.is_active,
     image_url: primary?.url ?? null,
     catalog_pages: images.map((i) => i.url),
+    stock_quantity: raw.stock_quantity,
     spec_groups,
     images,
   };
+}
+
+// ============================================================
+// 在庫サマリ（派生計算）
+//
+// stock_quantity はマスタの保有数。in_use は order_items から派生計算する。
+// 「貸出中」= status not in ('rejected','cancelled') な order に紐づく
+// order_items の (quantity - returned_quantity - lost_quantity) の合計。
+//
+// 仕様グループがある材料は spec_option 単位で集計（order_item_spec_options 経由）。
+// 仕様グループが無い材料は materials 直下で集計。
+// ============================================================
+
+const ACTIVE_ORDER_STATUSES = ["pending", "approved", "renting", "completed"] as const;
+
+type StockUsageRow = {
+  spec_option_id: string;
+  order_items: {
+    quantity: number;
+    returned_quantity: number;
+    lost_quantity: number | null;
+    orders: { status: string } | null;
+  } | null;
+};
+
+type MaterialUsageRow = {
+  id: string;
+  quantity: number;
+  returned_quantity: number;
+  lost_quantity: number | null;
+  orders: { status: string } | null;
+};
+
+export async function getMaterialStockSummary(
+  materialId: string
+): Promise<MaterialStockSummary> {
+  const tenantId = await getTenantId();
+  const supabase = await getSupabaseTenant();
+
+  const { data: matRow, error: matErr } = await supabase
+    .from("materials")
+    .select(
+      `id, stock_quantity,
+       spec_groups(id, is_active,
+         spec_options(id, spec_group_id, stock_quantity, is_active))`
+    )
+    .eq("tenant_id", tenantId)
+    .eq("id", materialId)
+    .maybeSingle();
+  if (matErr) throw matErr;
+  if (!matRow) throw new Error("対象の資材が見つかりません");
+
+  type Row = {
+    stock_quantity: number | null;
+    spec_groups:
+      | {
+          id: string;
+          is_active: boolean;
+          spec_options:
+            | {
+                id: string;
+                spec_group_id: string;
+                stock_quantity: number | null;
+                is_active: boolean;
+              }[]
+            | null;
+        }[]
+      | null;
+  };
+  const r = matRow as unknown as Row;
+
+  const activeOptions = (r.spec_groups ?? [])
+    .filter((g) => g.is_active)
+    .flatMap((g) =>
+      (g.spec_options ?? []).filter((o) => o.is_active).map((o) => ({
+        id: o.id,
+        group_id: o.spec_group_id,
+        stock: o.stock_quantity,
+      }))
+    );
+
+  if (activeOptions.length === 0) {
+    // 仕様グループ無し: order_items を直接集計
+    const stock = r.stock_quantity;
+    const { data, error } = await supabase
+      .from("order_items")
+      .select("id, quantity, returned_quantity, lost_quantity, orders!inner(status)")
+      .eq("tenant_id", tenantId)
+      .eq("material_id", materialId)
+      .in("orders.status", ACTIVE_ORDER_STATUSES as unknown as string[]);
+    if (error) throw error;
+    let inUse = 0;
+    for (const row of (data ?? []) as unknown as MaterialUsageRow[]) {
+      const remaining =
+        row.quantity - row.returned_quantity - (row.lost_quantity ?? 0);
+      if (remaining > 0) inUse += remaining;
+    }
+    return {
+      kind: "material",
+      stock: stock ?? null,
+      in_use: inUse,
+      available: stock == null ? null : Math.max(0, stock - inUse),
+    };
+  }
+
+  const optionIds = activeOptions.map((o) => o.id);
+  const { data: usage, error: usageErr } = await supabase
+    .from("order_item_spec_options")
+    .select(
+      "spec_option_id, order_items!inner(quantity, returned_quantity, lost_quantity, orders!inner(status))"
+    )
+    .eq("tenant_id", tenantId)
+    .in("spec_option_id", optionIds)
+    .in("order_items.orders.status", ACTIVE_ORDER_STATUSES as unknown as string[]);
+  if (usageErr) throw usageErr;
+
+  const inUseByOption = new Map<string, number>();
+  for (const row of (usage ?? []) as unknown as StockUsageRow[]) {
+    const oi = row.order_items;
+    if (!oi) continue;
+    const remaining =
+      oi.quantity - oi.returned_quantity - (oi.lost_quantity ?? 0);
+    if (remaining <= 0) continue;
+    inUseByOption.set(
+      row.spec_option_id,
+      (inUseByOption.get(row.spec_option_id) ?? 0) + remaining
+    );
+  }
+
+  const options: SpecOptionStock[] = activeOptions.map((o) => {
+    const inUse = inUseByOption.get(o.id) ?? 0;
+    return {
+      spec_option_id: o.id,
+      group_id: o.group_id,
+      stock: o.stock ?? null,
+      in_use: inUse,
+      available: o.stock == null ? null : Math.max(0, o.stock - inUse),
+    };
+  });
+
+  return { kind: "spec_options", options };
 }
 
 export type AdminOfficeRow = Office & { in_use_count: number };

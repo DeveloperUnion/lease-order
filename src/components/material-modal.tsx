@@ -2,8 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Material, SpecGroup, SpecSelectionLabel } from "@/lib/types";
+import {
+  Material,
+  MaterialStockSummary,
+  SpecGroup,
+  SpecOptionStock,
+  SpecSelectionLabel,
+} from "@/lib/types";
 import { useCart } from "@/lib/cart-context";
+import { fetchMaterialStock } from "@/lib/material-stock-actions";
 
 type Props = {
   material: Material;
@@ -28,6 +35,28 @@ export default function MaterialModal({ material, onClose }: Props) {
   const groupRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [errorGroupId, setErrorGroupId] = useState<string | null>(null);
 
+  // 在庫サマリ（モーダル open のタイミングで派生計算を取得）
+  const [stock, setStock] = useState<MaterialStockSummary | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchMaterialStock(material.id)
+      .then((s) => {
+        if (!cancelled) setStock(s);
+      })
+      .catch(() => {
+        // 在庫取得失敗時は残数表示なしで動かす（発注は妨げない）
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [material.id]);
+
+  const stockByOptionId = useMemo(() => {
+    if (!stock || stock.kind !== "spec_options")
+      return new Map<string, SpecOptionStock>();
+    return new Map(stock.options.map((o) => [o.spec_option_id, o]));
+  }, [stock]);
+
   const catalogPages = material.catalog_pages || [];
   const hasMultiplePages = catalogPages.length > 1;
 
@@ -42,6 +71,27 @@ export default function MaterialModal({ material, onClose }: Props) {
   // 仕様は常に必須として扱うので、全 spec_groups が選択済みかチェック
   const allSelected = specGroups.every((g) => selections[g.id]);
   const ctaEnabled = allSelected;
+
+  // 現在の選択に対する「利用可能数」を派生計算。
+  // 仕様グループが複数あって複数 spec_option を選ぶ場合は、組み合わせ別在庫を
+  // 持たないので各 option の available の min をその注文への上限として扱う。
+  // 選択した option のいずれかが「未設定」(available=null) なら全体を null にし、
+  // 警告も出さない（未設定 = 在庫管理されていないので発注を妨げる根拠がない）。
+  const availableForOrder: number | null = useMemo(() => {
+    if (!stock) return null;
+    if (stock.kind === "material") return stock.available;
+    if (!allSelected) return null;
+    const ids = specGroups
+      .map((g) => selections[g.id])
+      .filter((v): v is string => !!v);
+    if (ids.length === 0) return null;
+    const values = ids.map((id) => stockByOptionId.get(id)?.available);
+    if (values.some((v) => v === null || v === undefined)) return null;
+    return Math.min(...(values as number[]));
+  }, [stock, allSelected, specGroups, selections, stockByOptionId]);
+
+  const exceedsStock =
+    availableForOrder !== null && quantity > availableForOrder;
 
   function selectOption(groupId: string, optionId: string) {
     setSelections((prev) => ({ ...prev, [groupId]: optionId }));
@@ -180,6 +230,7 @@ export default function MaterialModal({ material, onClose }: Props) {
                     selectedId={selections[g.id]}
                     error={errorGroupId === g.id}
                     onSelect={(optId) => selectOption(g.id, optId)}
+                    optionStocks={stockByOptionId}
                     refCallback={(el) => {
                       groupRefs.current[g.id] = el;
                     }}
@@ -188,44 +239,75 @@ export default function MaterialModal({ material, onClose }: Props) {
               </div>
             </div>
           )}
+
+          {/* 仕様グループ無しの資材は数量入力近くに残数を見せる（未設定なら非表示） */}
+          {!hasSpecGroups &&
+            stock?.kind === "material" &&
+            stock.available !== null && (
+              <div className="px-5 pb-5">
+                <div className="rounded-xl border border-border p-3 flex items-center gap-3 text-sm">
+                  <span className="text-muted">在庫</span>
+                  <span
+                    className={`tabular-nums font-semibold ${
+                      stock.available <= 0 ? "text-danger" : "text-foreground"
+                    }`}
+                  >
+                    残 {stock.available}
+                  </span>
+                  <span className="text-xs text-subtle tabular-nums">
+                    (保有 {stock.stock} / 貸出中 {stock.in_use})
+                  </span>
+                </div>
+              </div>
+            )}
         </div>
 
         {/* 固定フッター */}
-        <div className="border-t border-border px-5 py-4 bg-surface flex items-center gap-3">
-          <div className="inline-flex items-stretch border border-border rounded-lg overflow-hidden">
+        <div className="border-t border-border px-5 py-3 bg-surface flex flex-col gap-2">
+          {exceedsStock && availableForOrder !== null && (
+            <p className="text-xs text-danger tabular-nums" role="alert">
+              残り {availableForOrder} 個です。数量が在庫を超えています（管理者にお問い合わせください）。
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <div className="inline-flex items-stretch border border-border rounded-lg overflow-hidden">
+              <button
+                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                aria-label="数量を減らす"
+                className="w-11 inline-flex items-center justify-center text-muted hover:bg-surface-muted hover:text-foreground transition-colors"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" d="M5 12h14" /></svg>
+              </button>
+              <input
+                type="number"
+                min={1}
+                value={quantity}
+                onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+                aria-label="数量"
+                aria-invalid={exceedsStock || undefined}
+                className={`w-14 text-center text-sm font-semibold text-foreground border-x h-11 bg-surface tabular-nums focus:outline-none focus:bg-accent-soft ${
+                  exceedsStock ? "border-danger" : "border-border"
+                }`}
+              />
+              <button
+                onClick={() => setQuantity(quantity + 1)}
+                aria-label="数量を増やす"
+                className="w-11 inline-flex items-center justify-center text-muted hover:bg-surface-muted hover:text-foreground transition-colors"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
+              </button>
+            </div>
             <button
-              onClick={() => setQuantity(Math.max(1, quantity - 1))}
-              aria-label="数量を減らす"
-              className="w-11 inline-flex items-center justify-center text-muted hover:bg-surface-muted hover:text-foreground transition-colors"
+              onClick={handleCtaClick}
+              aria-disabled={!ctaEnabled}
+              className="flex-1 h-11 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99] inline-flex items-center justify-center gap-2 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:bg-primary"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" d="M5 12h14" /></svg>
-            </button>
-            <input
-              type="number"
-              min={1}
-              value={quantity}
-              onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
-              aria-label="数量"
-              className="w-14 text-center text-sm font-semibold text-foreground border-x border-border h-11 bg-surface tabular-nums focus:outline-none focus:bg-accent-soft"
-            />
-            <button
-              onClick={() => setQuantity(quantity + 1)}
-              aria-label="数量を増やす"
-              className="w-11 inline-flex items-center justify-center text-muted hover:bg-surface-muted hover:text-foreground transition-colors"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
+              </svg>
+              カートに追加
             </button>
           </div>
-          <button
-            onClick={handleCtaClick}
-            aria-disabled={!ctaEnabled}
-            className="flex-1 h-11 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99] inline-flex items-center justify-center gap-2 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:bg-primary"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
-            </svg>
-            カートに追加
-          </button>
         </div>
       </div>
     </div>
@@ -237,12 +319,14 @@ function SpecGroupBlock({
   selectedId,
   error = false,
   onSelect,
+  optionStocks,
   refCallback,
 }: {
   group: SpecGroup;
   selectedId: string | undefined;
   error?: boolean;
   onSelect: (optionId: string) => void;
+  optionStocks: Map<string, SpecOptionStock>;
   refCallback?: (el: HTMLDivElement | null) => void;
 }) {
   return (
@@ -265,18 +349,39 @@ function SpecGroupBlock({
       <div className="grid grid-cols-2 gap-2">
         {group.options.map((opt) => {
           const selected = selectedId === opt.id;
+          const stockInfo = optionStocks.get(opt.id);
+          // null = 未設定（在庫管理外なので残数表示も disabled もしない）。
+          // 0 以下 = 明示的な在庫切れ。
+          const available = stockInfo?.available ?? null;
+          const outOfStock = available !== null && available <= 0;
           return (
             <button
               key={opt.id}
               type="button"
-              onClick={() => onSelect(opt.id)}
-              className={`h-12 rounded-lg border text-sm font-semibold transition-colors ${
-                selected
+              onClick={() => !outOfStock && onSelect(opt.id)}
+              disabled={outOfStock}
+              className={`px-2 py-2 min-h-[3rem] rounded-lg border text-sm font-semibold transition-colors flex flex-col items-center justify-center gap-0.5 ${
+                outOfStock
+                  ? "border-border bg-surface-muted text-subtle cursor-not-allowed"
+                  : selected
                   ? "border-brand bg-brand/10 text-brand"
                   : "border-border bg-surface text-foreground hover:bg-surface-muted"
               }`}
             >
-              {opt.label}
+              <span>{opt.label}</span>
+              {available !== null && (
+                <span
+                  className={`text-[10px] font-normal tabular-nums ${
+                    outOfStock
+                      ? "text-danger"
+                      : selected
+                      ? "text-brand/80"
+                      : "text-subtle"
+                  }`}
+                >
+                  {outOfStock ? "在庫切れ" : `残 ${available}`}
+                </span>
+              )}
             </button>
           );
         })}
