@@ -187,3 +187,9 @@ export function useCart() {
   if (!context) throw new Error("useCart must be used within CartProvider");
   return context;
 }
+
+// admin の intake-flow など、CartProvider 外でマウントされる経路から呼ぶ用。
+// context が無い場合は null を返す（呼び出し側が mode で分岐する前提）。
+export function useOptionalCart() {
+  return useContext(CartContext);
+}

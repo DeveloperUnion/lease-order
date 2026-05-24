@@ -23,7 +23,7 @@ export default async function HomePage() {
           aria-hidden
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-white text-lg"
         >
-          📄
+          📷
         </span>
         <span className="flex-1 min-w-0">
           <span className="flex items-center gap-1.5">
