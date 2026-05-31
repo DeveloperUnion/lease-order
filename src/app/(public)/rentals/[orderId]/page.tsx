@@ -6,6 +6,7 @@ import { getOffices } from "@/lib/data";
 import ReturnForm from "./return-form";
 import LeaseTimeline from "@/components/ui/lease-timeline";
 import StatusBadge from "@/components/ui/status-badge";
+import { formatYen, UNIT_LABEL } from "@/lib/pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -240,14 +241,42 @@ export default async function RentalDetailPage({
             {order.items.map((it) => (
               <div
                 key={it.id}
-                className="px-5 py-3 flex items-center justify-between text-sm border-b border-border last:border-b-0"
+                className="px-5 py-3 flex items-center justify-between gap-3 text-sm border-b border-border last:border-b-0"
               >
-                <span className="text-foreground">{it.material_name}</span>
-                <span className="text-subtle tabular-nums">
-                  × {it.quantity}（返却 {it.returned_quantity}）
-                </span>
+                <div className="min-w-0">
+                  <span className="text-foreground">{it.material_name}</span>
+                  <span className="block text-xs text-subtle tabular-nums">
+                    × {it.quantity}（返却 {it.returned_quantity}）
+                  </span>
+                </div>
+                {it.amount != null && (
+                  <div className="flex-shrink-0 text-right tabular-nums">
+                    <span className="block text-foreground font-semibold">
+                      {formatYen(it.amount)}
+                    </span>
+                    {it.price_unit && it.unit_price != null && (
+                      <span className="block text-xs text-subtle">
+                        {UNIT_LABEL[it.price_unit]} {formatYen(it.unit_price)}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
+            {order.items.some((it) => it.amount != null) && (
+              <div className="px-5 py-3 flex items-center justify-between bg-surface-muted/50">
+                <span className="text-sm font-semibold text-foreground">
+                  合計（税抜）
+                </span>
+                <span className="text-base font-bold text-foreground tabular-nums">
+                  {order.items.every((it) => it.amount != null)
+                    ? formatYen(
+                        order.items.reduce((s, it) => s + (it.amount ?? 0), 0)
+                      )
+                    : "一部価格未設定"}
+                </span>
+              </div>
+            )}
           </div>
         </section>
       )}

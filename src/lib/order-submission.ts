@@ -2,9 +2,10 @@ import "server-only";
 
 import { notifyAdmins } from "@/lib/notifications";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
-import { getTenantId } from "@/lib/tenant";
+import { getTenant } from "@/lib/tenant";
 import { getCurrentCustomer, type CustomerSession } from "@/lib/customer-auth";
 import { revalidateCatalog } from "@/lib/catalog-cache";
+import { calcLine, leaseDays } from "@/lib/pricing";
 import type { DeliveryMethod, SpecSelectionLabel } from "@/lib/types";
 
 export type SubmitOrderInput = {
@@ -68,7 +69,8 @@ export async function submitOrderCore(
     return { ok: false, error: "client_request_id が不正です" };
   }
 
-  const tenantId = await getTenantId();
+  const tenant = await getTenant();
+  const tenantId = tenant.id;
 
   // 顧客 self の場合は HMAC cookie から、admin proxy の場合は actingAs から解決。
   let customer: CustomerSession;
@@ -208,7 +210,7 @@ export async function submitOrderCore(
       : Promise.resolve({ data: null, error: null } as const),
     supabase
       .from("materials")
-      .select("id, name")
+      .select("id, name, daily_price, monthly_price")
       .eq("tenant_id", tenantId)
       .in("id", materialIds),
     optionIds.length > 0
@@ -236,6 +238,12 @@ export async function submitOrderCore(
   }
   const materials = matRes.data;
   const materialMap = new Map(materials?.map((m) => [m.id, m.name]) ?? []);
+  const priceMap = new Map(
+    materials?.map((m) => [
+      m.id,
+      { daily_price: m.daily_price, monthly_price: m.monthly_price },
+    ]) ?? []
+  );
   const missing = items.filter((i) => !materialMap.has(i.materialId));
   if (missing.length) {
     return { ok: false, error: "存在しない資材が含まれています" };
@@ -329,18 +337,33 @@ export async function submitOrderCore(
     return { ok: false, error: "発注の登録に失敗しました" };
   }
 
+  // 発注時点の単価・金額をスナップショット保存（後の価格改定の影響を受けない）
+  const days = leaseDays(input.leaseStartDate, input.leaseEndDate);
+
   // order_items は select("id") で各行の id を取り、選択肢の bulk insert に使う
   const { data: insertedItems, error: itemsErr } = await supabase
     .from("order_items")
     .insert(
-      items.map((i) => ({
-        tenant_id: tenantId,
-        order_id: order.id,
-        material_id: i.materialId,
-        material_name: materialMap.get(i.materialId)!,
-        quantity: i.quantity,
-        lease_end_date: input.leaseEndDate,
-      }))
+      items.map((i) => {
+        const rates = priceMap.get(i.materialId) ?? {
+          daily_price: null,
+          monthly_price: null,
+        };
+        const charge = calcLine(tenant.billing_rule, rates, days, i.quantity);
+        return {
+          tenant_id: tenantId,
+          order_id: order.id,
+          material_id: i.materialId,
+          material_name: materialMap.get(i.materialId)!,
+          quantity: i.quantity,
+          lease_end_date: input.leaseEndDate,
+          price_unit: charge?.unit ?? null,
+          unit_price: charge?.unitPrice ?? null,
+          billed_units: charge?.billedUnits ?? null,
+          amount: charge?.amount ?? null,
+          billing_rule_snapshot: tenant.billing_rule,
+        };
+      })
     )
     .select("id");
 

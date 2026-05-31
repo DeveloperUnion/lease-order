@@ -2,8 +2,9 @@ import bcrypt from "bcryptjs";
 import { tenantData } from "./seed-source";
 
 const TENANTS = [
-  { id: "00000000-0000-0000-0000-000000000001", name: "Union", slug: "union" },
-  { id: "00000000-0000-0000-0000-000000000002", name: "三信産業", slug: "sanshin" },
+  // 一旦は全テナント月額（billing_rule）。
+  { id: "00000000-0000-0000-0000-000000000001", name: "Union", slug: "union", billing_rule: '{"type":"monthly"}' },
+  { id: "00000000-0000-0000-0000-000000000002", name: "三信産業", slug: "sanshin", billing_rule: '{"type":"monthly"}' },
 ];
 
 const ADMIN_USERS: { tenant_slug: string; email: string }[] = [
@@ -39,6 +40,10 @@ function sqlJsonb(obj: Record<string, string> | null | undefined): string {
   return sqlString(JSON.stringify(obj)) + "::jsonb";
 }
 
+function sqlInt(n: number | null | undefined): string {
+  return n === null || n === undefined ? "null" : String(n);
+}
+
 const lines: string[] = [];
 
 lines.push("-- ============================================================");
@@ -50,9 +55,12 @@ lines.push("");
 
 lines.push("-- tenants");
 const tenantValues = TENANTS.map(
-  (t) => `  ('${t.id}', ${sqlString(t.name)}, ${sqlString(t.slug)})`
+  (t) =>
+    `  ('${t.id}', ${sqlString(t.name)}, ${sqlString(t.slug)}, ${sqlString(t.billing_rule)}::jsonb)`
 ).join(",\n");
-lines.push(`insert into tenants (id, name, slug) values\n${tenantValues};`);
+lines.push(
+  `insert into tenants (id, name, slug, billing_rule) values\n${tenantValues};`
+);
 lines.push("");
 
 lines.push("-- admin_users (allowlist for /admin sign-in)");
@@ -118,11 +126,11 @@ for (const tenant of TENANTS) {
   const materialValues = materials
     .map((m) => {
       const catSlug = categories.find((c) => c.id === m.category_id)?.slug;
-      return `  ('${tenant.id}', (select id from categories where tenant_id='${tenant.id}' and slug=${sqlString(catSlug!)}), ${sqlString(m.name)}, ${sqlString(m.description)}, ${sqlJsonb(m.spec)}, ${m.sort_order}, ${m.is_active})`;
+      return `  ('${tenant.id}', (select id from categories where tenant_id='${tenant.id}' and slug=${sqlString(catSlug!)}), ${sqlString(m.name)}, ${sqlString(m.description)}, ${sqlJsonb(m.spec)}, ${sqlInt(m.daily_price)}, ${sqlInt(m.monthly_price)}, ${m.sort_order}, ${m.is_active})`;
     })
     .join(",\n");
   lines.push(
-    `insert into materials (tenant_id, category_id, name, description, spec, sort_order, is_active) values\n${materialValues};`
+    `insert into materials (tenant_id, category_id, name, description, spec, daily_price, monthly_price, sort_order, is_active) values\n${materialValues};`
   );
   lines.push("");
 

@@ -175,7 +175,19 @@ type MaterialInput = {
   description: string;
   sortOrder: number;
   isActive: boolean;
+  // undefined = フォームに入力欄が無かった（既存値を保持）, null = 空でクリア
+  dailyPrice: number | null | undefined;
+  monthlyPrice: number | null | undefined;
 };
+
+// 価格欄を解釈する。未送信(undefined)・空(null)・数値 を区別する。
+function parsePrice(formData: FormData, key: string): number | null | undefined {
+  if (!formData.has(key)) return undefined;
+  const raw = String(formData.get(key) ?? "").trim();
+  if (raw === "") return null;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
 
 function parseMaterialInput(formData: FormData): MaterialInput {
   const name = String(formData.get("name") ?? "").trim();
@@ -190,6 +202,8 @@ function parseMaterialInput(formData: FormData): MaterialInput {
     description: String(formData.get("description") ?? "").trim(),
     sortOrder: Number(formData.get("sort_order") ?? 0) || 0,
     isActive: formData.get("is_active") === "on" || formData.get("is_active") === "true",
+    dailyPrice: parsePrice(formData, "daily_price"),
+    monthlyPrice: parsePrice(formData, "monthly_price"),
   };
 }
 
@@ -263,6 +277,8 @@ export async function createMaterial(formData: FormData) {
       name: input.name,
       description: input.description || null,
       spec: {},
+      daily_price: input.dailyPrice ?? null,
+      monthly_price: input.monthlyPrice ?? null,
       sort_order: input.sortOrder,
       is_active: input.isActive,
     })
@@ -294,6 +310,8 @@ export async function updateMaterial(materialId: string, formData: FormData) {
       name: input.name,
       description: input.description || null,
       is_active: input.isActive,
+      ...(input.dailyPrice !== undefined ? { daily_price: input.dailyPrice } : {}),
+      ...(input.monthlyPrice !== undefined ? { monthly_price: input.monthlyPrice } : {}),
     })
     .eq("id", materialId)
     .eq("tenant_id", tenantId);
@@ -316,7 +334,7 @@ export async function duplicateMaterial(sourceMaterialId: string): Promise<strin
 
   const { data: src, error: srcErr } = await supabase
     .from("materials")
-    .select("category_id, name, description, spec")
+    .select("category_id, name, description, spec, daily_price, monthly_price")
     .eq("id", sourceMaterialId)
     .single();
   if (srcErr || !src) throw new Error("コピー元の資材が見つかりません");
@@ -338,6 +356,8 @@ export async function duplicateMaterial(sourceMaterialId: string): Promise<strin
       name: `${src.name}のコピー`,
       description: src.description,
       spec: src.spec ?? {},
+      daily_price: src.daily_price,
+      monthly_price: src.monthly_price,
       sort_order: nextSort,
       is_active: false,
     })

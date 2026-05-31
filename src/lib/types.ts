@@ -1,3 +1,5 @@
+import type { PriceUnit } from "@/lib/pricing";
+
 export type Category = {
   id: string;
   name: string;
@@ -12,6 +14,8 @@ export type Material = {
   image_url: string | null;
   description: string | null;
   spec: Record<string, string> | null;
+  daily_price: number | null;
+  monthly_price: number | null;
   sort_order: number;
   is_active: boolean;
   catalog_pages?: string[];
@@ -111,6 +115,11 @@ export type OrderItem = {
   quantity: number;
   returned_quantity: number;
   lease_end_date: string | null;
+  // 発注時スナップショット（価格未設定だった行は null）
+  price_unit: PriceUnit | null;
+  unit_price: number | null;
+  billed_units: number | null;
+  amount: number | null;
 };
 
 export type CartItem = {

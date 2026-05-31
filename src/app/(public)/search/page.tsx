@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getAllMaterials, getCategories } from "@/lib/data";
 import { requireCustomer } from "@/lib/customer-auth";
+import { getTenant } from "@/lib/tenant";
 import SearchView from "./search-view";
 
 export const dynamic = "force-dynamic";
@@ -14,9 +15,10 @@ export default async function SearchPage({
   const { q } = await searchParams;
   const query = q ?? "";
 
-  const [allMaterials, categories] = await Promise.all([
+  const [allMaterials, categories, tenant] = await Promise.all([
     getAllMaterials(),
     getCategories(),
+    getTenant(),
   ]);
 
   const results = query.trim()
@@ -33,7 +35,12 @@ export default async function SearchPage({
       >
         <span aria-hidden>←</span> 発注画面に戻る
       </Link>
-      <SearchView query={query} results={results} categories={categories} />
+      <SearchView
+        query={query}
+        results={results}
+        categories={categories}
+        billingRule={tenant.billing_rule}
+      />
     </main>
   );
 }

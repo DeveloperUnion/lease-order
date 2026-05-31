@@ -15,8 +15,19 @@ import {
 } from "@/lib/offline/drafts";
 import { enqueue, flushOne, removeItem as removeOutboxItem } from "@/lib/offline/outbox";
 import type { SubmitOrderInput } from "@/lib/order-submission";
+import {
+  calcLine,
+  leaseDays,
+  formatYen,
+  UNIT_LABEL,
+  type BillingRule,
+} from "@/lib/pricing";
 
-type Props = { offices: Office[]; customer: CustomerSession };
+type Props = {
+  offices: Office[];
+  customer: CustomerSession;
+  billingRule: BillingRule;
+};
 
 type Step = "cart" | "form" | "done" | "queued";
 
@@ -72,7 +83,7 @@ function StepProgress({ active }: { active: Step }) {
   );
 }
 
-export default function CartForm({ offices, customer }: Props) {
+export default function CartForm({ offices, customer, billingRule }: Props) {
   const {
     items,
     updateQuantity,
@@ -646,33 +657,83 @@ export default function CartForm({ offices, customer }: Props) {
             </FormSection>
           </div>
 
-          {/* 注文プレビュー */}
-          <div className="border border-border bg-surface rounded-xl overflow-hidden mb-6">
-            <div className="px-4 py-2.5 border-b border-border bg-surface-muted/50">
-              <p className="text-sm font-semibold text-foreground">
-                発注内容
-                <span className="text-subtle font-normal ml-2">{items.length} 品目</span>
-              </p>
-            </div>
-            {items.map((item) => (
-              <div
-                key={item.cartLineId}
-                className="flex items-baseline justify-between gap-3 px-4 py-2.5 border-b border-border last:border-b-0"
-              >
-                <span className="text-sm text-foreground truncate">
-                  {item.material.name}
-                  {item.selections.length > 0 && (
-                    <span className="ml-2 text-xs text-muted">
-                      ({item.selections.map((s) => s.option_label).join(" / ")})
+          {/* 注文プレビュー（リース期間が入っていれば見積金額も表示） */}
+          {(() => {
+            const days =
+              leaseStartDate && leaseEndDate
+                ? leaseDays(leaseStartDate, leaseEndDate)
+                : 0;
+            const lines = items.map((item) => ({
+              item,
+              charge: calcLine(
+                billingRule,
+                {
+                  daily_price: item.material.daily_price,
+                  monthly_price: item.material.monthly_price,
+                },
+                days,
+                item.quantity
+              ),
+            }));
+            const showAmounts = days > 0;
+            const allPriced = lines.every((l) => l.charge != null);
+            const total = lines.reduce((sum, l) => sum + (l.charge?.amount ?? 0), 0);
+            return (
+              <div className="border border-border bg-surface rounded-xl overflow-hidden mb-6">
+                <div className="px-4 py-2.5 border-b border-border bg-surface-muted/50">
+                  <p className="text-sm font-semibold text-foreground">
+                    発注内容
+                    <span className="text-subtle font-normal ml-2">
+                      {items.length} 品目
                     </span>
-                  )}
-                </span>
-                <span className="text-sm font-semibold text-foreground flex-shrink-0 tabular-nums">
-                  × {item.quantity}
-                </span>
+                  </p>
+                </div>
+                {lines.map(({ item, charge }) => (
+                  <div
+                    key={item.cartLineId}
+                    className="flex items-baseline justify-between gap-3 px-4 py-2.5 border-b border-border last:border-b-0"
+                  >
+                    <span className="text-sm text-foreground truncate">
+                      {item.material.name}
+                      {item.selections.length > 0 && (
+                        <span className="ml-2 text-xs text-muted">
+                          ({item.selections.map((s) => s.option_label).join(" / ")})
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex-shrink-0 text-right tabular-nums">
+                      {showAmounts && charge ? (
+                        <>
+                          <span className="block text-sm font-semibold text-foreground">
+                            {formatYen(charge.amount)}
+                          </span>
+                          <span className="block text-xs text-muted">
+                            {UNIT_LABEL[charge.unit]} {formatYen(charge.unitPrice)} ×{" "}
+                            {charge.billedUnits}
+                            {charge.unit === "day" ? "日" : "ヶ月"} × {item.quantity}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-sm font-semibold text-foreground">
+                          × {item.quantity}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+                {showAmounts && (
+                  <div className="flex items-baseline justify-between gap-3 px-4 py-3 bg-surface-muted/50">
+                    <span className="text-sm font-semibold text-foreground">
+                      合計（税抜）
+                    </span>
+                    <span className="text-base font-bold text-foreground tabular-nums">
+                      {allPriced ? formatYen(total) : "一部価格未設定"}
+                    </span>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
+            );
+          })()}
 
           {errorMessage && (
             <div className="mb-4 p-3 bg-danger-soft border border-danger/20 rounded-lg text-sm text-danger">

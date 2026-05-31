@@ -16,6 +16,8 @@ type Material = {
   image_url: string | null;
   description: string | null;
   spec: Record<string, string>;
+  daily_price?: number | null;
+  monthly_price?: number | null;
   sort_order: number;
   is_active: boolean;
   catalog_pages?: string[];
@@ -179,39 +181,175 @@ export const offices: Office[] = [
   { id: "office-18", name: "岩国営業所・機材センター", area: "山口", address: "山口県岩国市日の出町2343番地1", phone: "0827-88-4432", fax: "0827-88-4448", sort_order: 18, is_active: true },
 ];
 
-// ===== union用 placeholder データ（sanshin の構造をそのまま複製して名前を差し替え） =====
+// ===== union（福祉用品リース＝介護保険の福祉用具貸与相当）の実名データ =====
+// カタログ向けグルーピングで 12 カテゴリ・代表セット。画像は後日追加するため image_url / catalog_pages は空。
 
-const catLetter = (i: number) => String.fromCharCode(65 + i); // 0→A, 1→B, ...
+const unionCategories: Category[] = [
+  { id: "union-cat-1", name: "車いす", slug: "wheelchair", image_url: null, sort_order: 1 },
+  { id: "union-cat-2", name: "車いす付属品", slug: "wheelchair-accessory", image_url: null, sort_order: 2 },
+  { id: "union-cat-3", name: "介護用ベッド（特殊寝台）", slug: "care-bed", image_url: null, sort_order: 3 },
+  { id: "union-cat-4", name: "ベッド付属品", slug: "bed-accessory", image_url: null, sort_order: 4 },
+  { id: "union-cat-5", name: "床ずれ防止用具", slug: "anti-decubitus", image_url: null, sort_order: 5 },
+  { id: "union-cat-6", name: "体位変換器", slug: "position-change", image_url: null, sort_order: 6 },
+  { id: "union-cat-7", name: "手すり（工事不要）", slug: "handrail", image_url: null, sort_order: 7 },
+  { id: "union-cat-8", name: "スロープ", slug: "slope", image_url: null, sort_order: 8 },
+  { id: "union-cat-9", name: "歩行器・歩行車", slug: "walker", image_url: null, sort_order: 9 },
+  { id: "union-cat-10", name: "歩行補助つえ", slug: "cane", image_url: null, sort_order: 10 },
+  { id: "union-cat-11", name: "移動用リフト", slug: "lift", image_url: null, sort_order: 11 },
+  { id: "union-cat-12", name: "入浴・排泄用具", slug: "bath-toilet", image_url: null, sort_order: 12 },
+];
 
-const unionCategories: Category[] = categories.map((c, i) => ({
-  id: `union-${c.id}`,
-  name: `カテゴリ${catLetter(i)}`,
-  slug: `cat-${catLetter(i).toLowerCase()}`,
+// 福祉用具レンタルらしい資材を各カテゴリ数点ずつ。spec は sanshin と同じ Record<string,string> 流儀。
+const unionMaterialSeed: Array<Omit<Material, "id" | "image_url" | "catalog_pages" | "is_active">> = [
+  // ===== 車いす =====
+  { category_id: "union-cat-1", name: "標準型自走用車いす", slug: "wheelchair-standard", description: "自分でこげる標準タイプの車いす", spec: { "座幅": "40cm", "重量": "約13kg", "最大使用者体重": "100kg" }, sort_order: 1 },
+  { category_id: "union-cat-1", name: "介助用車いす", slug: "wheelchair-attendant", description: "介助者が押して使う軽量タイプ", spec: { "座幅": "40cm", "重量": "約11kg", "最大使用者体重": "100kg" }, sort_order: 2 },
+  { category_id: "union-cat-1", name: "リクライニング車いす", slug: "wheelchair-reclining", description: "背もたれを倒せるリクライニング機構付き", spec: { "座幅": "42cm", "リクライニング角度": "〜120°", "最大使用者体重": "100kg" }, sort_order: 3 },
+  { category_id: "union-cat-1", name: "ティルト・リクライニング車いす", slug: "wheelchair-tilt", description: "座面ごと傾けて姿勢保持できるタイプ", spec: { "座幅": "42cm", "ティルト角度": "〜25°", "最大使用者体重": "100kg" }, sort_order: 4 },
+  { category_id: "union-cat-1", name: "電動車いす", slug: "wheelchair-electric", description: "ジョイスティック操作の電動タイプ", spec: { "最高速度": "6km/h", "走行距離": "約20km", "バッテリー": "鉛蓄電池" }, sort_order: 5 },
+  { category_id: "union-cat-1", name: "モジュール型車いす", slug: "wheelchair-modular", description: "体格に合わせて寸法調整できるタイプ", spec: { "座幅": "調整可", "座面高": "調整可", "最大使用者体重": "100kg" }, sort_order: 6 },
+
+  // ===== 車いす付属品 =====
+  { category_id: "union-cat-2", name: "車いすクッション", slug: "wheelchair-cushion", description: "座位姿勢の保持・床ずれ予防用クッション", spec: { "厚さ": "5cm", "素材": "ウレタン・ゲル" }, sort_order: 1 },
+  { category_id: "union-cat-2", name: "電動補助装置", slug: "power-assist", description: "手動車いすに後付けする電動アシスト", spec: { "方式": "アシスト式", "適合": "標準型車いす" }, sort_order: 2 },
+  { category_id: "union-cat-2", name: "テーブル板", slug: "wheelchair-table", description: "車いすに取り付ける食事・作業用テーブル", spec: { "素材": "樹脂" }, sort_order: 3 },
+  { category_id: "union-cat-2", name: "ブレーキ延長レバー", slug: "brake-lever", description: "ブレーキ操作を楽にする延長レバー", spec: { "取付": "ねじ式" }, sort_order: 4 },
+
+  // ===== 介護用ベッド（特殊寝台）=====
+  { category_id: "union-cat-3", name: "2モーターベッド", slug: "bed-2motor", description: "背上げと高さ調整ができる2モータータイプ", spec: { "機構": "背・脚連動＋高さ調整", "幅": "83/91/100cm" }, sort_order: 1 },
+  { category_id: "union-cat-3", name: "3モーターベッド", slug: "bed-3motor", description: "背・脚・高さを独立操作できる3モータータイプ", spec: { "機構": "背・脚・高さ独立", "幅": "83/91/100cm" }, sort_order: 2 },
+  { category_id: "union-cat-3", name: "1モーターベッド", slug: "bed-1motor", description: "背上げのみのシンプルな1モータータイプ", spec: { "機構": "背上げのみ", "幅": "83cm" }, sort_order: 3 },
+  { category_id: "union-cat-3", name: "超低床ベッド", slug: "bed-low", description: "転落リスクを抑える超低床タイプ", spec: { "最低床高": "約11cm" }, sort_order: 4 },
+
+  // ===== ベッド付属品 =====
+  { category_id: "union-cat-4", name: "マットレス", slug: "bed-mattress", description: "介護用ベッド対応マットレス", spec: { "厚さ": "10cm", "幅": "83/91cm" }, sort_order: 1 },
+  { category_id: "union-cat-4", name: "サイドレール", slug: "side-rail", description: "ベッドからの転落を防ぐ柵", spec: { "方式": "差込式", "長さ": "約90cm" }, sort_order: 2 },
+  { category_id: "union-cat-4", name: "介助バー（ベッド用手すり）", slug: "assist-bar", description: "起き上がり・立ち上がりを補助する手すり", spec: { "方式": "スイングアーム式" }, sort_order: 3 },
+  { category_id: "union-cat-4", name: "ベッドテーブル", slug: "bed-table", description: "ベッド上で使える昇降式テーブル", spec: { "高さ": "調整可", "キャスター": "付" }, sort_order: 4 },
+  { category_id: "union-cat-4", name: "スライディングボード", slug: "sliding-board", description: "ベッド〜車いすの移乗を助ける板", spec: { "用途": "移乗用", "素材": "樹脂" }, sort_order: 5 },
+
+  // ===== 床ずれ防止用具 =====
+  { category_id: "union-cat-5", name: "エアマットレス", slug: "air-mattress", description: "体圧を自動で分散するエアマットレス", spec: { "方式": "圧切替式", "付属": "ポンプ" }, sort_order: 1 },
+  { category_id: "union-cat-5", name: "ウレタンマットレス", slug: "urethane-mattress", description: "多層ウレタンの体圧分散マットレス", spec: { "構造": "多層ウレタン", "厚さ": "10cm" }, sort_order: 2 },
+  { category_id: "union-cat-5", name: "静止型マットレス", slug: "static-mattress", description: "動かない静止型の床ずれ防止マットレス", spec: { "素材": "体圧分散ウレタン" }, sort_order: 3 },
+
+  // ===== 体位変換器 =====
+  { category_id: "union-cat-6", name: "体位変換クッション", slug: "position-cushion", description: "横向き姿勢などの保持に使うクッション", spec: { "素材": "ウレタン", "カバー": "洗濯可" }, sort_order: 1 },
+  { category_id: "union-cat-6", name: "スライディングシート", slug: "sliding-sheet", description: "体の下に敷いて移動を楽にするシート", spec: { "形状": "筒状", "素材": "ナイロン" }, sort_order: 2 },
+
+  // ===== 手すり（工事不要）=====
+  { category_id: "union-cat-7", name: "据置型手すり", slug: "handrail-freestanding", description: "床に置くだけの工事不要手すり", spec: { "設置": "床置式", "工事": "不要" }, sort_order: 1 },
+  { category_id: "union-cat-7", name: "突っ張り型手すり", slug: "handrail-tension", description: "床〜天井を突っ張って固定する手すり", spec: { "設置": "天井突っ張り式" }, sort_order: 2 },
+  { category_id: "union-cat-7", name: "ベッドサイド手すり", slug: "handrail-bedside", description: "ベッド脇に設置する起き上がり手すり", spec: { "設置": "マットレス下差込式" }, sort_order: 3 },
+
+  // ===== スロープ =====
+  { category_id: "union-cat-8", name: "アルミ可搬型スロープ", slug: "slope-portable", description: "持ち運べるアルミ製スロープ", spec: { "長さ": "1m/1.5m/2m", "素材": "アルミ" }, sort_order: 1 },
+  { category_id: "union-cat-8", name: "段差解消スロープ", slug: "slope-step", description: "玄関などの段差を解消するスロープ", spec: { "素材": "ゴム", "対応段差": "5/10cm" }, sort_order: 2 },
+  { category_id: "union-cat-8", name: "折りたたみスロープ", slug: "slope-folding", description: "折りたたんで収納できるスロープ", spec: { "形状": "二つ折り", "素材": "アルミ" }, sort_order: 3 },
+
+  // ===== 歩行器・歩行車 =====
+  { category_id: "union-cat-9", name: "固定型歩行器", slug: "walker-fixed", description: "持ち上げて進む固定型歩行器", spec: { "素材": "アルミ", "高さ": "調整可" }, sort_order: 1 },
+  { category_id: "union-cat-9", name: "交互型歩行器", slug: "walker-reciprocal", description: "左右を交互に動かして進む歩行器", spec: { "機構": "左右交互稼働" }, sort_order: 2 },
+  { category_id: "union-cat-9", name: "四輪歩行車", slug: "walker-4wheel", description: "座って休める四輪タイプの歩行車", spec: { "タイプ": "座面・かご付" }, sort_order: 3 },
+  { category_id: "union-cat-9", name: "抑速ブレーキ付歩行車", slug: "walker-brake", description: "下り坂で自動的に速度を抑える歩行車", spec: { "機構": "下り坂自動制動" }, sort_order: 4 },
+
+  // ===== 歩行補助つえ =====
+  { category_id: "union-cat-10", name: "4点杖（多点杖）", slug: "cane-quad", description: "接地面4点で安定する多点杖", spec: { "支持": "4点", "高さ": "調整可" }, sort_order: 1 },
+  { category_id: "union-cat-10", name: "ロフストランドクラッチ", slug: "cane-lofstrand", description: "前腕で支えるロフストランドクラッチ", spec: { "支持": "前腕型" }, sort_order: 2 },
+  { category_id: "union-cat-10", name: "松葉杖", slug: "crutch", description: "脇で支える調整式の松葉杖", spec: { "高さ": "調整可", "素材": "アルミ" }, sort_order: 3 },
+  { category_id: "union-cat-10", name: "サイドウォーカー", slug: "side-walker", description: "片手で扱える四脚のサイドウォーカー", spec: { "操作": "片手", "脚数": "四脚" }, sort_order: 4 },
+
+  // ===== 移動用リフト =====
+  { category_id: "union-cat-11", name: "床走行式リフト", slug: "lift-mobile", description: "キャスターで移動できるつり上げリフト", spec: { "方式": "つり上げ式", "最大荷重": "100/150kg" }, sort_order: 1 },
+  { category_id: "union-cat-11", name: "据置式リフト", slug: "lift-stationary", description: "ベッド〜車いす間に設置する据置リフト", spec: { "設置": "固定式" }, sort_order: 2 },
+  { category_id: "union-cat-11", name: "立位補助リフト", slug: "lift-standing", description: "立ち上がりを補助するリフト", spec: { "用途": "起立補助", "最大荷重": "100kg" }, sort_order: 3 },
+  { category_id: "union-cat-11", name: "スリングシート（つり具）", slug: "sling-sheet", description: "リフトに取り付けるつり具シート", spec: { "素材": "ポリエステル", "サイズ": "S/M/L" }, sort_order: 4 },
+
+  // ===== 入浴・排泄用具 =====
+  { category_id: "union-cat-12", name: "シャワーチェア", slug: "shower-chair", description: "座って洗体できる入浴用いす", spec: { "背": "付", "高さ": "調整可", "折りたたみ": "可" }, sort_order: 1 },
+  { category_id: "union-cat-12", name: "バスボード（入浴台）", slug: "bath-board", description: "浴槽の出入りを補助する板", spec: { "設置": "浴槽縁掛け", "最大使用者体重": "100kg" }, sort_order: 2 },
+  { category_id: "union-cat-12", name: "浴槽内いす", slug: "bath-stool", description: "浴槽の中で使う高さ調整いす", spec: { "固定": "吸盤", "高さ": "調整可" }, sort_order: 3 },
+  { category_id: "union-cat-12", name: "ポータブルトイレ", slug: "portable-toilet", description: "居室に置ける移動式トイレ", spec: { "素材": "樹脂・木製", "便座": "暖房便座" }, sort_order: 4 },
+  { category_id: "union-cat-12", name: "自動排泄処理装置", slug: "auto-toilet", description: "排泄物を自動で吸引・処理する装置", spec: { "方式": "自動吸引", "対応": "尿・便" }, sort_order: 5 },
+];
+
+// union は月額レンタル（介護保険の福祉用具貸与相当）。slug → 月額（円・税抜）。
+const unionMonthlyPrice: Record<string, number> = {
+  // 車いす
+  "wheelchair-standard": 6000,
+  "wheelchair-attendant": 6000,
+  "wheelchair-reclining": 9000,
+  "wheelchair-tilt": 12000,
+  "wheelchair-electric": 22000,
+  "wheelchair-modular": 11000,
+  // 車いす付属品
+  "wheelchair-cushion": 2000,
+  "power-assist": 18000,
+  "wheelchair-table": 1500,
+  "brake-lever": 800,
+  // 介護用ベッド
+  "bed-2motor": 8000,
+  "bed-3motor": 10000,
+  "bed-1motor": 6000,
+  "bed-low": 11000,
+  // ベッド付属品
+  "bed-mattress": 3000,
+  "side-rail": 600,
+  "assist-bar": 1500,
+  "bed-table": 1800,
+  "sliding-board": 2500,
+  // 床ずれ防止用具
+  "air-mattress": 9000,
+  "urethane-mattress": 5000,
+  "static-mattress": 4000,
+  // 体位変換器
+  "position-cushion": 1500,
+  "sliding-sheet": 1800,
+  // 手すり
+  "handrail-freestanding": 3000,
+  "handrail-tension": 3500,
+  "handrail-bedside": 2000,
+  // スロープ
+  "slope-portable": 4000,
+  "slope-step": 1500,
+  "slope-folding": 4500,
+  // 歩行器・歩行車
+  "walker-fixed": 2500,
+  "walker-reciprocal": 3000,
+  "walker-4wheel": 4000,
+  "walker-brake": 5000,
+  // 歩行補助つえ
+  "cane-quad": 1200,
+  "cane-lofstrand": 1500,
+  crutch: 1000,
+  "side-walker": 2000,
+  // 移動用リフト
+  "lift-mobile": 18000,
+  "lift-stationary": 16000,
+  "lift-standing": 20000,
+  "sling-sheet": 6000,
+  // 入浴・排泄用具
+  "shower-chair": 3000,
+  "bath-board": 2500,
+  "bath-stool": 2500,
+  "portable-toilet": 4000,
+  "auto-toilet": 25000,
+};
+
+const unionMaterials: Material[] = unionMaterialSeed.map((m, i) => ({
+  id: `union-m-${i + 1}`,
+  category_id: m.category_id,
+  name: m.name,
+  slug: m.slug,
   image_url: null,
-  sort_order: c.sort_order,
+  description: m.description,
+  spec: m.spec,
+  daily_price: null,
+  monthly_price: unionMonthlyPrice[m.slug] ?? null,
+  sort_order: m.sort_order,
+  is_active: true,
+  catalog_pages: [],
 }));
-
-const unionMaterials: Material[] = (() => {
-  const countByCat = new Map<string, number>();
-  return materials.map((m) => {
-    const catIdx = categories.findIndex((c) => c.id === m.category_id);
-    const L = catLetter(catIdx);
-    const n = (countByCat.get(m.category_id) ?? 0) + 1;
-    countByCat.set(m.category_id, n);
-    return {
-      id: `union-${m.id}`,
-      category_id: `union-${m.category_id}`,
-      name: `資材${L}-${n}`,
-      slug: `mat-${L.toLowerCase()}-${n}`,
-      image_url: null,
-      description: null,
-      spec: {},
-      sort_order: m.sort_order,
-      is_active: m.is_active,
-      catalog_pages: [],
-    };
-  });
-})();
 
 const unionOffices: Office[] = [
   { id: "union-office-1", name: "本社", area: null, address: null, phone: null, fax: null, sort_order: 1, is_active: true },

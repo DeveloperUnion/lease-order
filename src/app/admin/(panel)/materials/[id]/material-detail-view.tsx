@@ -8,6 +8,7 @@ import type {
   MaterialImageRow,
 } from "@/lib/admin-data";
 import type { SpecGroup, SpecOption } from "@/lib/types";
+import type { BillingRule, PriceUnit } from "@/lib/pricing";
 import {
   addMaterialImage,
   createSpecGroupWithOptions,
@@ -37,12 +38,26 @@ import { resizeImage } from "@/lib/image/resize-client";
 
 const MAX_IMAGES = 5;
 
+// 課金ルールが使う価格単位（管理画面の入力欄をこれで出し分ける）。
+function unitsForRule(rule: BillingRule): PriceUnit[] {
+  switch (rule.type) {
+    case "daily":
+      return ["day"];
+    case "monthly":
+      return ["month"];
+    case "threshold":
+      return Array.from(new Set([rule.under, rule.over]));
+  }
+}
+
 export default function MaterialDetailView({
   material,
   categories,
+  billingRule,
 }: {
   material: MaterialDetail;
   categories: AdminCategoryRow[];
+  billingRule: BillingRule;
 }) {
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => {
@@ -63,6 +78,7 @@ export default function MaterialDetailView({
         <BasicInfoSection
           material={material}
           categories={categories}
+          billingRule={billingRule}
           onToast={showToast}
         />
         <ImagesSection material={material} onToast={showToast} />
@@ -146,22 +162,33 @@ function ActiveToggle({
 function BasicInfoSection({
   material,
   categories,
+  billingRule,
   onToast,
 }: {
   material: MaterialDetail;
   categories: AdminCategoryRow[];
+  billingRule: BillingRule;
   onToast: (msg: string) => void;
 }) {
   const [name, setName] = useState(material.name);
   const [categoryId, setCategoryId] = useState(material.category_id);
   const [description, setDescription] = useState(material.description ?? "");
+  const priceToStr = (n: number | null) => (n == null ? "" : String(n));
+  const [dailyPrice, setDailyPrice] = useState(priceToStr(material.daily_price));
+  const [monthlyPrice, setMonthlyPrice] = useState(priceToStr(material.monthly_price));
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  const units = unitsForRule(billingRule);
+  const showDaily = units.includes("day");
+  const showMonthly = units.includes("month");
 
   const dirty =
     name !== material.name ||
     categoryId !== material.category_id ||
-    (description ?? "") !== (material.description ?? "");
+    (description ?? "") !== (material.description ?? "") ||
+    (showDaily && dailyPrice !== priceToStr(material.daily_price)) ||
+    (showMonthly && monthlyPrice !== priceToStr(material.monthly_price));
 
   const handleSave = () => {
     setError(null);
@@ -171,6 +198,9 @@ function BasicInfoSection({
       fd.set("category_id", categoryId);
       fd.set("description", description);
       fd.set("is_active", material.is_active ? "true" : "false");
+      // 表示している単位の価格欄だけ送信（非表示の単位は既存値を保持）
+      if (showDaily) fd.set("daily_price", dailyPrice.trim());
+      if (showMonthly) fd.set("monthly_price", monthlyPrice.trim());
       try {
         await updateMaterial(material.id, fd);
         onToast("更新しました");
@@ -213,6 +243,36 @@ function BasicInfoSection({
             rows={3}
           />
         </FormField>
+        {(showDaily || showMonthly) && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {showDaily && (
+              <FormField label="日額" htmlFor="material-daily-price" hint="円・税抜">
+                <TextInput
+                  id="material-daily-price"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  placeholder="例: 1000"
+                  value={dailyPrice}
+                  onChange={(e) => setDailyPrice(e.target.value)}
+                />
+              </FormField>
+            )}
+            {showMonthly && (
+              <FormField label="月額" htmlFor="material-monthly-price" hint="円・税抜">
+                <TextInput
+                  id="material-monthly-price"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  placeholder="例: 8000"
+                  value={monthlyPrice}
+                  onChange={(e) => setMonthlyPrice(e.target.value)}
+                />
+              </FormField>
+            )}
+          </div>
+        )}
         {error && (
           <p className="text-sm text-[var(--color-status-rejected-fg)]">{error}</p>
         )}

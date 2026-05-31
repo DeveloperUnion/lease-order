@@ -5,13 +5,16 @@ import { useSearchParams } from "next/navigation";
 import MaterialCard from "@/components/material-card";
 import MaterialModal from "@/components/material-modal";
 import type { Category, Material } from "@/lib/types";
+import type { BillingRule } from "@/lib/pricing";
 
 function CategoryViewInner({
   category,
   materials,
+  billingRule,
 }: {
   category: Category;
   materials: Material[];
+  billingRule: BillingRule;
 }) {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
@@ -86,6 +89,7 @@ function CategoryViewInner({
       {selectedMaterial && (
         <MaterialModal
           material={selectedMaterial}
+          billingRule={billingRule}
           onClose={() => setSelectedMaterial(null)}
         />
       )}
@@ -93,7 +97,11 @@ function CategoryViewInner({
   );
 }
 
-export default function CategoryView(props: { category: Category; materials: Material[] }) {
+export default function CategoryView(props: {
+  category: Category;
+  materials: Material[];
+  billingRule: BillingRule;
+}) {
   return (
     <Suspense fallback={<p className="text-subtle text-center py-16 text-sm">読み込み中…</p>}>
       <CategoryViewInner {...props} />

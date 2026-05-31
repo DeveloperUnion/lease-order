@@ -4,15 +4,18 @@ import { useState } from "react";
 import MaterialCard from "@/components/material-card";
 import MaterialModal from "@/components/material-modal";
 import type { Category, Material } from "@/lib/types";
+import type { BillingRule } from "@/lib/pricing";
 
 export default function SearchView({
   query,
   results,
   categories,
+  billingRule,
 }: {
   query: string;
   results: Material[];
   categories: Category[];
+  billingRule: BillingRule;
 }) {
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
 
@@ -70,6 +73,7 @@ export default function SearchView({
       {selectedMaterial && (
         <MaterialModal
           material={selectedMaterial}
+          billingRule={billingRule}
           onClose={() => setSelectedMaterial(null)}
         />
       )}

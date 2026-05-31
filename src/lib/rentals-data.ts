@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { supabaseAdmin } from "./supabase-admin";
 import type { DeliveryMethod } from "./types";
+import type { PriceUnit } from "./pricing";
 
 export type PendingExtension = {
   id: string;
@@ -40,6 +41,9 @@ export type RentalItemRow = {
   lease_end_date: string | null;
   is_overdue: boolean;
   pending_extension: PendingExtension | null;
+  price_unit: PriceUnit | null;
+  unit_price: number | null;
+  amount: number | null;
 };
 
 export type RentalOrder = {
@@ -227,6 +231,9 @@ export async function listRentalsByCustomer(customerId: string, tenantId: string
             lease_end_date: x.row.lease_end_date,
             is_overdue: true,
             pending_extension: null,
+            price_unit: null,
+            unit_price: null,
+            amount: null,
           },
         });
       }
@@ -263,6 +270,9 @@ type OrderDetailRaw = {
         returned_quantity: number;
         lease_end_date: string | null;
         created_at: string;
+        price_unit: PriceUnit | null;
+        unit_price: number | null;
+        amount: number | null;
       }[]
     | null;
   offices:
@@ -311,7 +321,7 @@ export const getRentalOrder = cache(async (orderId: string, customerId: string, 
   const { data, error } = await supabaseAdmin
     .from("orders")
     .select(
-      "id, order_number, customer_id, site_name, status, delivery_method, delivery_address, pickup_office_id, lease_start_date, lease_end_date, created_at, order_items(id, material_id, material_name, quantity, returned_quantity, lease_end_date, created_at), offices:pickup_office_id(id, name, area, address, phone)"
+      "id, order_number, customer_id, site_name, status, delivery_method, delivery_address, pickup_office_id, lease_start_date, lease_end_date, created_at, order_items(id, material_id, material_name, quantity, returned_quantity, lease_end_date, created_at, price_unit, unit_price, amount), offices:pickup_office_id(id, name, area, address, phone)"
     )
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
@@ -442,6 +452,9 @@ export const getRentalOrder = cache(async (orderId: string, customerId: string, 
       lease_end_date: it.lease_end_date,
       is_overdue: remaining > 0 && isItemOverdue(it.lease_end_date, today),
       pending_extension: pendingExtensionByItem.get(it.id) ?? null,
+      price_unit: it.price_unit,
+      unit_price: it.unit_price,
+      amount: it.amount,
     };
   });
 

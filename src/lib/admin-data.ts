@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { getSupabaseTenant } from "./supabase-tenant";
 import { getTenantId } from "./tenant";
+import type { PriceUnit } from "./pricing";
 import type {
   Category,
   DeliveryMethod,
@@ -21,6 +22,8 @@ type AdminMaterialRow = {
   name: string;
   description: string | null;
   spec: Record<string, string> | null;
+  daily_price: number | null;
+  monthly_price: number | null;
   sort_order: number;
   is_active: boolean;
   material_images:
@@ -60,7 +63,7 @@ export const listMaterialsForAdmin = cache(async (): Promise<Material[]> => {
   const { data, error } = await supabase
     .from("materials")
     .select(
-      "id, category_id, name, description, spec, sort_order, is_active, material_images(sort_order, is_primary, images(url))"
+      "id, category_id, name, description, spec, daily_price, monthly_price, sort_order, is_active, material_images(sort_order, is_primary, images(url))"
     )
     .eq("tenant_id", tenantId)
     .order("sort_order");
@@ -78,6 +81,8 @@ export const listMaterialsForAdmin = cache(async (): Promise<Material[]> => {
       image_url: primary?.images?.url ?? null,
       description: row.description,
       spec: row.spec,
+      daily_price: row.daily_price,
+      monthly_price: row.monthly_price,
       sort_order: row.sort_order,
       is_active: row.is_active,
       catalog_pages: imgs.map((i) => i.images!.url),
@@ -122,6 +127,8 @@ type MaterialDetailRaw = {
   name: string;
   description: string | null;
   spec: Record<string, string> | null;
+  daily_price: number | null;
+  monthly_price: number | null;
   sort_order: number;
   is_active: boolean;
   stock_quantity: number | null;
@@ -169,7 +176,7 @@ export async function getMaterialDetail(
   const { data, error } = await supabase
     .from("materials")
     .select(
-      `id, category_id, name, description, spec, sort_order, is_active, stock_quantity,
+      `id, category_id, name, description, spec, daily_price, monthly_price, sort_order, is_active, stock_quantity,
        spec_groups(id, material_id, name, sort_order, is_active,
          spec_options(id, spec_group_id, label, sort_order, is_active, stock_quantity)),
        material_images(image_id, sort_order, is_primary, images(url, caption))`
@@ -204,6 +211,8 @@ export async function getMaterialDetail(
     name: raw.name,
     description: raw.description,
     spec: raw.spec,
+    daily_price: raw.daily_price,
+    monthly_price: raw.monthly_price,
     sort_order: raw.sort_order,
     is_active: raw.is_active,
     image_url: primary?.url ?? null,
@@ -628,6 +637,9 @@ export type OrderItemRow = {
   spec_selections: SpecSelectionLabel[];
   quantity: number;
   approved_quantity: number | null;
+  price_unit: PriceUnit | null;
+  unit_price: number | null;
+  amount: number | null;
 };
 
 export type OrderPickupOffice = {
@@ -771,7 +783,7 @@ export const getOrder = cache(async (id: string): Promise<OrderDetail | null> =>
        lease_start_date, lease_end_date, pickup_office_id, status,
        approved_at, approved_by, reject_reason, rejected_at, shipped_at,
        completed_at, created_at,
-       order_items(id, material_id, material_name, quantity, approved_quantity, created_at,
+       order_items(id, material_id, material_name, quantity, approved_quantity, price_unit, unit_price, amount, created_at,
          order_item_spec_options(spec_group_id, spec_option_id, group_name_snapshot, option_label_snapshot)),
        offices:pickup_office_id(id, name, area, address, phone, lat, lng)`
     )
@@ -792,6 +804,9 @@ export const getOrder = cache(async (id: string): Promise<OrderDetail | null> =>
       material_name: it.material_name,
       quantity: it.quantity,
       approved_quantity: it.approved_quantity,
+      price_unit: it.price_unit,
+      unit_price: it.unit_price,
+      amount: it.amount,
       spec_selections: (it.order_item_spec_options ?? []).map((s) => ({
         spec_group_id: s.spec_group_id,
         spec_option_id: s.spec_option_id,

@@ -11,13 +11,15 @@ import {
 } from "@/lib/types";
 import { useCart } from "@/lib/cart-context";
 import { fetchMaterialStock } from "@/lib/material-stock-actions";
+import { priceLines, formatYen, type BillingRule } from "@/lib/pricing";
 
 type Props = {
   material: Material;
+  billingRule: BillingRule;
   onClose: () => void;
 };
 
-export default function MaterialModal({ material, onClose }: Props) {
+export default function MaterialModal({ material, billingRule, onClose }: Props) {
   const [quantity, setQuantity] = useState(1);
   const { addItem } = useCart();
   const [currentPage, setCurrentPage] = useState(0);
@@ -59,6 +61,12 @@ export default function MaterialModal({ material, onClose }: Props) {
 
   const catalogPages = material.catalog_pages || [];
   const hasMultiplePages = catalogPages.length > 1;
+
+  const prices = priceLines(billingRule, {
+    daily_price: material.daily_price,
+    monthly_price: material.monthly_price,
+  });
+  const hasPrice = prices.some((p) => p.price != null);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -261,6 +269,21 @@ export default function MaterialModal({ material, onClose }: Props) {
               </div>
             )}
         </div>
+
+        {/* 単価 */}
+        {hasPrice && (
+          <div className="border-t border-border px-5 pt-3 bg-surface flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            {prices.map((p) => (
+              <span key={p.label} className="text-sm text-muted">
+                {p.label}{" "}
+                <span className="font-semibold text-foreground tabular-nums">
+                  {formatYen(p.price)}
+                </span>
+              </span>
+            ))}
+            <span className="text-xs text-subtle">（税抜）</span>
+          </div>
+        )}
 
         {/* 固定フッター */}
         <div className="border-t border-border px-5 py-3 bg-surface flex flex-col gap-2">

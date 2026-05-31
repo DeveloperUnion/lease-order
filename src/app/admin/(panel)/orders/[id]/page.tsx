@@ -14,6 +14,7 @@ import {
 import OrderActions from "./order-actions";
 import MapView from "@/components/map/map-view";
 import CompletedReturnsSection from "./completed-returns-section";
+import { formatYen, UNIT_LABEL } from "@/lib/pricing";
 
 type OrderDetailItem = NonNullable<Awaited<ReturnType<typeof getOrder>>>["items"][number];
 
@@ -145,7 +146,33 @@ export default async function OrderDetailPage({
         );
       },
     },
+    {
+      key: "amount",
+      header: "金額(税抜)",
+      width: "140px",
+      align: "right",
+      mono: true,
+      cell: (it) =>
+        it.amount == null ? (
+          <span className="text-subtle">—</span>
+        ) : (
+          <span>
+            <span className="text-foreground font-semibold">
+              {formatYen(it.amount)}
+            </span>
+            {it.price_unit && it.unit_price != null && (
+              <span className="block text-xs text-subtle">
+                {UNIT_LABEL[it.price_unit]} {formatYen(it.unit_price)}
+              </span>
+            )}
+          </span>
+        ),
+    },
   ];
+
+  const orderTotal = order.items.reduce((s, it) => s + (it.amount ?? 0), 0);
+  const hasAmounts = order.items.some((it) => it.amount != null);
+  const allPriced = order.items.every((it) => it.amount != null);
 
   return (
     <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
@@ -238,6 +265,16 @@ export default async function OrderDetailPage({
           density="compact"
           caption="注文明細"
         />
+        {hasAmounts && (
+          <div className="mt-3 flex items-baseline justify-end gap-3 px-1">
+            <span className="text-xs font-semibold tracking-wider text-subtle uppercase">
+              合計（税抜）
+            </span>
+            <span className="text-base font-bold text-foreground tabular-nums">
+              {allPriced ? formatYen(orderTotal) : "一部価格未設定"}
+            </span>
+          </div>
+        )}
       </section>
 
       <CompletedReturnsSection orderId={order.id} />

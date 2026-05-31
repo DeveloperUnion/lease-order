@@ -71,6 +71,8 @@ type MaterialRow = {
   name: string;
   description: string | null;
   spec: Record<string, string> | null;
+  daily_price: number | null;
+  monthly_price: number | null;
   sort_order: number;
   is_active: boolean;
   stock_quantity: number | null;
@@ -118,6 +120,8 @@ function mapMaterial(row: MaterialRow): Material {
     image_url: primary?.images?.url ?? null,
     description: row.description,
     spec: row.spec,
+    daily_price: row.daily_price,
+    monthly_price: row.monthly_price,
     sort_order: row.sort_order,
     is_active: row.is_active,
     catalog_pages: imgs.map((i) => i.images!.url),
@@ -207,7 +211,7 @@ async function loadMaterialsAndMerge(
   let matsQuery = supabase
     .from("materials")
     .select(
-      "id, category_id, name, description, spec, sort_order, is_active, stock_quantity, material_images(sort_order, is_primary, images(url))"
+      "id, category_id, name, description, spec, daily_price, monthly_price, sort_order, is_active, stock_quantity, material_images(sort_order, is_primary, images(url))"
     )
     .eq("tenant_id", tenantId)
     .eq("is_active", true)
