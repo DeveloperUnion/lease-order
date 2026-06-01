@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/app/admin/auth-actions";
@@ -86,9 +87,16 @@ export default function Sidebar({
         <Link
           href="/admin"
           onClick={onNavigate}
-          className="block font-[family-name:var(--font-display)] text-lg leading-none tracking-tight text-foreground hover:text-accent transition-colors"
+          className="flex items-center"
         >
-          管理コンソール
+          <Image
+            src="/images/logo-union.webp"
+            alt="union"
+            width={486}
+            height={823}
+            priority
+            className="h-10 w-auto"
+          />
         </Link>
       </div>
 

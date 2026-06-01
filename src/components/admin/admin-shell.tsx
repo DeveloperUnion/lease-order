@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, use, useEffect, useState } from "react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import Sidebar from "./sidebar";
 import AdminNotificationBell from "./admin-notification-bell";
@@ -133,9 +134,14 @@ export default function AdminShell({
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="lg:hidden font-[family-name:var(--font-display)] text-base tracking-tight text-foreground">
-            管理コンソール
-          </span>
+          <Image
+            src="/images/logo-union.webp"
+            alt="union"
+            width={486}
+            height={823}
+            priority
+            className="lg:hidden h-8 w-auto"
+          />
           <div className="ml-auto">
             <Suspense fallback={<BellSkeleton />}>
               <BellWithData promise={notificationPromise} />
