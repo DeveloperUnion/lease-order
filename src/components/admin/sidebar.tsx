@@ -83,11 +83,11 @@ export default function Sidebar({
 
   return (
     <div className="flex h-full w-full flex-col bg-surface">
-      <div className="px-5 py-5 border-b border-rule">
+      <div className="h-14 flex items-center px-5 border-b border-rule">
         <Link
           href="/admin"
           onClick={onNavigate}
-          className="flex items-center"
+          className="flex items-center gap-2"
         >
           <Image
             src="/images/logo-union.webp"
@@ -95,8 +95,9 @@ export default function Sidebar({
             width={486}
             height={823}
             priority
-            className="h-10 w-auto"
+            className="h-9 w-auto"
           />
+          <span className="text-lg font-bold tracking-tight text-accent">発注<span className="text-xs font-medium ml-1">for リース</span></span>
         </Link>
       </div>
 

@@ -2,6 +2,7 @@
 
 import { Suspense, use, useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Sidebar from "./sidebar";
 import AdminNotificationBell from "./admin-notification-bell";
@@ -134,14 +135,17 @@ export default function AdminShell({
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <Image
-            src="/images/logo-union.webp"
-            alt="union"
-            width={486}
-            height={823}
-            priority
-            className="lg:hidden h-8 w-auto"
-          />
+          <Link href="/admin" className="lg:hidden flex items-center gap-2">
+            <Image
+              src="/images/logo-union.webp"
+              alt="union"
+              width={486}
+              height={823}
+              priority
+              className="h-8 w-auto"
+            />
+            <span className="text-base font-bold tracking-tight text-accent">発注<span className="text-xs font-medium ml-1">for リース</span></span>
+          </Link>
           <div className="ml-auto">
             <Suspense fallback={<BellSkeleton />}>
               <BellWithData promise={notificationPromise} />
