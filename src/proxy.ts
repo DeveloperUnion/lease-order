@@ -1,8 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { verifySessionToken, CUSTOMER_COOKIE_NAME } from "@/lib/customer-auth";
-import { extractSlugFromHost, getCustomerAccessModeByHost } from "@/lib/tenant";
+import {
+  extractSlugFromHost,
+  isSuperAdminHost,
+  getCustomerAccessModeByHost,
+  isTenantLockedByHost,
+} from "@/lib/tenant";
 import { isAdminAllowedForTenant } from "@/lib/admin-access";
+import { isSuperAdmin } from "@/lib/super-admin-access";
 
 const PUBLIC_ADMIN_PATHS = ["/admin/login"];
 
@@ -75,6 +81,73 @@ async function adminProxy(request: NextRequest) {
   return response;
 }
 
+// 運営者(super-admin)コンソール専用ホストのゲート。
+// ルートファイルは /super-admin/* 配下に置くが、ブラウザにはクリーンな
+// パス（/, /login, /tenants/...）を見せたいので、最後に内部 rewrite で
+// /super-admin を前置する。テナント JWT は一切発行しない。
+async function superAdminProxy(request: NextRequest) {
+  let response = NextResponse.next({ request });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          for (const { name, value } of cookiesToSet) {
+            request.cookies.set(name, value);
+          }
+          response = NextResponse.next({ request });
+          for (const { name, value, options } of cookiesToSet) {
+            response.cookies.set(name, value, options);
+          }
+        },
+      },
+    }
+  );
+
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims ?? null;
+
+  const { pathname } = request.nextUrl;
+  // クリーンパス基準の public 判定（/login, /auth/callback）
+  const isPublic = pathname === "/login" || pathname.startsWith("/auth");
+
+  // リフレッシュされた session cookie を、確定レスポンス（redirect / rewrite）へ載せ直す。
+  const handoff = (res: NextResponse) => {
+    for (const cookie of response.cookies.getAll()) res.cookies.set(cookie);
+    return res;
+  };
+
+  if (!claims && !isPublic) {
+    const loginUrl = new URL("/login", request.url);
+    if (pathname !== "/") loginUrl.searchParams.set("next", pathname);
+    return handoff(NextResponse.redirect(loginUrl));
+  }
+
+  if (claims && pathname === "/login") {
+    return handoff(NextResponse.redirect(new URL("/", request.url)));
+  }
+
+  // ログイン済みかつ保護ルートのとき、super_admins allowlist を確認する。
+  if (claims && !isPublic) {
+    const email = (claims.email as string | undefined) ?? null;
+    if (!email || !(await isSuperAdmin(email))) {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("error", "not_allowed");
+      return handoff(NextResponse.redirect(loginUrl));
+    }
+  }
+
+  // クリーンパス → 内部の /super-admin/* ルートへ rewrite。
+  const url = request.nextUrl.clone();
+  url.pathname = pathname === "/" ? "/super-admin" : `/super-admin${pathname}`;
+  return handoff(NextResponse.rewrite(url));
+}
+
 async function customerProxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get(CUSTOMER_COOKIE_NAME)?.value;
@@ -104,6 +177,19 @@ async function customerProxy(request: NextRequest) {
 }
 
 export async function proxy(request: NextRequest) {
+  const host = request.headers.get("host") ?? "";
+  // 運営者コンソールは専用ホストで完全分離。最初に分岐させる（ロック対象外）。
+  if (isSuperAdminHost(host)) {
+    return superAdminProxy(request);
+  }
+  // トライアル期限切れ / 手動停止のテナントは admin・顧客とも完全ロック。
+  // ロック画面（/trial-expired）自身は通し、それ以外は全パスを rewrite で覆う。
+  const { pathname } = request.nextUrl;
+  if (pathname !== "/trial-expired" && (await isTenantLockedByHost(host))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/trial-expired";
+    return NextResponse.rewrite(url);
+  }
   // 管理者は常時認証必須。それ以外（顧客側）はテナントの customer_access_mode に従う。
   if (request.nextUrl.pathname.startsWith("/admin")) {
     return adminProxy(request);
