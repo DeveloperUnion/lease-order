@@ -8,6 +8,7 @@ import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 import { revalidateCatalog } from "@/lib/catalog-cache";
 import { generateTempPassword } from "@/lib/temp-password";
+import { ensureAuthUser } from "@/lib/admin-auth-provision";
 
 function slugify(input: string): string {
   const base = input
@@ -913,48 +914,8 @@ export async function reorderMaterialImages(
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// admin は Supabase Auth ユーザーとしてパスワードを持つ。allowlist (admin_users)
-// への追加時に auth.users を作成し、その id を admin_users.auth_user_id に保持する。
-// 既に auth.users に存在するメール（マジックリンク時代の残存など）はパスワードを
-// 更新して再利用する。
-async function findAuthUserIdByEmail(email: string): Promise<string | null> {
-  const target = email.toLowerCase();
-  for (let page = 1; page <= 20; page++) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
-      page,
-      perPage: 200,
-    });
-    if (error || !data?.users?.length) return null;
-    const found = data.users.find((u) => u.email?.toLowerCase() === target);
-    if (found) return found.id;
-    if (data.users.length < 200) return null;
-  }
-  return null;
-}
-
-async function ensureAuthUser(email: string, password: string): Promise<string> {
-  const { data, error } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-  });
-  if (!error && data?.user) return data.user.id;
-
-  const existingId = await findAuthUserIdByEmail(email);
-  if (existingId) {
-    const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(
-      existingId,
-      { password, email_confirm: true }
-    );
-    if (updErr) {
-      throw new Error(`認証ユーザーの更新に失敗しました: ${updErr.message}`);
-    }
-    return existingId;
-  }
-  throw new Error(
-    `認証ユーザーの作成に失敗しました: ${error?.message ?? "unknown"}`
-  );
-}
+// admin の auth.users 発行は @/lib/admin-auth-provision の ensureAuthUser に集約
+// （super-admin コンソールの addTenantAdmin と共通化）。
 
 export async function addAdminUser(
   formData: FormData

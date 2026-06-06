@@ -21,14 +21,23 @@ import {
 } from "../../actions";
 import TrialBadge from "../../trial-badge";
 
-const PRODUCT_DOMAIN = "lease-order.kensetsu-tech.com";
-
-export default function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
+export default function TenantDetailView({
+  tenant,
+  baseDomain,
+}: {
+  tenant: TenantDetail;
+  baseDomain: string;
+}) {
   const [name, setName] = useState(tenant.name);
   const [billingType, setBillingType] = useState<"monthly" | "daily">(
     tenant.billing_rule.type === "daily" ? "daily" : "monthly"
   );
   const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [issued, setIssued] = useState<{
+    email: string;
+    password: string;
+    emailSent: boolean;
+  } | null>(null);
   const [extendDays, setExtendDays] = useState("30");
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -90,7 +99,14 @@ export default function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
       const result = await addTenantAdminAction(tenant.id, newAdminEmail);
       if (result.ok) {
         setNewAdminEmail("");
-        showToast("管理者を招待しました");
+        setIssued({
+          email: result.email,
+          password: result.tempPassword,
+          emailSent: result.emailSent,
+        });
+        showToast(
+          result.emailSent ? "招待メールを送信しました" : "管理者を招待しました"
+        );
       } else {
         setError(result.error);
       }
@@ -111,7 +127,7 @@ export default function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
       <PageHeader
         backHref="/"
         backLabel="テナント一覧"
-        eyebrow={`${tenant.slug}.${PRODUCT_DOMAIN}`}
+        eyebrow={`${tenant.slug}.${baseDomain}`}
         title={tenant.name}
         description={`顧客 ${tenant.customerCount} 社 ・ 注文 ${tenant.orderCount} 件 ・ 作成 ${new Date(
           tenant.created_at
@@ -243,7 +259,9 @@ export default function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
           className="mb-4"
         />
         <p className="text-xs text-muted mb-3 leading-relaxed">
-          招待されたメールは <span className="font-[family-name:var(--font-mono)]">{tenant.slug}.{PRODUCT_DOMAIN}/admin</span> からマジックリンクでサインインできます。
+          招待すると、本人宛に初期パスワードとログイン案内メールが送信されます。管理者は{" "}
+          <span className="font-[family-name:var(--font-mono)]">{tenant.slug}.{baseDomain}/admin</span>{" "}
+          からメールアドレスと初期パスワードでサインインします（初回サインイン後に変更が必要）。
         </p>
 
         <form action={handleAddAdmin} className="flex gap-2 mb-4">
@@ -259,6 +277,26 @@ export default function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
             {isPending ? "招待中…" : "+ 招待"}
           </Button>
         </form>
+
+        {issued && (
+          <div className="mb-4 border border-[var(--color-status-approved-fg)]/30 bg-[var(--color-status-approved-bg)] px-4 py-3">
+            <p className="text-sm text-foreground font-medium mb-1">
+              {issued.emailSent
+                ? "招待メールを送信しました"
+                : "初期パスワードを発行しました"}
+            </p>
+            <p className="text-xs text-muted leading-relaxed mb-2">
+              {issued.emailSent
+                ? "本人宛に初期パスワードとログイン案内を送信しました。下記は控えです（この画面でのみ表示）。初回サインイン後に変更が必要です。"
+                : "メールは未送信です（送信未構成）。下記を本人に安全に共有してください。初回サインイン後に変更が必要です。"}
+            </p>
+            <div className="font-[family-name:var(--font-mono)] text-sm text-foreground break-all">
+              <span className="text-subtle">{issued.email}</span>
+              {" / "}
+              <span className="select-all">{issued.password}</span>
+            </div>
+          </div>
+        )}
 
         {error && (
           <p className="mb-3 text-sm text-[var(--color-status-rejected-fg)]">

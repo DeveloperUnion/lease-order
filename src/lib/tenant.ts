@@ -50,6 +50,22 @@ export function extractSlugFromHost(rawHost: string): string | null {
   return slugForZone(host, STAGING_DOMAIN) ?? slugForZone(host, PRODUCT_DOMAIN);
 }
 
+// super-admin コンソールのホストから、テナントが使うベースドメインを導く。
+//   super-admin.lease-order...         → lease-order...        （prod）
+//   super-admin.staging.lease-order... → staging.lease-order... （staging）
+// これで super-admin の UI が prod/staging で正しいテナント URL を表示できる。
+export function tenantBaseDomainFromHost(rawHost: string): string {
+  const host = rawHost.split(":")[0].toLowerCase();
+  const prefix = "super-admin.";
+  return host.startsWith(prefix) ? host.slice(prefix.length) : host;
+}
+
+// 現在のリクエスト host から tenantBaseDomain を解決する（server 専用）。
+export async function getTenantBaseDomain(): Promise<string> {
+  const host = (await headers()).get("host") ?? PRODUCT_DOMAIN;
+  return tenantBaseDomainFromHost(host);
+}
+
 async function resolveSlug(): Promise<string> {
   const host = (await headers()).get("host");
   if (host) {

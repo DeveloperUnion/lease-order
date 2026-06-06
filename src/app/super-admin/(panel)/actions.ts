@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/current-super-admin";
+import { getTenantBaseDomain } from "@/lib/tenant";
 import {
   createTenant,
   updateTenant,
@@ -36,7 +37,8 @@ export async function updateTenantAction(input: UpdateTenantInput) {
 
 export async function addTenantAdminAction(tenantId: string, email: string) {
   await requireSuperAdmin();
-  const result = await addTenantAdmin(tenantId, email);
+  const baseDomain = await getTenantBaseDomain();
+  const result = await addTenantAdmin(tenantId, email, baseDomain);
   if (result.ok) revalidatePath(`/super-admin/tenants/${tenantId}`);
   return result;
 }
