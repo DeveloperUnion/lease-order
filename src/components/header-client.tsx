@@ -158,7 +158,7 @@ export default function HeaderClient({
   const { totalItems } = useCart();
   const pathname = usePathname();
   const isAdmin = pathname.startsWith("/admin");
-  const isAuthPage = pathname === "/login" || pathname.startsWith("/signup");
+  const isAuthPage = pathname === "/login";
 
   if (isAuthPage) {
     return null;

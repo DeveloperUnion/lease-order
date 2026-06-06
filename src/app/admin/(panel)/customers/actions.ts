@@ -48,8 +48,8 @@ export async function createCustomer(input: CreateCustomerInput): Promise<Create
       phone: input.phone?.trim() || null,
       default_address: input.defaultAddress?.trim() || null,
       contact_email: input.contactEmail?.trim() || null,
-      // admin 発行アカウントは検証不要・会員登録由来でない。
-      email_verified: true,
+      // admin が入力したメールは検証済み扱い（無ければ false）。
+      email_verified: !!input.contactEmail?.trim(),
       self_registered: false,
     })
     .select("id")
@@ -78,7 +78,12 @@ export async function updateCustomer(input: UpdateCustomerInput): Promise<{ ok: 
   if (input.name !== undefined) patch.name = input.name.trim();
   if (input.phone !== undefined) patch.phone = input.phone?.trim() || null;
   if (input.defaultAddress !== undefined) patch.default_address = input.defaultAddress?.trim() || null;
-  if (input.contactEmail !== undefined) patch.contact_email = input.contactEmail?.trim() || null;
+  if (input.contactEmail !== undefined) {
+    const e = input.contactEmail?.trim() || null;
+    patch.contact_email = e;
+    // admin が入力したメールは検証済み扱い（クリア時は false）。
+    patch.email_verified = !!e;
+  }
 
   const { error } = await supabaseAdmin
     .from("customers")

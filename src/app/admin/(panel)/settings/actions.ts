@@ -23,18 +23,3 @@ export async function setCustomerAccessMode(mode: CustomerAccessMode): Promise<R
   revalidatePath("/admin/settings");
   return { ok: true };
 }
-
-// 会員登録（self-registration）の可否を自テナントにのみ反映する。
-export async function setCustomerSelfRegistration(enabled: boolean): Promise<Result> {
-  const tenantId = await getTenantId();
-  const { error } = await supabaseAdmin
-    .from("tenants")
-    .update({ customer_self_registration: enabled })
-    .eq("id", tenantId);
-  if (error) {
-    console.error("setCustomerSelfRegistration error", error);
-    return { ok: false, error: "設定の更新に失敗しました" };
-  }
-  revalidatePath("/admin/settings");
-  return { ok: true };
-}

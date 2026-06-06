@@ -10,45 +10,32 @@ import { setCustomerSession, clearCustomerSession } from "@/lib/customer-auth";
 
 export type LoginResult = { ok: true } | { ok: false; error: string };
 
-export async function login(input: { identifier: string; password: string; next?: string }): Promise<LoginResult> {
-  const identifier = input.identifier.trim();
+export async function login(input: { companyId: string; password: string; next?: string }): Promise<LoginResult> {
+  const companyId = input.companyId.trim();
   const password = input.password;
-  if (!identifier || !password) {
-    return { ok: false, error: "会社 ID（またはメールアドレス）とパスワードを入力してください" };
+  if (!companyId || !password) {
+    return { ok: false, error: "会社 ID とパスワードを入力してください" };
   }
 
   const tenantId = await getTenantId();
-  // 会員登録ユーザーはメール、admin 発行ユーザーは会社 ID でログインできる。
-  const isEmail = identifier.includes("@");
-  let query = supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("customers")
-    .select("id, password_hash, is_active, self_registered, email_verified")
-    .eq("tenant_id", tenantId);
-  query = isEmail
-    ? query.eq("contact_email", identifier.toLowerCase())
-    : query.eq("company_id", identifier);
-  const { data: rows, error } = await query
-    .order("created_at", { ascending: true })
-    .limit(1);
+    .select("id, password_hash, is_active")
+    .eq("tenant_id", tenantId)
+    .eq("company_id", companyId)
+    .maybeSingle();
 
   if (error) {
     console.error("login lookup error", error);
     return { ok: false, error: "ログインに失敗しました。時間をおいて再度お試しください。" };
   }
-  const data = rows?.[0] ?? null;
 
   const dummyHash = "$2a$12$0000000000000000000000000000000000000000000000000000ab";
   const hash = data?.password_hash ?? dummyHash;
   const ok = await bcrypt.compare(password, hash);
 
   if (!data || !data.is_active || !ok) {
-    return { ok: false, error: "会社 ID／メールアドレスまたはパスワードが正しくありません" };
-  }
-  if (data.self_registered && !data.email_verified) {
-    return {
-      ok: false,
-      error: "メールアドレスの確認が完了していません。確認メールのコードを入力してください。",
-    };
+    return { ok: false, error: "会社 ID またはパスワードが正しくありません" };
   }
 
   await setCustomerSession(data.id, tenantId);

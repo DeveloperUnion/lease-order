@@ -17,6 +17,7 @@ export type CustomerSession = {
   default_address: string | null;
   phone: string | null;
   contact_email: string | null;
+  email_verified: boolean;
   must_change_password: boolean;
 };
 
@@ -74,7 +75,7 @@ export const getCurrentCustomer = cache(async (): Promise<CustomerSession | null
 
   const { data, error } = await supabaseAdmin
     .from("customers")
-    .select("id, tenant_id, company_id, name, default_address, phone, contact_email, is_active, must_change_password")
+    .select("id, tenant_id, company_id, name, default_address, phone, contact_email, email_verified, is_active, must_change_password")
     .eq("id", payload.cid)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -88,6 +89,7 @@ export const getCurrentCustomer = cache(async (): Promise<CustomerSession | null
     default_address: data.default_address,
     phone: data.phone,
     contact_email: data.contact_email,
+    email_verified: data.email_verified ?? false,
     must_change_password: data.must_change_password,
   };
 });

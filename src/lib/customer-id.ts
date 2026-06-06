@@ -2,9 +2,9 @@ import "server-only";
 import { supabaseAdmin } from "./supabase-admin";
 
 // 顧客の company_id を採番する: C-<year>-<seq> 形式。
-// admin によるアカウント発行（createCustomer）と会員登録（registerCustomer）の
-// 両方から使う。並走登録で同一 seq に当たると customers の unique(tenant_id, company_id)
-// で弾かれるため、呼び出し側は unique 違反時にリトライする想定。
+// admin によるアカウント発行（createCustomer）で使う。並走登録で同一 seq に当たると
+// customers の unique(tenant_id, company_id) で弾かれるため、必要なら呼び出し側で
+// unique 違反時にリトライする想定。
 export async function nextCompanyId(tenantId: string): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `C-${year}-`;

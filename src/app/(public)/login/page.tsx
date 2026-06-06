@@ -1,6 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
-import { getTenant } from "@/lib/tenant";
 import LoginForm from "./login-form";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +6,7 @@ export const dynamic = "force-dynamic";
 type SearchParams = Promise<{ next?: string }>;
 
 export default async function LoginPage({ searchParams }: { searchParams: SearchParams }) {
-  const [{ next }, tenant] = await Promise.all([searchParams, getTenant()]);
+  const { next } = await searchParams;
 
   return (
     <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 sm:py-20 bg-background">
@@ -28,15 +26,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
         </div>
 
         <LoginForm next={next} />
-
-        {tenant.customer_self_registration && (
-          <p className="text-sm text-muted mt-6">
-            アカウントをお持ちでない場合は{" "}
-            <Link href="/signup" className="text-accent underline">
-              会員登録
-            </Link>
-          </p>
-        )}
 
         <p className="text-xs text-subtle mt-8 leading-relaxed">
           ログイン情報をお忘れの場合はリース会社の担当者までお問い合わせください。
