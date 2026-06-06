@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getTenantId } from "@/lib/tenant";
+import { nextCompanyId } from "@/lib/customer-id";
 
 export type CreateCustomerInput = {
   name: string;
@@ -28,25 +29,6 @@ function generateTempPassword(length = 12): string {
   return out;
 }
 
-async function nextCompanyId(tenantId: string): Promise<string> {
-  const year = new Date().getFullYear();
-  const prefix = `C-${year}-`;
-  const { data, error } = await supabaseAdmin
-    .from("customers")
-    .select("company_id")
-    .eq("tenant_id", tenantId)
-    .like("company_id", `${prefix}%`);
-  if (error) throw error;
-  const maxSeq = (data ?? []).reduce((m, row) => {
-    const match = /^C-\d{4}-(\d+)$/.exec((row as { company_id: string }).company_id);
-    if (!match) return m;
-    const n = Number(match[1]);
-    return Number.isFinite(n) && n > m ? n : m;
-  }, 0);
-  const seq = String(maxSeq + 1).padStart(3, "0");
-  return `${prefix}${seq}`;
-}
-
 export async function createCustomer(input: CreateCustomerInput): Promise<CreateCustomerResult> {
   const name = input.name.trim();
   if (!name) return { ok: false, error: "会社名は必須です" };
@@ -66,6 +48,9 @@ export async function createCustomer(input: CreateCustomerInput): Promise<Create
       phone: input.phone?.trim() || null,
       default_address: input.defaultAddress?.trim() || null,
       contact_email: input.contactEmail?.trim() || null,
+      // admin が入力したメールは検証済み扱い（無ければ false）。
+      email_verified: !!input.contactEmail?.trim(),
+      self_registered: false,
     })
     .select("id")
     .single();
@@ -93,7 +78,12 @@ export async function updateCustomer(input: UpdateCustomerInput): Promise<{ ok: 
   if (input.name !== undefined) patch.name = input.name.trim();
   if (input.phone !== undefined) patch.phone = input.phone?.trim() || null;
   if (input.defaultAddress !== undefined) patch.default_address = input.defaultAddress?.trim() || null;
-  if (input.contactEmail !== undefined) patch.contact_email = input.contactEmail?.trim() || null;
+  if (input.contactEmail !== undefined) {
+    const e = input.contactEmail?.trim() || null;
+    patch.contact_email = e;
+    // admin が入力したメールは検証済み扱い（クリア時は false）。
+    patch.email_verified = !!e;
+  }
 
   const { error } = await supabaseAdmin
     .from("customers")

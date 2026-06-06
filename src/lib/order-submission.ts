@@ -89,7 +89,7 @@ export async function submitOrderCore(
     const { data: cust } = await supabaseCheck
       .from("customers")
       .select(
-        "id, tenant_id, company_id, name, default_address, phone, contact_email, must_change_password, is_active"
+        "id, tenant_id, company_id, name, default_address, phone, contact_email, email_verified, must_change_password, is_active"
       )
       .eq("id", options.actingAs.customerId)
       .eq("tenant_id", tenantId)
@@ -105,6 +105,7 @@ export async function submitOrderCore(
       default_address: cust.default_address,
       phone: cust.phone,
       contact_email: cust.contact_email,
+      email_verified: cust.email_verified ?? false,
       must_change_password: cust.must_change_password,
     };
   } else {
@@ -296,7 +297,8 @@ export async function submitOrderCore(
       company_name: customer.name,
       contact_name: contactName,
       phone: input.phone.trim() || customer.phone || null,
-      email: customer.contact_email,
+      // 検証済みメールのみ通知先としてスナップショットする。
+      email: customer.email_verified ? customer.contact_email : null,
       note: input.note.trim() || null,
       delivery_method: input.deliveryMethod,
       delivery_address:

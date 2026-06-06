@@ -144,6 +144,29 @@ function deriveNameFromDraft(d: Draft): string {
   return "新規下書き";
 }
 
+// ゲスト（customerId=null）で作成した下書きを、ログイン後の customer に引き継ぐ。
+// 「ゲスト閲覧 → カート投入 → 発注時にログイン」の導線で、同一ブラウザのカートを
+// 失わないようにする。claim 後はゲスト下書きが消えるため再実行は冪等。
+export async function claimGuestDrafts(
+  tenantId: string | null,
+  customerId: string
+): Promise<void> {
+  if (!customerId) return;
+  const db = await getDb();
+  const all = await db.getAll("drafts");
+  const guestDrafts = all.filter(
+    (d) => d.tenantId === tenantId && d.customerId === null && d.items.length > 0
+  );
+  if (guestDrafts.length === 0) return;
+  for (const d of guestDrafts) {
+    d.customerId = customerId;
+    d.updatedAt = Date.now();
+    await db.put("drafts", d);
+  }
+  const latest = guestDrafts.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  if (latest) setActiveDraftIdSync(tenantId, customerId, latest.id);
+}
+
 export async function ensureActiveDraft(
   tenantId: string | null,
   customerId: string | null

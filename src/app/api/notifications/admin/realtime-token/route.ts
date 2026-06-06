@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 
 // 通知 Realtime 用の admin 専用短期 JWT。
 // /api/notifications/realtime-token は resolveRecipientIdentity (customer-first 推論) を
-// 使っていたため、同一ブラウザに顧客 cookie がある / DISABLE_AUTH=1 のとき token.audience が
-// 常に "customer" になり、admin の NotificationBell が subscribe を諦めていた。
+// 使っていたため、同一ブラウザに顧客 cookie があると token.audience が常に "customer" に
+// なり、admin の NotificationBell が subscribe を諦めていた。
 // URL でどっち側か申告させて resolveAsAdmin に固定することで誤判定を防ぐ。
 const REALTIME_TTL_SECONDS = 60 * 30;
 

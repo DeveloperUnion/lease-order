@@ -1,12 +1,24 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { verifySessionToken, CUSTOMER_COOKIE_NAME } from "@/lib/customer-auth";
-import { extractSlugFromHost, isSuperAdminHost } from "@/lib/tenant";
+import {
+  extractSlugFromHost,
+  isSuperAdminHost,
+  getCustomerAccessModeByHost,
+} from "@/lib/tenant";
 import { isAdminAllowedForTenant } from "@/lib/admin-access";
 import { isSuperAdmin } from "@/lib/super-admin-access";
 
-const PUBLIC_ADMIN_PATHS = ["/admin/login", "/admin/auth"];
-const PUBLIC_CUSTOMER_PATHS = ["/login"];
+const PUBLIC_ADMIN_PATHS = ["/admin/login"];
+
+// guest_browse モードでゲスト（未ログイン）に開放するカタログ系パス。
+// allow-list 方式（protect-by-default）：ここに無いパスは未ログインなら必ず
+// /login へ送る。発注・履歴・rentals 等の機微なページが誤って公開されるのを防ぐ。
+function isGuestBrowsable(pathname: string): boolean {
+  if (pathname === "/" || pathname === "/search") return true;
+  if (pathname.startsWith("/category/")) return true;
+  return false;
+}
 
 async function adminProxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -135,48 +147,40 @@ async function superAdminProxy(request: NextRequest) {
   return handoff(NextResponse.rewrite(url));
 }
 
-function customerProxy(request: NextRequest) {
+async function customerProxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isPublic = PUBLIC_CUSTOMER_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
-
   const token = request.cookies.get(CUSTOMER_COOKIE_NAME)?.value;
   const payload = verifySessionToken(token);
 
-  if (!payload && !isPublic) {
-    const loginUrl = new URL("/login", request.url);
-    if (pathname !== "/") loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  if (payload && pathname === "/login") {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
-
-  return NextResponse.next({ request });
-}
-
-export async function proxy(request: NextRequest) {
-  // 運営者コンソールは専用ホストで完全分離。DISABLE_AUTH より前に分岐し、
-  // フィードバックモードでも super-admin ゲートは決して素通りさせない。
-  if (isSuperAdminHost(request.headers.get("host") ?? "")) {
-    return superAdminProxy(request);
-  }
-
-  // フィードバック収集モード: 認証ゲートを丸ごと素通りさせる。
-  // 未ログイン訪問者には getCurrentCustomer / getAdminContext / currentAdminUserId
-  // のフォールバックでテナントの最初の有効 customer / admin が割り当てられる。
-  // 本番では DISABLE_AUTH を未設定にして従来通り認証を強制する。
-  if (process.env.DISABLE_AUTH === "1") {
-    const { pathname } = request.nextUrl;
-    // ログイン画面は意味がないので飛ばす
-    if (pathname === "/admin/login") {
-      return NextResponse.redirect(new URL("/admin", request.url));
-    }
+  if (payload) {
+    // ログイン済みがログイン画面に来たらカタログへ。
     if (pathname === "/login") {
       return NextResponse.redirect(new URL("/", request.url));
     }
     return NextResponse.next({ request });
   }
+
+  // 未ログイン。ログイン画面はそのまま表示。
+  if (pathname === "/login") return NextResponse.next({ request });
+
+  // guest_browse モードならカタログ系パスはゲスト通過。それ以外（login モード or
+  // 保護パス）は /login へ。発注・履歴等は requireCustomer でも守られる二重防御。
+  const mode = await getCustomerAccessModeByHost(request.headers.get("host"));
+  if (mode === "guest_browse" && isGuestBrowsable(pathname)) {
+    return NextResponse.next({ request });
+  }
+
+  const loginUrl = new URL("/login", request.url);
+  if (pathname !== "/") loginUrl.searchParams.set("next", pathname);
+  return NextResponse.redirect(loginUrl);
+}
+
+export async function proxy(request: NextRequest) {
+  // 運営者コンソールは専用ホストで完全分離。最初に分岐させる。
+  if (isSuperAdminHost(request.headers.get("host") ?? "")) {
+    return superAdminProxy(request);
+  }
+  // 管理者は常時認証必須。それ以外（顧客側）はテナントの customer_access_mode に従う。
   if (request.nextUrl.pathname.startsWith("/admin")) {
     return adminProxy(request);
   }

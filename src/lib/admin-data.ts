@@ -1010,6 +1010,7 @@ export { statusLabels } from "./order-status";
 export type AdminUserRow = {
   id: string;
   email: string;
+  must_change_password: boolean;
   created_at: string;
 };
 
@@ -1018,7 +1019,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
   const supabase = await getSupabaseTenant();
   const { data, error } = await supabase
     .from("admin_users")
-    .select("id, email, created_at")
+    .select("id, email, must_change_password, created_at")
     .eq("tenant_id", tenantId)
     .order("created_at");
   if (error) throw error;

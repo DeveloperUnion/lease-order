@@ -1,5 +1,5 @@
 import { getCategories, getMaterialsByCategory } from "@/lib/data";
-import { requireCustomer } from "@/lib/customer-auth";
+import { gateCatalogAccess } from "@/lib/customer-auth";
 import { getTenant } from "@/lib/tenant";
 import CategoryView from "./category-view";
 
@@ -12,7 +12,7 @@ export default async function CategoryPage({
   // categories は cache hit が前提（小さい）。materials は category 単位の
   // 軽量クエリ + Redis L3 で cold start も短時間で済む。
   const [, { slug }, categories, tenant] = await Promise.all([
-    requireCustomer(),
+    gateCatalogAccess(),
     params,
     getCategories(),
     getTenant(),

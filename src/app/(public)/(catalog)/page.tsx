@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { getCategoriesWithCounts } from "@/lib/data";
-import { requireCustomer } from "@/lib/customer-auth";
+import { gateCatalogAccess } from "@/lib/customer-auth";
 
 export default async function HomePage() {
-  await requireCustomer();
+  await gateCatalogAccess();
   const categories = await getCategoriesWithCounts();
 
   return (

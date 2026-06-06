@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCustomer } from "@/lib/customer-auth";
+import { gateCatalogAccess } from "@/lib/customer-auth";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 
@@ -21,7 +21,7 @@ export type SearchResult = {
 };
 
 export async function GET(req: Request): Promise<Response> {
-  await requireCustomer();
+  await gateCatalogAccess();
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim();
   if (!q) {
