@@ -1,8 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { verifySessionToken, CUSTOMER_COOKIE_NAME } from "@/lib/customer-auth";
-import { extractSlugFromHost } from "@/lib/tenant";
+import { extractSlugFromHost, isSuperAdminHost } from "@/lib/tenant";
 import { isAdminAllowedForTenant } from "@/lib/admin-access";
+import { isSuperAdmin } from "@/lib/super-admin-access";
 
 const PUBLIC_ADMIN_PATHS = ["/admin/login", "/admin/auth"];
 const PUBLIC_CUSTOMER_PATHS = ["/login"];
@@ -67,6 +68,73 @@ async function adminProxy(request: NextRequest) {
   return response;
 }
 
+// 運営者(super-admin)コンソール専用ホストのゲート。
+// ルートファイルは /super-admin/* 配下に置くが、ブラウザにはクリーンな
+// パス（/, /login, /tenants/...）を見せたいので、最後に内部 rewrite で
+// /super-admin を前置する。テナント JWT は一切発行しない。
+async function superAdminProxy(request: NextRequest) {
+  let response = NextResponse.next({ request });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          for (const { name, value } of cookiesToSet) {
+            request.cookies.set(name, value);
+          }
+          response = NextResponse.next({ request });
+          for (const { name, value, options } of cookiesToSet) {
+            response.cookies.set(name, value, options);
+          }
+        },
+      },
+    }
+  );
+
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims ?? null;
+
+  const { pathname } = request.nextUrl;
+  // クリーンパス基準の public 判定（/login, /auth/callback）
+  const isPublic = pathname === "/login" || pathname.startsWith("/auth");
+
+  // リフレッシュされた session cookie を、確定レスポンス（redirect / rewrite）へ載せ直す。
+  const handoff = (res: NextResponse) => {
+    for (const cookie of response.cookies.getAll()) res.cookies.set(cookie);
+    return res;
+  };
+
+  if (!claims && !isPublic) {
+    const loginUrl = new URL("/login", request.url);
+    if (pathname !== "/") loginUrl.searchParams.set("next", pathname);
+    return handoff(NextResponse.redirect(loginUrl));
+  }
+
+  if (claims && pathname === "/login") {
+    return handoff(NextResponse.redirect(new URL("/", request.url)));
+  }
+
+  // ログイン済みかつ保護ルートのとき、super_admins allowlist を確認する。
+  if (claims && !isPublic) {
+    const email = (claims.email as string | undefined) ?? null;
+    if (!email || !(await isSuperAdmin(email))) {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("error", "not_allowed");
+      return handoff(NextResponse.redirect(loginUrl));
+    }
+  }
+
+  // クリーンパス → 内部の /super-admin/* ルートへ rewrite。
+  const url = request.nextUrl.clone();
+  url.pathname = pathname === "/" ? "/super-admin" : `/super-admin${pathname}`;
+  return handoff(NextResponse.rewrite(url));
+}
+
 function customerProxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_CUSTOMER_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
@@ -88,6 +156,12 @@ function customerProxy(request: NextRequest) {
 }
 
 export async function proxy(request: NextRequest) {
+  // 運営者コンソールは専用ホストで完全分離。DISABLE_AUTH より前に分岐し、
+  // フィードバックモードでも super-admin ゲートは決して素通りさせない。
+  if (isSuperAdminHost(request.headers.get("host") ?? "")) {
+    return superAdminProxy(request);
+  }
+
   // フィードバック収集モード: 認証ゲートを丸ごと素通りさせる。
   // 未ログイン訪問者には getCurrentCustomer / getAdminContext / currentAdminUserId
   // のフォールバックでテナントの最初の有効 customer / admin が割り当てられる。

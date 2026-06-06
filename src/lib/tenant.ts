@@ -13,7 +13,21 @@ export type Tenant = {
 const PRODUCT_DOMAIN = "lease-order.kensetsu-tech.com";
 const FALLBACK_SLUG = "union";
 
+// super-admin（運営者）コンソール専用ホスト判定。
+//   本番:    super-admin.lease-order.kensetsu-tech.com
+//   staging: staging.super-admin.lease-order.kensetsu-tech.com
+//   ローカル: super-admin.localhost:3000（*.localhost は 127.0.0.1 に解決される）
+// staging. を剥がした上で super-admin. 始まりかどうかで一括判定する。
+export function isSuperAdminHost(rawHost: string): boolean {
+  const host = rawHost.split(":")[0].toLowerCase();
+  const noStaging = host.startsWith("staging.") ? host.slice("staging.".length) : host;
+  return noStaging.startsWith("super-admin.");
+}
+
 export function extractSlugFromHost(rawHost: string): string | null {
+  // super-admin ホストはテナントではない。slug "super-admin" として誤って
+  // getTenant に渡ると tenant not found で落ちるため、ここで明示的に除外する。
+  if (isSuperAdminHost(rawHost)) return null;
   const host = rawHost.split(":")[0].toLowerCase();
   const noStaging = host.startsWith("staging.") ? host.slice("staging.".length) : host;
   if (noStaging === PRODUCT_DOMAIN) return FALLBACK_SLUG;
