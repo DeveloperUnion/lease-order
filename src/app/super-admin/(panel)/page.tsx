@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { listTenants } from "@/lib/super-admin-data";
+import { getTenantBaseDomain } from "@/lib/tenant";
 import { PageHeader, ButtonLink, EmptyState } from "@/components/admin/ui";
 import TrialBadge from "./trial-badge";
 
 export const dynamic = "force-dynamic";
 
-const PRODUCT_DOMAIN = "lease-order.kensetsu-tech.com";
-
 export default async function TenantsPage() {
-  const tenants = await listTenants();
+  const [tenants, baseDomain] = await Promise.all([
+    listTenants(),
+    getTenantBaseDomain(),
+  ]);
 
   return (
     <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-6 sm:px-6 sm:py-8">
@@ -42,7 +44,7 @@ export default async function TenantsPage() {
                   </span>
                   <TrialBadge display={t.statusDisplay} hideActive />
                   <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted">
-                    {t.slug}.{PRODUCT_DOMAIN}
+                    {t.slug}.{baseDomain}
                   </span>
                 </div>
                 <p className="font-[family-name:var(--font-mono)] text-[10px] text-subtle mt-1 uppercase tracking-wider">

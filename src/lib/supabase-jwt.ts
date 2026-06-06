@@ -9,8 +9,17 @@ function getPrivateKey(): KeyObject {
   if (cachedKey) return cachedKey;
   const raw = process.env.SUPABASE_JWT_PRIVATE_KEY;
   if (!raw) throw new Error("SUPABASE_JWT_PRIVATE_KEY is not set");
+  let pem = raw.trim();
+  // Vercel 等の env UI に PEM を `"..."` ごと貼ると、クォートが値に含まれて
+  // createPrivateKey が ERR_OSSL_UNSUPPORTED で落ちる。前後の一致するクォートを剥がす。
+  if (
+    (pem.startsWith('"') && pem.endsWith('"')) ||
+    (pem.startsWith("'") && pem.endsWith("'"))
+  ) {
+    pem = pem.slice(1, -1);
+  }
   // .env で `\n` 文字列として保存されていた場合に実改行へ戻す
-  const pem = raw.includes("\\n") ? raw.replace(/\\n/g, "\n") : raw;
+  if (pem.includes("\\n")) pem = pem.replace(/\\n/g, "\n");
   cachedKey = createPrivateKey(pem);
   return cachedKey;
 }

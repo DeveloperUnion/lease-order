@@ -1,5 +1,8 @@
 import "server-only";
 import { supabaseAdmin } from "./supabase-admin";
+import { generateTempPassword } from "./temp-password";
+import { ensureAuthUser } from "./admin-auth-provision";
+import { sendTransactionalEmail } from "./mailer";
 import type { BillingRule } from "./pricing";
 import {
   tenantStatusDisplay,
@@ -281,26 +284,88 @@ export async function suspendTenant(id: string): Promise<TenantMutationResult> {
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+export type AddTenantAdminResult =
+  | { ok: true; email: string; tempPassword: string; emailSent: boolean }
+  | { ok: false; error: string };
+
+// テナント管理者を招待する。admin はパスワード認証なので、admin_users 行だけでなく
+// Supabase Auth ユーザーを仮パスワード付きで発行し、auth_user_id を保持する
+// （/admin の addAdminUser と同じ流れ）。発行後、招待メール（初期パスワード＋
+// ログイン案内）を本人宛に送信する。baseDomain は prod/staging で異なる
+// ログイン URL を組むために呼び出し側から渡す。
 export async function addTenantAdmin(
   tenantId: string,
-  email: string
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  email: string,
+  baseDomain: string
+): Promise<AddTenantAdminResult> {
   const normalized = email.trim().toLowerCase();
   if (!EMAIL_RE.test(normalized)) {
     return { ok: false, error: "メールアドレスの形式が正しくありません" };
   }
-  const { error } = await supabaseAdmin
+
+  const { data: tenant } = await supabaseAdmin
+    .from("tenants")
+    .select("slug, name")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (!tenant) {
+    return { ok: false, error: "テナントが見つかりません" };
+  }
+
+  // admin_users.email は global unique。auth ユーザーを無駄に作る前に弾く。
+  const { data: existing } = await supabaseAdmin
     .from("admin_users")
-    .insert({ tenant_id: tenantId, email: normalized });
+    .select("id")
+    .eq("email", normalized)
+    .maybeSingle();
+  if (existing) {
+    return { ok: false, error: "このメールは既にいずれかのテナントの管理者です" };
+  }
+
+  const tempPassword = generateTempPassword();
+  let authUserId: string;
+  try {
+    authUserId = await ensureAuthUser(normalized, tempPassword);
+  } catch (e) {
+    console.error("addTenantAdmin ensureAuthUser error", e);
+    return { ok: false, error: "認証ユーザーの発行に失敗しました" };
+  }
+
+  const { error } = await supabaseAdmin.from("admin_users").insert({
+    tenant_id: tenantId,
+    email: normalized,
+    auth_user_id: authUserId,
+    must_change_password: true,
+  });
   if (error) {
-    // admin_users.email は UNIQUE（1 メール = 1 テナント）。
     if (error.code === "23505") {
       return { ok: false, error: "このメールは既にいずれかのテナントの管理者です" };
     }
     console.error("addTenantAdmin error", error);
     return { ok: false, error: "管理者の追加に失敗しました" };
   }
-  return { ok: true };
+
+  // 招待メール送信（best-effort）。失敗しても招待自体は成功とし、画面表示の
+  // 初期パスワードで手動共有できるようにする。
+  const loginUrl = `https://${tenant.slug}.${baseDomain}/admin`;
+  const mail = await sendTransactionalEmail({
+    to: normalized,
+    fromName: "Union",
+    subject: `【発注 for リース】${tenant.name} 管理コンソールへの招待`,
+    text:
+      `${tenant.name} の管理コンソールに招待されました。\n\n` +
+      `以下の情報でサインインできます。\n\n` +
+      `  ログイン URL : ${loginUrl}\n` +
+      `  メールアドレス: ${normalized}\n` +
+      `  初期パスワード: ${tempPassword}\n\n` +
+      `セキュリティのため、初回サインイン後にパスワードの変更が必要です。\n` +
+      `本メールに心当たりがない場合は破棄してください。`,
+  });
+  if (!mail.ok) {
+    console.warn("addTenantAdmin invite email not sent:", mail.error);
+  }
+
+  return { ok: true, email: normalized, tempPassword, emailSent: mail.ok };
 }
 
 export async function removeTenantAdmin(

@@ -12,9 +12,7 @@ import {
   Button,
 } from "@/components/admin/ui";
 
-const PRODUCT_DOMAIN = "lease-order.kensetsu-tech.com";
-
-export default function NewTenantForm() {
+export default function NewTenantForm({ baseDomain }: { baseDomain: string }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -56,7 +54,7 @@ export default function NewTenantForm() {
         required
         hint={
           slug
-            ? `${slug}.${PRODUCT_DOMAIN}`
+            ? `${slug}.${baseDomain}`
             : "英小文字・数字・ハイフン。例: sanshin"
         }
       >
