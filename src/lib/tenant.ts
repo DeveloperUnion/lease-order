@@ -11,17 +11,30 @@ export type Tenant = {
 };
 
 const PRODUCT_DOMAIN = "lease-order.kensetsu-tech.com";
+// staging はワイルドカード可能な形 <slug>.staging.lease-order... を採用する。
+// （staging.<slug>.lease-order... だと staging.*.lease-order が DNS 上不正で
+//  ワイルドカードにできないため、slug を左に寄せて *.staging.lease-order を効かせる）
+const STAGING_DOMAIN = `staging.${PRODUCT_DOMAIN}`;
 const FALLBACK_SLUG = "union";
 
 // super-admin（運営者）コンソール専用ホスト判定。
 //   本番:    super-admin.lease-order.kensetsu-tech.com
-//   staging: staging.super-admin.lease-order.kensetsu-tech.com
+//   staging: super-admin.staging.lease-order.kensetsu-tech.com
 //   ローカル: super-admin.localhost:3000（*.localhost は 127.0.0.1 に解決される）
-// staging. を剥がした上で super-admin. 始まりかどうかで一括判定する。
+// prod/staging/local いずれも「先頭ラベルが super-admin か」で一括判定できる。
+// slug "super-admin" はテナント作成時に予約済み（createTenant）なので衝突しない。
 export function isSuperAdminHost(rawHost: string): boolean {
   const host = rawHost.split(":")[0].toLowerCase();
-  const noStaging = host.startsWith("staging.") ? host.slice("staging.".length) : host;
-  return noStaging.startsWith("super-admin.");
+  return host.split(".")[0] === "super-admin";
+}
+
+// 指定ゾーン内での slug を返す。host がゾーンちょうど（apex）なら FALLBACK、
+// ゾーンのサブドメインなら左ラベルを slug として返す。該当しなければ null。
+function slugForZone(host: string, zone: string): string | null {
+  if (host === zone) return FALLBACK_SLUG;
+  const suffix = `.${zone}`;
+  if (host.endsWith(suffix)) return host.slice(0, -suffix.length);
+  return null;
 }
 
 export function extractSlugFromHost(rawHost: string): string | null {
@@ -29,11 +42,9 @@ export function extractSlugFromHost(rawHost: string): string | null {
   // getTenant に渡ると tenant not found で落ちるため、ここで明示的に除外する。
   if (isSuperAdminHost(rawHost)) return null;
   const host = rawHost.split(":")[0].toLowerCase();
-  const noStaging = host.startsWith("staging.") ? host.slice("staging.".length) : host;
-  if (noStaging === PRODUCT_DOMAIN) return FALLBACK_SLUG;
-  const suffix = "." + PRODUCT_DOMAIN;
-  if (noStaging.endsWith(suffix)) return noStaging.slice(0, -suffix.length);
-  return null;
+  // staging ゾーン（<slug>.staging.lease-order... / staging.lease-order...）を先に判定。
+  // prod ゾーン（.lease-order...）にも末尾一致するため、評価順が重要。
+  return slugForZone(host, STAGING_DOMAIN) ?? slugForZone(host, PRODUCT_DOMAIN);
 }
 
 async function resolveSlug(): Promise<string> {

@@ -137,7 +137,8 @@ export async function createTenant(input: CreateTenantInput): Promise<CreateTena
       error: "slug は英小文字・数字・ハイフンのみ（先頭末尾は英数字、2〜32文字）",
     };
   }
-  if (slug.startsWith("super-admin")) {
+  // 予約 slug: super-admin（運営コンソール）/ staging（staging ゾーン apex）と衝突するため。
+  if (slug === "super-admin" || slug === "staging" || slug.startsWith("super-admin")) {
     return { ok: false, error: "この slug は予約済みです" };
   }
 
