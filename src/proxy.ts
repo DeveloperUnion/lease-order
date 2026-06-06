@@ -12,7 +12,6 @@ const PUBLIC_ADMIN_PATHS = ["/admin/login"];
 function isGuestBrowsable(pathname: string): boolean {
   if (pathname === "/" || pathname === "/search") return true;
   if (pathname.startsWith("/category/")) return true;
-  if (pathname === "/signup" || pathname.startsWith("/signup/")) return true;
   return false;
 }
 
@@ -82,8 +81,8 @@ async function customerProxy(request: NextRequest) {
   const payload = verifySessionToken(token);
 
   if (payload) {
-    // ログイン済みがログイン/会員登録画面に来たらカタログへ。
-    if (pathname === "/login" || pathname === "/signup") {
+    // ログイン済みがログイン画面に来たらカタログへ。
+    if (pathname === "/login") {
       return NextResponse.redirect(new URL("/", request.url));
     }
     return NextResponse.next({ request });

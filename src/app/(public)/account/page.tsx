@@ -1,6 +1,7 @@
 import { requireCustomer } from "@/lib/customer-auth";
 import ProfileForm from "./profile-form";
 import PasswordForm from "./password-form";
+import EmailSection from "./email-section";
 import LogoutButton from "./logout-button";
 
 export const dynamic = "force-dynamic";
@@ -46,11 +47,17 @@ export default async function AccountPage({
         <PasswordForm mustChange={showResetBanner} />
       </Section>
 
+      <Section label="通知メール">
+        <EmailSection
+          initialEmail={customer.contact_email ?? ""}
+          initialVerified={customer.email_verified}
+        />
+      </Section>
+
       <Section label="連絡先情報">
         <ProfileForm
           initialPhone={customer.phone ?? ""}
           initialDefaultAddress={customer.default_address ?? ""}
-          initialContactEmail={customer.contact_email ?? ""}
         />
       </Section>
 

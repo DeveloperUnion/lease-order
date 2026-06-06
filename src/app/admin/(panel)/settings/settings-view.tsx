@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { CustomerAccessMode } from "@/lib/tenant";
-import { setCustomerAccessMode, setCustomerSelfRegistration } from "./actions";
+import { setCustomerAccessMode } from "./actions";
 import { PageHeader, SectionRule } from "@/components/admin/ui";
 
 const MODE_OPTIONS: {
@@ -26,13 +26,10 @@ const MODE_OPTIONS: {
 
 export default function SettingsView({
   initialMode,
-  initialSelfRegistration,
 }: {
   initialMode: CustomerAccessMode;
-  initialSelfRegistration: boolean;
 }) {
   const [mode, setMode] = useState<CustomerAccessMode>(initialMode);
-  const [selfReg, setSelfReg] = useState(initialSelfRegistration);
   const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -49,21 +46,6 @@ export default function SettingsView({
       const res = await setCustomerAccessMode(next);
       if (!res.ok) {
         setMode(prev);
-        showToast(res.error);
-      } else {
-        showToast("保存しました");
-      }
-    });
-  };
-
-  const toggleSelfReg = () => {
-    if (isPending) return;
-    const next = !selfReg;
-    setSelfReg(next);
-    startTransition(async () => {
-      const res = await setCustomerSelfRegistration(next);
-      if (!res.ok) {
-        setSelfReg(!next);
         showToast(res.error);
       } else {
         showToast("保存しました");
@@ -117,37 +99,6 @@ export default function SettingsView({
               </button>
             );
           })}
-        </div>
-      </section>
-
-      <section>
-        <SectionRule label="会員登録" className="mb-3" />
-        <div className="flex items-start justify-between gap-4 px-4 py-3 border border-rule">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              顧客の会員登録を許可する
-            </p>
-            <p className="mt-1 text-xs text-muted leading-relaxed">
-              有効にすると、顧客が自分でメールアドレスを認証して会員登録できます。
-              無効の場合は管理画面から発行したアカウントのみ利用できます。
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={selfReg}
-            onClick={toggleSelfReg}
-            disabled={isPending}
-            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-              selfReg ? "bg-accent" : "bg-surface-muted border border-rule-strong"
-            } ${isPending ? "opacity-60" : ""}`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                selfReg ? "translate-x-6" : "translate-x-1"
-              }`}
-            />
-          </button>
         </div>
       </section>
 

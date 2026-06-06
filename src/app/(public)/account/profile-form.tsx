@@ -6,13 +6,11 @@ import { updateProfile } from "./actions";
 type Props = {
   initialPhone: string;
   initialDefaultAddress: string;
-  initialContactEmail: string;
 };
 
-export default function ProfileForm({ initialPhone, initialDefaultAddress, initialContactEmail }: Props) {
+export default function ProfileForm({ initialPhone, initialDefaultAddress }: Props) {
   const [phone, setPhone] = useState(initialPhone);
   const [defaultAddress, setDefaultAddress] = useState(initialDefaultAddress);
-  const [contactEmail, setContactEmail] = useState(initialContactEmail);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -22,7 +20,7 @@ export default function ProfileForm({ initialPhone, initialDefaultAddress, initi
     setErrorMessage(null);
     setSavedAt(null);
     startTransition(async () => {
-      const result = await updateProfile({ phone, defaultAddress, contactEmail });
+      const result = await updateProfile({ phone, defaultAddress });
       if (!result.ok) {
         setErrorMessage(result.error);
         return;
@@ -46,14 +44,6 @@ export default function ProfileForm({ initialPhone, initialDefaultAddress, initi
           type="text"
           value={defaultAddress}
           onChange={(e) => setDefaultAddress(e.target.value)}
-          className="input"
-        />
-      </Field>
-      <Field label="連絡先メールアドレス">
-        <input
-          type="email"
-          value={contactEmail}
-          onChange={(e) => setContactEmail(e.target.value)}
           className="input"
         />
       </Field>
