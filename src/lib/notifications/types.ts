@@ -41,13 +41,28 @@ export type NotificationTarget =
       address: string;
     };
 
+// 個別宛先型チャンネル（email / in-app）。受信者ごとに 1 通配信する。
 export interface Channel {
-  readonly name: "email" | "in-app" | "line";
+  readonly name: "email" | "in-app";
   supports(kind: NotificationKind): boolean;
   send(
     target: NotificationTarget,
     kind: NotificationKind,
     ctx: NotificationContext,
     tenantId: string
+  ): Promise<void>;
+}
+
+// 連携先の識別子。notification_channels.channel と一致する。
+export type TeamChannelName = "slack" | "chatwork" | "line_works";
+
+// 共有チャンネル型（Slack 等）。テナント単位で 1 回だけ投稿する。
+// 受信者ごとのループ（notifyAdmins）には入れず、notifyTeamChannels から呼ぶ。
+export interface TeamChannel {
+  readonly name: TeamChannelName;
+  send(
+    kind: NotificationKind,
+    ctx: NotificationContext,
+    config: Record<string, unknown>
   ): Promise<void>;
 }
