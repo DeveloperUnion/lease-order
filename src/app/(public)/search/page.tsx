@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getAllMaterials, getCategories } from "@/lib/data";
-import { requireCustomer } from "@/lib/customer-auth";
+import { gateCatalogAccess } from "@/lib/customer-auth";
 import { getTenant } from "@/lib/tenant";
 import SearchView from "./search-view";
 
@@ -11,7 +11,7 @@ export default async function SearchPage({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  await requireCustomer();
+  await gateCatalogAccess();
   const { q } = await searchParams;
   const query = q ?? "";
 

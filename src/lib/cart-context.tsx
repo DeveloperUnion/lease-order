@@ -13,6 +13,7 @@ import { CartItem, Material, SpecSelectionLabel } from "./types";
 import { buildCartLineId } from "./spec-resolver";
 import {
   ensureActiveDraft,
+  claimGuestDrafts,
   getDraft,
   createDraft,
   updateDraftItems,
@@ -79,6 +80,10 @@ export function CartProvider({ children, tenantId, customerId }: CartProviderPro
     loadedRef.current = false;
     (async () => {
       try {
+        // ログイン直後はゲスト時に組んだカートを customer に引き継ぐ。
+        if (customerId) {
+          await claimGuestDrafts(tenantId, customerId).catch(() => {});
+        }
         const draft = await ensureActiveDraft(tenantId, customerId);
         if (cancelled) return;
         setActiveDraftId(draft.id);

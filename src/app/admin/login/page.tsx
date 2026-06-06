@@ -6,7 +6,7 @@ type SearchParams = Promise<{ error?: string; next?: string }>;
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_allowed: "このメールアドレスは管理画面のアクセス権がありません。",
-  invalid_code: "ログインリンクが無効か期限切れです。再度メールを送信してください。",
+  invalid_credentials: "メールアドレスまたはパスワードが正しくありません。",
   tenant_mismatch:
     "このアカウントは別テナントの管理者として登録されています。所属テナントの URL からアクセスしてください。",
 };
@@ -28,9 +28,9 @@ export default async function LoginPage({
               管理コンソール
             </h1>
             <p className="text-sm text-muted mt-2 leading-relaxed">
-              登録済みのメールアドレス宛に
+              登録済みのメールアドレスと
               <br className="sm:hidden" />
-              ログインリンクを送信します。
+              パスワードでサインインしてください。
             </p>
           </header>
 

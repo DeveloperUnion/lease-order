@@ -158,9 +158,9 @@ export default function HeaderClient({
   const { totalItems } = useCart();
   const pathname = usePathname();
   const isAdmin = pathname.startsWith("/admin");
-  const isLogin = pathname === "/login";
+  const isAuthPage = pathname === "/login" || pathname.startsWith("/signup");
 
-  if (isLogin) {
+  if (isAuthPage) {
     return null;
   }
 
@@ -207,32 +207,38 @@ export default function HeaderClient({
 
           <SearchBar className="flex-1 max-w-lg md:flex-none md:w-[28rem]" />
 
-          {customer && (
-            <div className="flex items-center gap-2 flex-shrink-0 md:absolute md:right-0 md:top-1/2 md:-translate-y-1/2">
-              {notificationBell}
-              <Link
-                href="/cart"
-                aria-label="カート"
-                className="relative inline-flex items-center justify-center h-10 w-10 rounded-lg border border-border hover:border-border-strong hover:bg-surface-muted transition-colors"
+          <div className="flex items-center gap-2 flex-shrink-0 md:absolute md:right-0 md:top-1/2 md:-translate-y-1/2">
+            {customer && notificationBell}
+            <Link
+              href="/cart"
+              aria-label="カート"
+              className="relative inline-flex items-center justify-center h-10 w-10 rounded-lg border border-border hover:border-border-strong hover:bg-surface-muted transition-colors"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5 text-foreground"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 text-foreground"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                </svg>
-                {totalItems > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-bold bg-accent text-accent-ink">
-                    {totalItems}
-                  </span>
-                )}
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+              {totalItems > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-bold bg-accent text-accent-ink">
+                  {totalItems}
+                </span>
+              )}
+            </Link>
+            {!customer && (
+              <Link
+                href="/login"
+                className="inline-flex items-center h-10 px-3 rounded-lg border border-border text-sm font-medium text-foreground hover:border-border-strong hover:bg-surface-muted transition-colors whitespace-nowrap"
+              >
+                ログイン
               </Link>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </header>
