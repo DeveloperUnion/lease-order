@@ -64,25 +64,7 @@ export async function resolveAsAdmin(): Promise<RecipientIdentity> {
       };
     }
   }
-  // DISABLE_AUTH=1 のときはゲスト admin（テナント最古の admin_users）にフォールバック
-  if (process.env.DISABLE_AUTH === "1") {
-    const tenantId = await getTenantId();
-    const { data } = await supabaseAdmin
-      .from("admin_users")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (data?.id) {
-      return {
-        audience: "admin",
-        recipientId: data.id,
-        tenantId,
-        subject: `admin:${data.id}`,
-      };
-    }
-  }
+  // 管理者は常時認証必須。Auth セッションが無ければ anonymous（tenant スコープ）。
   const tenantId = await getTenantId();
   return { audience: "anonymous", tenantId, subject: `tenant:${tenantId}` };
 }

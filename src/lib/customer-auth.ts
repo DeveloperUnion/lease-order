@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { supabaseAdmin } from "./supabase-admin";
-import { getTenantId } from "./tenant";
+import { getTenant, getTenantId } from "./tenant";
 
 const COOKIE_NAME = "lo_customer";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -63,40 +63,11 @@ export function verifySessionToken(token: string | undefined | null): Payload | 
   }
 }
 
-// フィードバック収集モード (DISABLE_AUTH=1) のとき、未ログイン訪問者には
-// このテナントの最古 active customer を「ゲスト identity」として割り当てる。
-// 既存ログインセッションがある場合はこちらに入らず従来分岐を通る。
-async function resolveGuestCustomer(): Promise<CustomerSession | null> {
-  const tenantId = await getTenantId();
-  const { data } = await supabaseAdmin
-    .from("customers")
-    .select("id, tenant_id, company_id, name, default_address, phone, contact_email, must_change_password")
-    .eq("tenant_id", tenantId)
-    .eq("is_active", true)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (!data) return null;
-  return {
-    id: data.id,
-    tenant_id: data.tenant_id,
-    company_id: data.company_id,
-    name: data.name,
-    default_address: data.default_address,
-    phone: data.phone,
-    contact_email: data.contact_email,
-    must_change_password: data.must_change_password,
-  };
-}
-
 export const getCurrentCustomer = cache(async (): Promise<CustomerSession | null> => {
   const store = await cookies();
   const token = store.get(COOKIE_NAME)?.value;
   const payload = verifySessionToken(token);
-  if (!payload) {
-    if (process.env.DISABLE_AUTH === "1") return resolveGuestCustomer();
-    return null;
-  }
+  if (!payload) return null;
 
   const tenantId = await getTenantId();
   if (payload.tid !== tenantId) return null;
@@ -130,6 +101,22 @@ export async function requireCustomer(
     redirect("/account?reset=1");
   }
   return customer;
+}
+
+// カタログ閲覧（入口）用のゲート。
+//   - ログイン済み → 通常の customer を返す（must_change_password なら /account?reset=1）。
+//   - 未ログイン   → tenant.customer_access_mode が 'login' なら /login へ。
+//                    'guest_browse' なら null を返してゲスト閲覧を許可する。
+// 発注・履歴・rentals は引き続き requireCustomer でログイン必須を維持する。
+export async function gateCatalogAccess(): Promise<CustomerSession | null> {
+  const customer = await getCurrentCustomer();
+  if (customer) {
+    if (customer.must_change_password) redirect("/account?reset=1");
+    return customer;
+  }
+  const tenant = await getTenant();
+  if (tenant.customer_access_mode === "login") redirect("/login");
+  return null;
 }
 
 export async function setCustomerSession(customerId: string, tenantId: string): Promise<void> {

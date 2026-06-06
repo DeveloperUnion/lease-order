@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getTenantId } from "@/lib/tenant";
+import { nextCompanyId } from "@/lib/customer-id";
 
 export type CreateCustomerInput = {
   name: string;
@@ -28,25 +29,6 @@ function generateTempPassword(length = 12): string {
   return out;
 }
 
-async function nextCompanyId(tenantId: string): Promise<string> {
-  const year = new Date().getFullYear();
-  const prefix = `C-${year}-`;
-  const { data, error } = await supabaseAdmin
-    .from("customers")
-    .select("company_id")
-    .eq("tenant_id", tenantId)
-    .like("company_id", `${prefix}%`);
-  if (error) throw error;
-  const maxSeq = (data ?? []).reduce((m, row) => {
-    const match = /^C-\d{4}-(\d+)$/.exec((row as { company_id: string }).company_id);
-    if (!match) return m;
-    const n = Number(match[1]);
-    return Number.isFinite(n) && n > m ? n : m;
-  }, 0);
-  const seq = String(maxSeq + 1).padStart(3, "0");
-  return `${prefix}${seq}`;
-}
-
 export async function createCustomer(input: CreateCustomerInput): Promise<CreateCustomerResult> {
   const name = input.name.trim();
   if (!name) return { ok: false, error: "会社名は必須です" };
@@ -66,6 +48,9 @@ export async function createCustomer(input: CreateCustomerInput): Promise<Create
       phone: input.phone?.trim() || null,
       default_address: input.defaultAddress?.trim() || null,
       contact_email: input.contactEmail?.trim() || null,
+      // admin 発行アカウントは検証不要・会員登録由来でない。
+      email_verified: true,
+      self_registered: false,
     })
     .select("id")
     .single();

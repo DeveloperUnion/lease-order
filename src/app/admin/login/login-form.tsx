@@ -6,73 +6,29 @@ import { Button, FormField, TextInput } from "@/components/admin/ui";
 
 export default function LoginForm({ next }: { next?: string }) {
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
-    "idle"
-  );
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState<"idle" | "signing" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!email) return;
+    if (!email || !password) return;
 
-    setStatus("sending");
+    setStatus("signing");
     setErrorMessage(null);
 
     const supabase = createSupabaseBrowserClient();
-    const callbackUrl = new URL("/admin/auth/callback", window.location.origin);
-    if (next) callbackUrl.searchParams.set("next", next);
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: callbackUrl.toString(),
-        shouldCreateUser: true,
-      },
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       setStatus("error");
-      setErrorMessage(error.message);
+      setErrorMessage("メールアドレスまたはパスワードが正しくありません");
       return;
     }
 
-    setStatus("sent");
-  }
-
-  if (status === "sent") {
-    return (
-      <div className="flex flex-col items-center text-center py-3">
-        <div className="flex items-center justify-center w-10 h-10 bg-[var(--color-status-completed-bg)] text-[var(--color-status-completed-fg)] mb-4">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
-        </div>
-        <p className="font-[family-name:var(--font-display)] text-base font-medium text-foreground mb-1">
-          メールを送信しました
-        </p>
-        <p className="text-sm text-muted leading-relaxed">
-          <span className="font-[family-name:var(--font-mono)] text-foreground">
-            {email}
-          </span>
-          <br />
-          宛のログインリンクを開いてください。
-        </p>
-        <p className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider text-subtle mt-3">
-          届かない場合は迷惑メールフォルダもご確認ください
-        </p>
-      </div>
-    );
+    // セッション cookie はブラウザクライアントが保存済み。フルナビゲーションで
+    // proxy を通し、テナント所属チェック・初回パスワード変更の誘導に乗せる。
+    window.location.assign(next || "/admin");
   }
 
   return (
@@ -91,6 +47,20 @@ export default function LoginForm({ next }: { next?: string }) {
         />
       </FormField>
 
+      <FormField label="パスワード" htmlFor="password">
+        <TextInput
+          id="password"
+          name="password"
+          type="password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+          placeholder="••••••••"
+          className="h-11"
+        />
+      </FormField>
+
       {errorMessage && (
         <p className="text-sm text-[var(--color-status-rejected-fg)]">
           {errorMessage}
@@ -100,10 +70,10 @@ export default function LoginForm({ next }: { next?: string }) {
       <Button
         type="submit"
         size="lg"
-        disabled={status === "sending" || !email}
+        disabled={status === "signing" || !email || !password}
         className="w-full"
       >
-        {status === "sending" ? "送信中…" : "ログインリンクを送信"}
+        {status === "signing" ? "サインイン中…" : "サインイン"}
       </Button>
     </form>
   );

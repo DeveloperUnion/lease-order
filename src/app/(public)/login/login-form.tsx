@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { login } from "./actions";
 
 export default function LoginForm({ next }: { next?: string }) {
-  const [companyId, setCompanyId] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -15,7 +15,7 @@ export default function LoginForm({ next }: { next?: string }) {
     e.preventDefault();
     setErrorMessage(null);
     startTransition(async () => {
-      const result = await login({ companyId, password, next });
+      const result = await login({ identifier, password, next });
       if (!result.ok) {
         setErrorMessage(result.error);
         return;
@@ -28,18 +28,18 @@ export default function LoginForm({ next }: { next?: string }) {
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       <div>
-        <label htmlFor="companyId" className="block text-sm font-medium text-foreground mb-1.5">
-          会社 ID
+        <label htmlFor="identifier" className="block text-sm font-medium text-foreground mb-1.5">
+          会社 ID またはメールアドレス
         </label>
         <input
-          id="companyId"
-          name="companyId"
+          id="identifier"
+          name="identifier"
           type="text"
           required
-          value={companyId}
-          onChange={(e) => setCompanyId(e.target.value)}
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
           autoComplete="username"
-          placeholder="C-2026-001"
+          placeholder="C-2026-001 / you@example.com"
           className="w-full h-11 px-3.5 bg-surface border border-border rounded-lg text-sm text-foreground placeholder:text-subtle focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors"
         />
       </div>
@@ -68,7 +68,7 @@ export default function LoginForm({ next }: { next?: string }) {
 
       <button
         type="submit"
-        disabled={isPending || !companyId || !password}
+        disabled={isPending || !identifier || !password}
         className="w-full h-11 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-[background,transform] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.99] inline-flex items-center justify-center gap-2"
       >
         {isPending ? "ログイン中…" : "ログイン"}

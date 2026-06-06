@@ -7,6 +7,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 import { revalidateCatalog } from "@/lib/catalog-cache";
+import { generateTempPassword } from "@/lib/temp-password";
 
 function slugify(input: string): string {
   const base = input
@@ -912,16 +913,77 @@ export async function reorderMaterialImages(
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export async function addAdminUser(formData: FormData) {
+// admin は Supabase Auth ユーザーとしてパスワードを持つ。allowlist (admin_users)
+// への追加時に auth.users を作成し、その id を admin_users.auth_user_id に保持する。
+// 既に auth.users に存在するメール（マジックリンク時代の残存など）はパスワードを
+// 更新して再利用する。
+async function findAuthUserIdByEmail(email: string): Promise<string | null> {
+  const target = email.toLowerCase();
+  for (let page = 1; page <= 20; page++) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    });
+    if (error || !data?.users?.length) return null;
+    const found = data.users.find((u) => u.email?.toLowerCase() === target);
+    if (found) return found.id;
+    if (data.users.length < 200) return null;
+  }
+  return null;
+}
+
+async function ensureAuthUser(email: string, password: string): Promise<string> {
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (!error && data?.user) return data.user.id;
+
+  const existingId = await findAuthUserIdByEmail(email);
+  if (existingId) {
+    const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(
+      existingId,
+      { password, email_confirm: true }
+    );
+    if (updErr) {
+      throw new Error(`認証ユーザーの更新に失敗しました: ${updErr.message}`);
+    }
+    return existingId;
+  }
+  throw new Error(
+    `認証ユーザーの作成に失敗しました: ${error?.message ?? "unknown"}`
+  );
+}
+
+export async function addAdminUser(
+  formData: FormData
+): Promise<{ email: string; tempPassword: string }> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   if (!EMAIL_RE.test(email)) {
     throw new Error("有効なメールアドレスを入力してください");
   }
   const tenantId = await getTenantId();
-  const supabase = await getSupabaseTenant();
-  const { error } = await supabase
+
+  // admin_users.email は global unique。auth ユーザーを無駄に作る前に弾く。
+  const { data: existing } = await supabaseAdmin
     .from("admin_users")
-    .insert({ tenant_id: tenantId, email });
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+  if (existing) {
+    throw new Error("このメールアドレスは既に登録されています");
+  }
+
+  const tempPassword = generateTempPassword();
+  const authUserId = await ensureAuthUser(email, tempPassword);
+
+  const { error } = await supabaseAdmin.from("admin_users").insert({
+    tenant_id: tenantId,
+    email,
+    auth_user_id: authUserId,
+    must_change_password: true,
+  });
   if (error) {
     if (error.code === "23505") {
       throw new Error("このメールアドレスは既に登録されています");
@@ -929,6 +991,79 @@ export async function addAdminUser(formData: FormData) {
     throw new Error(`登録に失敗しました: ${error.message}`);
   }
   revalidatePath("/admin/users");
+  return { email, tempPassword };
+}
+
+export async function resetAdminPassword(
+  id: string
+): Promise<{ email: string; tempPassword: string }> {
+  const tenantId = await getTenantId();
+  const { data: target, error: targetErr } = await supabaseAdmin
+    .from("admin_users")
+    .select("email, tenant_id, auth_user_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (targetErr) throw targetErr;
+  if (!target || target.tenant_id !== tenantId) {
+    throw new Error("対象ユーザーが見つかりません");
+  }
+
+  const tempPassword = generateTempPassword();
+  let authUserId = target.auth_user_id as string | null;
+  if (authUserId) {
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(authUserId, {
+      password: tempPassword,
+      email_confirm: true,
+    });
+    if (error) {
+      throw new Error(`パスワードのリセットに失敗しました: ${error.message}`);
+    }
+  } else {
+    // マジックリンク時代の行は auth_user_id 未設定。email から解決し直す。
+    authUserId = await ensureAuthUser(target.email, tempPassword);
+    await supabaseAdmin
+      .from("admin_users")
+      .update({ auth_user_id: authUserId })
+      .eq("id", id)
+      .eq("tenant_id", tenantId);
+  }
+
+  await supabaseAdmin
+    .from("admin_users")
+    .update({ must_change_password: true })
+    .eq("id", id)
+    .eq("tenant_id", tenantId);
+  revalidatePath("/admin/users");
+  return { email: target.email, tempPassword };
+}
+
+// ログイン中の管理者自身がパスワードを変更する（初回パスワード変更の強制フロー含む）。
+// Supabase Auth のパスワードを更新し、admin_users.must_change_password を下ろす。
+export async function changeAdminPassword(input: {
+  newPassword: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!input.newPassword || input.newPassword.length < 8) {
+    return { ok: false, error: "新しいパスワードは 8 文字以上で入力してください" };
+  }
+  const ssr = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await ssr.auth.getUser();
+  if (!user?.email) {
+    return { ok: false, error: "認証情報を取得できませんでした" };
+  }
+  const { error } = await ssr.auth.updateUser({ password: input.newPassword });
+  if (error) {
+    return { ok: false, error: "パスワードの更新に失敗しました" };
+  }
+  const tenantId = await getTenantId();
+  await supabaseAdmin
+    .from("admin_users")
+    .update({ must_change_password: false })
+    .eq("tenant_id", tenantId)
+    .eq("email", user.email.toLowerCase());
+  revalidatePath("/admin");
+  return { ok: true };
 }
 
 export async function removeAdminUser(id: string) {
@@ -939,10 +1074,9 @@ export async function removeAdminUser(id: string) {
   } = await ssr.auth.getUser();
   if (!user?.email) throw new Error("認証情報を取得できませんでした");
 
-  const supabase = await getSupabaseTenant();
-  const { data: target, error: targetErr } = await supabase
+  const { data: target, error: targetErr } = await supabaseAdmin
     .from("admin_users")
-    .select("email, tenant_id")
+    .select("email, tenant_id, auth_user_id")
     .eq("id", id)
     .maybeSingle();
   if (targetErr) throw targetErr;
@@ -953,12 +1087,18 @@ export async function removeAdminUser(id: string) {
     throw new Error("自分自身は削除できません");
   }
 
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from("admin_users")
     .delete()
     .eq("id", id)
     .eq("tenant_id", tenantId);
   if (error) throw new Error(`削除に失敗しました: ${error.message}`);
+  // allowlist から外したら Auth ユーザーも削除し、同じメールの再登録をクリーンにする。
+  if (target.auth_user_id) {
+    await supabaseAdmin.auth.admin
+      .deleteUser(target.auth_user_id as string)
+      .catch(() => {});
+  }
   revalidatePath("/admin/users");
 }
 
