@@ -72,7 +72,10 @@ export default function Sidebar({
     },
     {
       label: "設定",
-      items: [{ href: "/admin/users", label: "管理ユーザー" }],
+      items: [
+        { href: "/admin/users", label: "管理ユーザー" },
+        { href: "/admin/notifications-settings", label: "通知連携" },
+      ],
     },
   ];
 

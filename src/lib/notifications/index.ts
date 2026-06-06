@@ -5,6 +5,7 @@ import { getSupabaseTenant } from "@/lib/supabase-tenant";
 import { getTenantId } from "@/lib/tenant";
 import { emailChannel } from "./channels/email";
 import { inAppChannel } from "./channels/in-app";
+import { getEnabledTeamChannels } from "./channels/team-config";
 import type {
   Channel,
   NotificationContext,
@@ -15,6 +16,27 @@ import type {
 export type { NotificationKind, NotificationContext } from "./types";
 
 const ACTIVE_CHANNELS: Channel[] = [emailChannel, inAppChannel];
+
+// 共有チャンネル（Slack 等）へ流す管理者向けインバウンド通知。
+// 承認・出荷など管理者自身の操作（アウトバウンド）は対象外。広げるときはここに追加。
+const TEAM_CHANNEL_KINDS: ReadonlySet<NotificationKind> = new Set([
+  "admin_new_order",
+  "return_requested",
+  "extension_requested",
+]);
+
+// テナントの有効な共有チャンネルへ「1 回だけ」投稿する。
+// notifyAdmins は admin を 1 人ずつループするため、共有チャンネルをそこに混ぜると
+// 人数分の重複投稿になる。よってループの外でテナント単位に 1 回呼ぶ。
+async function notifyTeamChannels(
+  tenantId: string,
+  kind: NotificationKind,
+  ctx: NotificationContext
+): Promise<void> {
+  if (!TEAM_CHANNEL_KINDS.has(kind)) return;
+  const channels = await getEnabledTeamChannels(tenantId);
+  await Promise.all(channels.map((c) => c.channel.send(kind, ctx, c.config)));
+}
 
 async function fanout(
   target: NotificationTarget,
@@ -128,6 +150,8 @@ export function notifyAdmins(
           )
         )
       );
+      // 共有チャンネル（Slack 等）へはテナント単位で 1 回だけ投稿する。
+      await notifyTeamChannels(tenantId, kind, ctx);
     } catch (e) {
       console.error(`notifyAdmins failed (${kind}, ${tenantId})`, e);
     }

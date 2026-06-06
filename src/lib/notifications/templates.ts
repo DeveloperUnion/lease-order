@@ -5,6 +5,16 @@ export type RenderedTemplate = {
   body: string;
 };
 
+// Slack / Chatwork など共有チャンネル向けの 1 本のテキスト。
+// メール用の subject/body をそのまま流用し、見出しを太字にして 1 メッセージに組む。
+export function renderChatMessage(
+  kind: NotificationKind,
+  ctx: NotificationContext
+): string {
+  const { subject, body } = renderTemplate(kind, ctx);
+  return `*${subject}*\n\n${body}`;
+}
+
 export function renderTemplate(
   kind: NotificationKind,
   ctx: NotificationContext
