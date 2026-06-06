@@ -7,6 +7,9 @@ import {
   updateTenant,
   addTenantAdmin,
   removeTenantAdmin,
+  convertTenantToActive,
+  extendTrial,
+  suspendTenant,
   type CreateTenantInput,
   type UpdateTenantInput,
 } from "@/lib/super-admin-data";
@@ -42,5 +45,31 @@ export async function removeTenantAdminAction(tenantId: string, adminUserId: str
   await requireSuperAdmin();
   const result = await removeTenantAdmin(adminUserId);
   if (result.ok) revalidatePath(`/super-admin/tenants/${tenantId}`);
+  return result;
+}
+
+function revalidateTenant(id: string) {
+  revalidatePath("/super-admin");
+  revalidatePath(`/super-admin/tenants/${id}`);
+}
+
+export async function convertTenantToActiveAction(id: string) {
+  await requireSuperAdmin();
+  const result = await convertTenantToActive(id);
+  if (result.ok) revalidateTenant(id);
+  return result;
+}
+
+export async function extendTrialAction(id: string, days: number) {
+  await requireSuperAdmin();
+  const result = await extendTrial(id, days);
+  if (result.ok) revalidateTenant(id);
+  return result;
+}
+
+export async function suspendTenantAction(id: string) {
+  await requireSuperAdmin();
+  const result = await suspendTenant(id);
+  if (result.ok) revalidateTenant(id);
   return result;
 }

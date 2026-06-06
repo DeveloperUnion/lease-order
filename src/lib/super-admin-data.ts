@@ -1,16 +1,31 @@
 import "server-only";
 import { supabaseAdmin } from "./supabase-admin";
 import type { BillingRule } from "./pricing";
+import {
+  tenantStatusDisplay,
+  type TenantStatus,
+  type TenantStatusDisplay,
+} from "./tenant-status";
 
 // 運営者(super-admin)コンソール用の cross-tenant データアクセス。
 // すべて service_role(supabaseAdmin) 経由。tenant JWT / RLS は通さない。
 // 呼び出し元(Server Action)は requireSuperAdmin() で権限を担保すること。
+
+export type { TenantStatus } from "./tenant-status";
+
+// トライアルの付与単位（固定30日）。
+export const TRIAL_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type TenantListRow = {
   id: string;
   slug: string;
   name: string;
   billing_rule: BillingRule;
+  status: TenantStatus;
+  trial_ends_at: string | null;
+  // 残り日数等の時刻依存表示はデータ層（リクエスト時刻）で算出して渡す。
+  statusDisplay: TenantStatusDisplay;
   created_at: string;
   adminCount: number;
   customerCount: number;
@@ -28,6 +43,9 @@ export type TenantDetail = {
   slug: string;
   name: string;
   billing_rule: BillingRule;
+  status: TenantStatus;
+  trial_ends_at: string | null;
+  statusDisplay: TenantStatusDisplay;
   created_at: string;
   admins: TenantAdminRow[];
   customerCount: number;
@@ -52,10 +70,11 @@ async function countRows(
 export async function listTenants(): Promise<TenantListRow[]> {
   const { data, error } = await supabaseAdmin
     .from("tenants")
-    .select("id, slug, name, billing_rule, created_at")
+    .select("id, slug, name, billing_rule, status, trial_ends_at, created_at")
     .order("created_at", { ascending: true });
   if (error) throw error;
   const rows = data ?? [];
+  const nowMs = Date.now();
 
   return Promise.all(
     rows.map(async (t) => {
@@ -64,11 +83,16 @@ export async function listTenants(): Promise<TenantListRow[]> {
         countRows("customers", t.id),
         countRows("orders", t.id),
       ]);
+      const status = (t.status as TenantStatus | null) ?? "active";
+      const trial_ends_at = (t.trial_ends_at as string | null) ?? null;
       return {
         id: t.id,
         slug: t.slug,
         name: t.name,
         billing_rule: (t.billing_rule ?? { type: "monthly" }) as BillingRule,
+        status,
+        trial_ends_at,
+        statusDisplay: tenantStatusDisplay(status, trial_ends_at, nowMs),
         created_at: t.created_at,
         adminCount,
         customerCount,
@@ -81,7 +105,7 @@ export async function listTenants(): Promise<TenantListRow[]> {
 export async function getTenantDetail(id: string): Promise<TenantDetail | null> {
   const { data: t, error } = await supabaseAdmin
     .from("tenants")
-    .select("id, slug, name, billing_rule, created_at")
+    .select("id, slug, name, billing_rule, status, trial_ends_at, created_at")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -92,12 +116,17 @@ export async function getTenantDetail(id: string): Promise<TenantDetail | null> 
     countRows("customers", t.id),
     countRows("orders", t.id),
   ]);
+  const status = (t.status as TenantStatus | null) ?? "active";
+  const trial_ends_at = (t.trial_ends_at as string | null) ?? null;
 
   return {
     id: t.id,
     slug: t.slug,
     name: t.name,
     billing_rule: (t.billing_rule ?? { type: "monthly" }) as BillingRule,
+    status,
+    trial_ends_at,
+    statusDisplay: tenantStatusDisplay(status, trial_ends_at, Date.now()),
     created_at: t.created_at,
     admins,
     customerCount,
@@ -121,6 +150,8 @@ export type CreateTenantInput = {
   name: string;
   slug: string;
   billingRule?: BillingRule;
+  // true なら status='trial' + trial_ends_at = 今 + TRIAL_DAYS で作成。
+  asTrial?: boolean;
 };
 
 export type CreateTenantResult =
@@ -143,9 +174,15 @@ export async function createTenant(input: CreateTenantInput): Promise<CreateTena
   }
 
   const billing_rule = input.billingRule ?? { type: "monthly" };
+  const trial = input.asTrial
+    ? {
+        status: "trial" as const,
+        trial_ends_at: new Date(Date.now() + TRIAL_DAYS * DAY_MS).toISOString(),
+      }
+    : {};
   const { data, error } = await supabaseAdmin
     .from("tenants")
-    .insert({ name, slug, billing_rule })
+    .insert({ name, slug, billing_rule, ...trial })
     .select("id")
     .single();
 
@@ -181,6 +218,63 @@ export async function updateTenant(
   if (error) {
     console.error("updateTenant error", error);
     return { ok: false, error: "更新に失敗しました" };
+  }
+  return { ok: true };
+}
+
+type TenantMutationResult = { ok: true } | { ok: false; error: string };
+
+// 本契約に切り替え：status='active' / trial_ends_at=null（以後ロックされない）。
+export async function convertTenantToActive(id: string): Promise<TenantMutationResult> {
+  const { error } = await supabaseAdmin
+    .from("tenants")
+    .update({ status: "active", trial_ends_at: null })
+    .eq("id", id);
+  if (error) {
+    console.error("convertTenantToActive error", error);
+    return { ok: false, error: "本契約への切り替えに失敗しました" };
+  }
+  return { ok: true };
+}
+
+// トライアル延長：任意日数を加算。期限切れ後でも「今」を基点に延長し、status を
+// trial に戻す（停止中からの再開にも使える）。
+export async function extendTrial(id: string, days: number): Promise<TenantMutationResult> {
+  if (!Number.isFinite(days) || days <= 0) {
+    return { ok: false, error: "延長日数は1以上で指定してください" };
+  }
+  const { data: t, error: readErr } = await supabaseAdmin
+    .from("tenants")
+    .select("trial_ends_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (readErr || !t) {
+    return { ok: false, error: "テナントが見つかりません" };
+  }
+  const now = Date.now();
+  const current = t.trial_ends_at ? new Date(t.trial_ends_at as string).getTime() : now;
+  const base = Math.max(now, current);
+  const newEnd = new Date(base + days * DAY_MS).toISOString();
+  const { error } = await supabaseAdmin
+    .from("tenants")
+    .update({ status: "trial", trial_ends_at: newEnd })
+    .eq("id", id);
+  if (error) {
+    console.error("extendTrial error", error);
+    return { ok: false, error: "トライアルの延長に失敗しました" };
+  }
+  return { ok: true };
+}
+
+// 即時停止：status='suspended'（trial_ends_at に関係なく完全ロック）。
+export async function suspendTenant(id: string): Promise<TenantMutationResult> {
+  const { error } = await supabaseAdmin
+    .from("tenants")
+    .update({ status: "suspended" })
+    .eq("id", id);
+  if (error) {
+    console.error("suspendTenant error", error);
+    return { ok: false, error: "停止に失敗しました" };
   }
   return { ok: true };
 }

@@ -15,7 +15,11 @@ import {
   updateTenantAction,
   addTenantAdminAction,
   removeTenantAdminAction,
+  convertTenantToActiveAction,
+  extendTrialAction,
+  suspendTenantAction,
 } from "../../actions";
+import TrialBadge from "../../trial-badge";
 
 const PRODUCT_DOMAIN = "lease-order.kensetsu-tech.com";
 
@@ -25,6 +29,7 @@ export default function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
     tenant.billing_rule.type === "daily" ? "daily" : "monthly"
   );
   const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [extendDays, setExtendDays] = useState("30");
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -32,6 +37,40 @@ export default function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 1800);
+  };
+
+  const handleExtend = () => {
+    const days = Number(extendDays);
+    if (!Number.isFinite(days) || days <= 0) {
+      setError("延長日数は1以上で指定してください");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const result = await extendTrialAction(tenant.id, days);
+      if (result.ok) showToast(`${days}日延長しました`);
+      else setError(result.error);
+    });
+  };
+
+  const handleConvert = () => {
+    if (!confirm(`${tenant.name} を本契約に切り替えますか？（以後ロックされません）`)) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await convertTenantToActiveAction(tenant.id);
+      if (result.ok) showToast("本契約に切り替えました");
+      else setError(result.error);
+    });
+  };
+
+  const handleSuspend = () => {
+    if (!confirm(`${tenant.name} を今すぐ停止しますか？（即座に完全ロックされます）`)) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await suspendTenantAction(tenant.id);
+      if (result.ok) showToast("停止しました");
+      else setError(result.error);
+    });
   };
 
   const handleSave = () => {
@@ -78,6 +117,73 @@ export default function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
           tenant.created_at
         ).toLocaleDateString("ja-JP")}`}
       />
+
+      {/* 契約状態（トライアル / 本契約 / 停止） */}
+      <section className="mb-10">
+        <SectionRule label="契約状態" className="mb-4" />
+        <div className="border border-rule bg-surface px-4 py-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <TrialBadge display={tenant.statusDisplay} />
+            {tenant.status === "trial" && tenant.trial_ends_at && (
+              <span className="text-sm text-muted">
+                期限{" "}
+                <span className="font-[family-name:var(--font-mono)] text-foreground">
+                  {new Date(tenant.trial_ends_at).toLocaleString("ja-JP", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-end gap-2 flex-wrap mt-4">
+            <FormField label="延長日数" htmlFor="extend" className="w-28">
+              <TextInput
+                id="extend"
+                type="number"
+                min={1}
+                value={extendDays}
+                onChange={(e) => setExtendDays(e.target.value)}
+                className="font-[family-name:var(--font-mono)]"
+              />
+            </FormField>
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              onClick={handleExtend}
+              disabled={isPending}
+            >
+              延長
+            </Button>
+            <Button
+              type="button"
+              size="md"
+              onClick={handleConvert}
+              disabled={isPending || tenant.status === "active"}
+            >
+              本契約に切り替え
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="md"
+              onClick={handleSuspend}
+              disabled={isPending || tenant.status === "suspended"}
+            >
+              停止
+            </Button>
+          </div>
+          <p className="text-xs text-subtle mt-3 leading-relaxed">
+            延長: 期限（切れていれば現在）から指定日数を加算しトライアルを継続します。
+            本契約: 以後ロックされません。停止: 即座に完全ロックします。
+          </p>
+        </div>
+      </section>
 
       {/* 基本情報 */}
       <section className="mb-10">

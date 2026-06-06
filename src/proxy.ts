@@ -5,6 +5,7 @@ import {
   extractSlugFromHost,
   isSuperAdminHost,
   getCustomerAccessModeByHost,
+  isTenantLockedByHost,
 } from "@/lib/tenant";
 import { isAdminAllowedForTenant } from "@/lib/admin-access";
 import { isSuperAdmin } from "@/lib/super-admin-access";
@@ -176,9 +177,18 @@ async function customerProxy(request: NextRequest) {
 }
 
 export async function proxy(request: NextRequest) {
-  // 運営者コンソールは専用ホストで完全分離。最初に分岐させる。
-  if (isSuperAdminHost(request.headers.get("host") ?? "")) {
+  const host = request.headers.get("host") ?? "";
+  // 運営者コンソールは専用ホストで完全分離。最初に分岐させる（ロック対象外）。
+  if (isSuperAdminHost(host)) {
     return superAdminProxy(request);
+  }
+  // トライアル期限切れ / 手動停止のテナントは admin・顧客とも完全ロック。
+  // ロック画面（/trial-expired）自身は通し、それ以外は全パスを rewrite で覆う。
+  const { pathname } = request.nextUrl;
+  if (pathname !== "/trial-expired" && (await isTenantLockedByHost(host))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/trial-expired";
+    return NextResponse.rewrite(url);
   }
   // 管理者は常時認証必須。それ以外（顧客側）はテナントの customer_access_mode に従う。
   if (request.nextUrl.pathname.startsWith("/admin")) {

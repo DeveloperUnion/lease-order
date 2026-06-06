@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listTenants } from "@/lib/super-admin-data";
 import { PageHeader, ButtonLink, EmptyState } from "@/components/admin/ui";
+import TrialBadge from "./trial-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export default async function TenantsPage() {
                   <span className="text-sm font-medium text-foreground truncate">
                     {t.name}
                   </span>
+                  <TrialBadge display={t.statusDisplay} hideActive />
                   <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted">
                     {t.slug}.{PRODUCT_DOMAIN}
                   </span>

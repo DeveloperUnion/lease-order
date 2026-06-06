@@ -98,3 +98,25 @@ export async function getCustomerAccessModeByHost(
     .maybeSingle();
   return (data?.customer_access_mode as CustomerAccessMode | null) ?? "guest_browse";
 }
+
+// トライアル期限切れ / 手動停止のテナントを完全ロックするための判定。
+// proxy（middleware）から host だけで引く。customer_access_mode とは別クエリにして
+// 疎結合に保つ（status/trial_ends_at 列が未適用の環境ではクエリが error になるが、
+// その場合は安全側で false ＝ロックしない）。判定は遅延評価で cron 不要：
+//   ロック = status='suspended' OR (status='trial' AND trial_ends_at < now())
+export async function isTenantLockedByHost(rawHost: string | null): Promise<boolean> {
+  const slug = rawHost ? extractSlugFromHost(rawHost) ?? FALLBACK_SLUG : FALLBACK_SLUG;
+  const { data, error } = await supabaseAdmin
+    .from("tenants")
+    .select("status, trial_ends_at")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error || !data) return false;
+  const status = data.status as string | null;
+  if (status === "suspended") return true;
+  if (status === "trial") {
+    const ends = data.trial_ends_at as string | null;
+    return !!ends && new Date(ends).getTime() < Date.now();
+  }
+  return false;
+}

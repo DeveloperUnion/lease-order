@@ -19,6 +19,7 @@ export default function NewTenantForm() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [billingType, setBillingType] = useState<"monthly" | "daily">("monthly");
+  const [asTrial, setAsTrial] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -27,7 +28,7 @@ export default function NewTenantForm() {
     setError(null);
     startTransition(async () => {
       const billingRule: BillingRule = { type: billingType };
-      const result = await createTenantAction({ name, slug, billingRule });
+      const result = await createTenantAction({ name, slug, billingRule, asTrial });
       if (result.ok) {
         router.push(`/tenants/${result.id}`);
       } else {
@@ -84,6 +85,23 @@ export default function NewTenantForm() {
           <option value="daily">日額</option>
         </Select>
       </FormField>
+
+      <label className="flex items-start gap-3 border border-rule bg-surface px-4 py-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={asTrial}
+          onChange={(e) => setAsTrial(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+        />
+        <span className="min-w-0">
+          <span className="text-sm font-medium text-foreground">
+            トライアル（30日）として作成
+          </span>
+          <span className="block text-xs text-subtle mt-0.5 leading-relaxed">
+            30日後に自動で完全ロックされます。詳細画面で延長・本契約への切り替えができます。
+          </span>
+        </span>
+      </label>
 
       {error && (
         <p className="text-sm text-[var(--color-status-rejected-fg)]">{error}</p>
