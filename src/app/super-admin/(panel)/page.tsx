@@ -48,7 +48,7 @@ export default async function TenantsPage() {
                   </span>
                 </div>
                 <p className="font-[family-name:var(--font-mono)] text-[10px] text-subtle mt-1 uppercase tracking-wider">
-                  作成 {new Date(t.created_at).toLocaleDateString("ja-JP")} ・ 課金 {t.billing_rule.type}
+                  作成 {new Date(t.created_at).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" })} ・ 課金 {t.billing_rule.type}
                 </p>
               </div>
               <div className="flex items-center gap-5 flex-shrink-0 font-[family-name:var(--font-mono)] tabular-nums text-center">
