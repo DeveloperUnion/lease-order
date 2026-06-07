@@ -5,10 +5,9 @@
 
 ## 前提となる仕組み
 
-- **migration CI**: `.github/workflows/migrate.yml`。
-  - **develop（staging）**: migration を push したら**自動適用**。
-  - **main（production）**: 自動適用しない。**GitHub UI から手動実行（workflow_dispatch）**で
-    main を指定したときだけ prod に `supabase db push` する（事故防止のため prod は常に手動）。
+- **migration CI**: `.github/workflows/migrate.yml`。`develop`→staging / `main`→prod に
+  振り分けて `supabase db push` する。migration を push したら**自動適用**（main も自動）。
+  `workflow_dispatch` で手動実行も可能（初回 cutover や再適用の保険）。
 - **初期データは migration が seed する**。`0035_create_super_admins.sql` が初期 super-admin
   `admin@kensetsu-tech.com` を `on conflict do nothing` で投入。
   → product 側の `tenants` / `admin_users` は **super-admin コンソールから実行時に作る**ので
@@ -94,13 +93,13 @@ super-admin ログイン＝Supabase Auth のメール送信が必須。
 1. [ ] §1 GitHub Secrets（本番）登録
 2. [ ] §2 Supabase 本番で JWT 鍵 import → §3 Vercel 本番 env を全て Production スコープで設定
 3. [ ] §2 Supabase 本番 Auth の redirect URL / メール設定
-4. [ ] `develop` → `main` を merge（PR）
-   - main は push で migration が自動適用**されない**。Vercel は native git 連携で
-     本番ビルド/デプロイが走る（この時点では DB 未適用なので一時的にエラーになり得る）
-5. [ ] **`migrate.yml` を Actions → Run workflow で `main` を指定して手動実行** → migration 適用
-   （super_admin seed 込み）。Actions ログで 0001〜0036 が成功することを確認
-6. [ ] `super-admin.lease-order.kensetsu-tech.com` にマジックリンクでログイン
-7. [ ] コンソールでテナント作成 → テナント admin 招待
+4. [ ] `develop` → `main` を merge（PR）/ push
+   - GitHub Actions が migration を自動適用（super_admin seed 込み）
+   - Vercel は native git 連携で本番ビルド/デプロイ（Actions と並行。空 DB の間は一時的に
+     エラーになり得るが migration 完了後に解消）
+   - ※ もし自動で流れない場合は `migrate.yml` を Actions → Run workflow で `main` 指定して手動実行
+5. [ ] `super-admin.lease-order.kensetsu-tech.com` にマジックリンクでログイン
+6. [ ] コンソールでテナント作成 → テナント admin 招待
 
 ---
 

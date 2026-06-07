@@ -1,15 +1,15 @@
 name: Run Supabase Migrations
 
 on:
-  # develop（staging）は migration を push したら自動適用。
+  # develop→staging / main→prod。migration を push したら自動適用。
   push:
     branches:
       - develop
+      - main
     paths:
       - "supabase/migrations/**"
-  # main（production）は自動適用しない。事故防止のため常に手動。
-  # GitHub UI → Actions → このワークフロー → Run workflow で main を指定して実行する
-  # と github.ref_name == main で prod に push される。
+  # 手動トリガー（保険）。初回 cutover や再適用で push に乗らないケース用に、
+  # GitHub UI → Actions → Run workflow で main を指定すれば手動でも流せる。
   workflow_dispatch: {}
 
 jobs:
