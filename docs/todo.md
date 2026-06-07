@@ -32,7 +32,7 @@
 
 ### インフラ・環境
 
-- [ ] prod 用 Supabase プロジェクト作成・GitHub Secrets 登録（`SUPABASE_PROJECT_REF_PROD` / `SUPABASE_DB_PASSWORD_PROD`）
+- [ ] prod 用 Supabase プロジェクト作成・GitHub Secrets 登録（`SUPABASE_PROJECT_REF_PRD` / `SUPABASE_DB_PASSWORD_PRD`）
 - [ ] Vercel 環境変数の設定（Preview → staging DB / Production → prod DB）
 
 ### 画像

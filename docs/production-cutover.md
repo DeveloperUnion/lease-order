@@ -27,11 +27,11 @@
 
 ## 1. GitHub リポジトリ Secrets
 
-`migrate.yml` が参照する。未設定だと workflow は warning を出して skip する。
+`migrate.yml` が参照する。未設定だと workflow は error で fail する（緑のまま素通りさせない）。
 
 - [ ] `SUPABASE_ACCESS_TOKEN`（共通 / Supabase CLI のアクセストークン）
-- [ ] `SUPABASE_PROJECT_REF_PROD`（本番プロジェクト ref）
-- [ ] `SUPABASE_DB_PASSWORD_PROD`（本番 DB パスワード）
+- [ ] `SUPABASE_PROJECT_REF_PRD`（本番プロジェクト ref）
+- [ ] `SUPABASE_DB_PASSWORD_PRD`（本番 DB パスワード）
 - [ ] `SUPABASE_PROJECT_REF_STG` / `SUPABASE_DB_PASSWORD_STG`（staging 分。未設定なら追加）
 
 設定場所: GitHub → Settings → Secrets and variables → Actions → Repository secrets
