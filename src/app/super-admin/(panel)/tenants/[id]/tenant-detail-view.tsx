@@ -131,7 +131,7 @@ export default function TenantDetailView({
         title={tenant.name}
         description={`顧客 ${tenant.customerCount} 社 ・ 注文 ${tenant.orderCount} 件 ・ 作成 ${new Date(
           tenant.created_at
-        ).toLocaleDateString("ja-JP")}`}
+        ).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" })}`}
       />
 
       {/* 契約状態（トライアル / 本契約 / 停止） */}
@@ -145,6 +145,7 @@ export default function TenantDetailView({
                 期限{" "}
                 <span className="font-[family-name:var(--font-mono)] text-foreground">
                   {new Date(tenant.trial_ends_at).toLocaleString("ja-JP", {
+                    timeZone: "Asia/Tokyo",
                     year: "numeric",
                     month: "2-digit",
                     day: "2-digit",
@@ -320,7 +321,7 @@ export default function TenantDetailView({
                     {a.email}
                   </span>
                   <p className="font-[family-name:var(--font-mono)] text-[10px] text-subtle mt-0.5 uppercase tracking-wider">
-                    招待 {new Date(a.created_at).toLocaleDateString("ja-JP")}
+                    招待 {new Date(a.created_at).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" })}
                   </p>
                 </div>
                 <Button

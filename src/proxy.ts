@@ -199,7 +199,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // 静的ファイル・画像最適化・favicon を除く全ルート
-    "/((?!_next/static|_next/image|favicon.ico|images|.*\\.png$|.*\\.svg$|.*\\.jpg$).*)",
+    // 静的ファイル・画像最適化・favicon・PWA manifest を除く全ルート。
+    // manifest.webmanifest は認証/テナント文脈を要さない公開リソース。除外しないと
+    // super-admin ホストで /super-admin/manifest.webmanifest に rewrite され 404 になる。
+    "/((?!_next/static|_next/image|favicon.ico|images|manifest.webmanifest|.*\\.png$|.*\\.svg$|.*\\.jpg$).*)",
   ],
 };
