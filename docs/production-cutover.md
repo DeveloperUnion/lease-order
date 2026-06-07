@@ -72,7 +72,9 @@ super-admin ログイン＝Supabase Auth のメール送信が必須。
 - [ ] `SUPABASE_SERVICE_ROLE_KEY`
 - [ ] `SUPABASE_JWT_PRIVATE_KEY`（上の JWT 鍵）
 - [ ] `SUPABASE_JWT_KID`（上の kid）
-- [ ] `CUSTOMER_SESSION_SECRET`（本番値: `wQQR7Vv1ElcdrWZ5OSr0vaAd8YQPNRj07OofbM1bI5A`）
+- [ ] `CUSTOMER_SESSION_SECRET`（256bit ランダム値を生成して Vercel のみに設定。
+      生成: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`。
+      **値はこのファイルやコミットに絶対書かない**）
 - ⚠️ 現状これらが **Preview のみ** になっているものがある → Production スコープを必ず追加すること
 
 ### Production / Preview 共通でよい（外部 API キー）
