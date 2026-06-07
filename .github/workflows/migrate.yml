@@ -27,8 +27,8 @@ jobs:
         id: env
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "project_ref=${{ secrets.SUPABASE_PROJECT_REF_PROD }}" >> "$GITHUB_OUTPUT"
-            echo "db_password=${{ secrets.SUPABASE_DB_PASSWORD_PROD }}" >> "$GITHUB_OUTPUT"
+            echo "project_ref=${{ secrets.SUPABASE_PROJECT_REF_PRD }}" >> "$GITHUB_OUTPUT"
+            echo "db_password=${{ secrets.SUPABASE_DB_PASSWORD_PRD }}" >> "$GITHUB_OUTPUT"
             echo "env_name=production" >> "$GITHUB_OUTPUT"
           else
             echo "project_ref=${{ secrets.SUPABASE_PROJECT_REF_STG }}" >> "$GITHUB_OUTPUT"
@@ -36,11 +36,13 @@ jobs:
             echo "env_name=staging" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Skip if secrets not configured
+      # Secrets 未設定で緑のまま素通り（=本番未適用に気付けない）するのを防ぐため、
+      # skip(exit 0) ではなく fail(exit 1) で止める。
+      - name: Fail if secrets not configured
         if: steps.env.outputs.project_ref == ''
         run: |
-          echo "::warning::Skipping migration — secrets not configured for ${{ steps.env.outputs.env_name }}"
-          exit 0
+          echo "::error::Migration secrets not configured for ${{ steps.env.outputs.env_name }} — refusing to silently skip"
+          exit 1
 
       - name: Link Supabase project
         if: steps.env.outputs.project_ref != ''
