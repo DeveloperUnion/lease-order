@@ -10,7 +10,11 @@ import {
 import { isAdminAllowedForTenant } from "@/lib/admin-access";
 import { isSuperAdmin } from "@/lib/super-admin-access";
 
-const PUBLIC_ADMIN_PATHS = ["/admin/login"];
+const PUBLIC_ADMIN_PATHS = [
+  "/admin/login",
+  "/admin/forgot-password",
+  "/admin/reset-password",
+];
 
 // guest_browse モードでゲスト（未ログイン）に開放するカタログ系パス。
 // allow-list 方式（protect-by-default）：ここに無いパスは未ログインなら必ず
