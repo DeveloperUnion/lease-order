@@ -45,6 +45,15 @@ export default async function LoginPage({
             )}
 
             <LoginForm next={next} />
+
+            <p className="mt-5 text-center">
+              <a
+                href="/admin/forgot-password"
+                className="font-[family-name:var(--font-mono)] text-[11px] tracking-wide text-subtle hover:text-foreground"
+              >
+                パスワードをお忘れですか？
+              </a>
+            </p>
           </div>
         </div>
 
